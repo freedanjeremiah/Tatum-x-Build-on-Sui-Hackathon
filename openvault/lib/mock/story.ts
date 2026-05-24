@@ -6,6 +6,11 @@ import { MockCdr, makeMockCdr } from "./cdr";
 
 const tx = (label: string, n: number) => ("0x" + label + n) as `0x${string}`;
 
+// A valid 20-byte hex address derived from a numeric tag, so viem ABI-encoding
+// (encodeAbiParameters with type "address") accepts mock ipIds/groupIds.
+const addr = (n: number) =>
+  ("0x" + n.toString(16).padStart(40, "0")) as `0x${string}`;
+
 export class MockStory {
   private ipCounter = 0;
   private childCounter = 0;
@@ -17,7 +22,7 @@ export class MockStory {
     registerIpAsset: async (..._args: unknown[]) => {
       const n = ++this.ipCounter;
       return {
-        ipId: ("0x" + "ip".padEnd(38, "0") + n).slice(0, 42) as `0x${string}`,
+        ipId: addr(0x1a0000 + n),
         licenseTermsId: "100" + n,
         tokenId: BigInt(n),
         txHash: tx("mockregip", n),
@@ -26,7 +31,7 @@ export class MockStory {
     registerDerivativeIpAsset: async (..._args: unknown[]) => {
       const n = ++this.childCounter;
       return {
-        ipId: ("0x" + "child".padEnd(38, "0") + n).slice(0, 42) as `0x${string}`,
+        ipId: addr(0x2c0000 + n),
         tokenId: BigInt(1000 + n),
         txHash: tx("mockderiv", n),
       };
@@ -60,7 +65,7 @@ export class MockStory {
     registerGroupAndAttachLicenseAndAddIps: async (..._args: unknown[]) => {
       const n = ++this.groupCounter;
       return {
-        groupId: ("0x" + "group".padEnd(38, "0") + n).slice(0, 42) as `0x${string}`,
+        groupId: addr(0x6a0000 + n),
         txHash: tx("mockgroup", n),
       };
     },
@@ -83,7 +88,8 @@ export interface MockClients {
 }
 
 export function makeMockClients(_addressOrPk: string): MockClients {
-  const account = { address: "0xMockOwner000000000000000000000000000000000" as `0x${string}` };
+  // A valid 20-byte hex address so viem ABI-encoding works in mock scripts.
+  const account = { address: "0x000000000000000000000000000000000000dEaD" as `0x${string}` };
   return {
     cdr: makeMockCdr(account.address),
     story: new MockStory(),
