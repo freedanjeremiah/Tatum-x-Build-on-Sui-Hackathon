@@ -1,67 +1,65 @@
 // SPEC §8.6 — Dispute raise + counter.
 //
 // Raise a dispute against a target IP with fresh evidence, then have the target
-// owner counter the assertion with fresh counter-evidence.
+// owner counter the assertion with fresh counter-evidence. The dispute steps now
+// use lib/dispute (fresh evidence CID per call).
 //
 // Run: NEXT_PUBLIC_MOCK=1 pnpm tsx scripts/04-dispute.ts
 
-import { randomUUID } from "node:crypto";
 import { parseEther } from "viem";
 
 import { getClients, logTx } from "./_util";
-import { IS_MOCK } from "../lib/env";
-import { PUBLIC_SPG_COLLECTION } from "../lib/constants";
-
-// Fresh evidence CID every run (a real dispute must not reuse stale evidence).
-const freshCid = (prefix: string) => "bafy" + prefix + randomUUID().replace(/-/g, "");
+import { uploadPublic } from "../lib/artifacts";
+import { freshEvidenceCid, raiseReport, counterDispute } from "../lib/dispute";
 
 async function main() {
-  const { story } = await getClients();
+  const clients = await getClients();
+  const owner = (clients.account as any).address as `0x${string}`;
 
   // A target IP to dispute (register one so the script is self-contained).
-  const target = await story.ipAsset.registerIpAsset({
-    nft: { type: "mint", spgNftContract: PUBLIC_SPG_COLLECTION },
-    licenseTermsData: [{ terms: { commercialUse: false, attribution: true } }],
-    ipMetadata: {},
-  } as any);
-  const targetIpId = (target as any).ipId as `0x${string}`;
+  const target = await uploadPublic(clients as any, {
+    bytes: new TextEncoder().encode("disputable artifact"),
+    meta: {
+      title: "Disputable Artifact",
+      description: "Target of a demo dispute.",
+      tags: ["demo"],
+      creators: [{ name: "OpenVault Demo", address: owner, contributionPercent: 100 }],
+      modality: "dataset",
+    },
+  });
+  const targetIpId = target.ipId;
 
-  // Minimum bond.
-  // VERIFY: real mode reads OptimisticOracleV3.getMinimumBond(WIP) on-chain.
-  const bond = IS_MOCK ? parseEther("0.1") : parseEther("0.1"); // fallback if read fails
+  // Minimum bond. VERIFY: real mode reads OptimisticOracleV3.getMinimumBond(WIP).
+  const bond = parseEther("0.1");
+  // DisputeTargetTag. VERIFY: DisputeTargetTag.IMPROPER_REGISTRATION in real mode.
+  const tag = "IMPROPER_REGISTRATION";
 
-  // DisputeTargetTag. Real mode: import { DisputeTargetTag } from core-sdk.
-  // VERIFY: DisputeTargetTag.IMPROPER_REGISTRATION enum from "@story-protocol/core-sdk"
-  const targetTag = "IMPROPER_REGISTRATION";
-
-  const evidenceCID = freshCid("Evidence");
-  const raised = await story.dispute.raiseDispute({
+  const evidenceCID = freshEvidenceCid("Evidence");
+  const raised = await raiseReport(clients.story as any, {
     targetIpId,
     cid: evidenceCID,
-    targetTag,
+    tag,
     bond,
     liveness: 2592000, // 30 days
-  } as any);
-  const disputeId = (raised as any).disputeId;
-  logTx("raise dispute", (raised as any).txHash);
+  });
+  logTx("raise dispute", raised.txHash);
 
   // Counter the assertion with fresh counter-evidence.
-  const assertionId = await story.dispute.disputeIdToAssertionId(Number(disputeId));
-  const counterCID = freshCid("Counter");
-  const counter = await story.dispute.disputeAssertion({
+  const counterCID = freshEvidenceCid("Counter");
+  const counter = await counterDispute(clients.story as any, {
     ipId: targetIpId,
-    assertionId,
+    disputeId: raised.disputeId,
     counterEvidenceCID: counterCID,
-  } as any);
+  });
 
   console.log("=== 04-dispute (SPEC §8.6) ===");
   console.log("targetIpId:", targetIpId);
-  console.log("disputeId:", disputeId);
+  console.log("disputeId:", raised.disputeId);
   console.log("bond (wei):", bond.toString());
   console.log("evidenceCID:", evidenceCID);
-  console.log("assertionId:", assertionId);
+  console.log("assertionId:", counter.assertionId);
   console.log("counterEvidenceCID:", counterCID);
-  logTx("counter assertion", (counter as any).txHash);
+  logTx("counter assertion", counter.txHash);
   console.log("✓ dispute raised + countered (fresh evidence each side)");
 }
 
