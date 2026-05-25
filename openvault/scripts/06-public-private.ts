@@ -79,7 +79,7 @@ async function main() {
 
   // Owner read: mint the owner's read token (mock) / owner satisfies the EOA condition.
   const ownerAux = IS_MOCK
-    ? await cdr.__mintFor(owner)
+    ? await (cdr as any).__mintFor(owner)
     : encodeAbiParameters([{ type: "address" }], [owner]);
   const ownerOut = await cdr.consumer.downloadFile({ uuid: prvUuid, accessAuxData: ownerAux, storageProvider } as any);
   const ownerText = new TextDecoder().decode((ownerOut as any).content);

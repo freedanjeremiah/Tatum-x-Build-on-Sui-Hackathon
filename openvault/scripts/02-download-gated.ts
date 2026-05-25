@@ -45,7 +45,7 @@ async function main() {
   // token minted via __mintFor(ipId), so we hand it that raw token there.
   let accessAuxData: string;
   if (IS_MOCK) {
-    accessAuxData = await cdr.__mintFor(ipId);
+    accessAuxData = await (cdr as any).__mintFor(ipId);
   } else {
     accessAuxData = encodeAbiParameters(
       [{ type: "uint256[]" }],

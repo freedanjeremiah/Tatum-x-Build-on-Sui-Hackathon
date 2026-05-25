@@ -76,7 +76,7 @@ async function main() {
 
   // The access token the (mock) vault will accept for this dataset.
   const accessAux = IS_MOCK
-    ? await cdr.__mintFor(datasetIpId)
+    ? await (cdr as any).__mintFor(datasetIpId)
     : "0x"; // VERIFY: real = ABI-encoded uint256[] of compute license token ids
 
   // ---- Inline worker simulation (real worker = Phase 5) ----
