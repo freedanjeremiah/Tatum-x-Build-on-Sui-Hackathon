@@ -1,5 +1,5 @@
 import { test, expect } from "vitest";
-import { allowlistCheck, submitJob, runJob } from "./compute";
+import { allowlistCheck, submitJob, runComputeJobInline } from "./compute";
 
 const allowed = ["sha256:mean-aggregate", "sha256:logistic-regression"];
 
@@ -20,18 +20,34 @@ test("submitJob builds a pending ComputeJob", () => {
   expect(job.datasetIpId).toBe("0xds");
 });
 
-test("runJob delegates to the passed-in runner fn", async () => {
-  const job = submitJob({
-    datasetIpId: "0xds" as `0x${string}`,
-    consumer: "0xme" as `0x${string}`,
-    algoHash: "sha256:mean-aggregate",
-    computeLicenseTokenId: 1n,
-  });
-  const result = await runJob(job, async (j) => ({
-    status: "done" as const,
-    metrics: { mean: 30 },
-    jobId: j.id,
-  }));
+test("runComputeJobInline rejects an off-allowlist algo WITHOUT decrypting", async () => {
+  const result = await runComputeJobInline(
+    {
+      datasetIpId:
+        "0xcmp0000000000000000000000000000000000005" as `0x${string}`,
+      algoHash: "sha256:dump-all-rows",
+    },
+    allowed
+  );
+  expect(result.status).toBe("rejected");
+  expect(result.decryptCalled).toBe(false);
+  expect(result.metrics).toBeUndefined();
+  expect(result.resultIpId).toBeUndefined();
+});
+
+test("runComputeJobInline returns metrics + a derivative resultIpId on a done run", async () => {
+  const result = await runComputeJobInline(
+    {
+      datasetIpId:
+        "0xcmp0000000000000000000000000000000000005" as `0x${string}`,
+      algoHash: "sha256:mean-aggregate",
+    },
+    allowed
+  );
   expect(result.status).toBe("done");
-  expect(result.metrics).toEqual({ mean: 30 });
+  expect(result.decryptCalled).toBe(true);
+  expect(result.metrics).toBeTruthy();
+  expect(typeof result.metrics?.mean).toBe("number");
+  expect(result.resultIpId).toBeTruthy();
+  expect(result.isolationMode).toContain("operator-trusted");
 });

@@ -17,7 +17,7 @@ import { getClients, logTx } from "./_util";
 import { IS_MOCK } from "../lib/env";
 import { PUBLIC_SPG_COLLECTION } from "../lib/constants";
 import { uploadCompute } from "../lib/artifacts";
-import { allowlistCheck, submitJob, runJob, type ComputeResult } from "../lib/compute";
+import { allowlistCheck, submitJob, type ComputeResult } from "../lib/compute";
 import { encodeAccessAuxData } from "../lib/licensing";
 import { heliaProvider } from "../lib/storage";
 import type { ComputeJob } from "../types/artifact";
@@ -103,7 +103,9 @@ async function main() {
     algoHash: "sha256:mean-aggregate",
     computeLicenseTokenId,
   });
-  const r1 = await runJob(job1, worker);
+  // runJob now POSTs to /api/compute (browser path); this script drives the
+  // worker fn directly to prove the same allowlist + results-only invariants.
+  const r1 = await worker(job1);
   if (r1.status !== "done") throw new Error("job1 should have completed");
   if (r1.metrics && ("values" in r1.metrics || "rows" in r1.metrics)) {
     throw new Error("compute result leaked raw rows");
@@ -120,7 +122,7 @@ async function main() {
     algoHash: "sha256:dump-all-rows",
     computeLicenseTokenId,
   });
-  const r2 = await runJob(job2, worker);
+  const r2 = await worker(job2);
   if (r2.status !== "rejected") throw new Error("job2 should have been rejected");
   if (r2.decryptCalled) throw new Error("job2 must NOT decrypt off-allowlist data");
   console.log("job2 algo:", job2.algoHash);

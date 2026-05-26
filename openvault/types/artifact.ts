@@ -34,3 +34,31 @@ export interface ComputeJob {
   resultIpId?: `0x${string}`;
   metricsURI?: string;
 }
+
+/**
+ * The outcome of a compute run. RESULTS ONLY — raw rows are NEVER returned.
+ * Either a "done" run with aggregate metrics + a derivative resultIpId, or a
+ * "rejected" run (algorithm not on the dataset allowlist) where `decryptCalled`
+ * is provably false: the worker refused before any decryption.
+ */
+export interface ComputeJobResult {
+  status: ComputeJob["status"];
+  /** Aggregate metrics — never raw rows. Present on a "done" run. */
+  metrics?: Record<string, number>;
+  /** The result registered as a derivative of the dataset (royalties upstream). */
+  resultIpId?: `0x${string}`;
+  /** Off-chain pointer to the metrics blob, if any. */
+  metricsURI?: string;
+  /** Why a job was rejected (e.g. off-allowlist algorithm). */
+  reason?: string;
+  /**
+   * Worker isolation disclosure. For this demo: "plain-server (operator-trusted,
+   * demo)" — the operator can see plaintext in memory. Production would attest an
+   * SGX/TDX enclave. CDR does key-delivery only; it is NOT the privacy boundary.
+   */
+  isolationMode?: string;
+  /** Provably false on a rejection: no decryption happened. */
+  decryptCalled?: boolean;
+  /** Tx hash for the derivative registration, when available. */
+  resultTx?: `0x${string}`;
+}
