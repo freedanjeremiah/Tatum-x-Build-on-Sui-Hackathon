@@ -1,11 +1,8 @@
-import PlaceholderPage from "@/components/PlaceholderPage";
+import UploadWizard from "@/components/UploadWizard";
 
+// The wizard is a client component and renders inside the WasmGate provided by
+// the root layout, so CDR/Story clients are only ever acquired once the secure
+// runtime is ready.
 export default function UploadPage() {
-  return (
-    <PlaceholderPage
-      eyebrow="Phase 4b"
-      title="Publish an artifact"
-      description="The upload wizard — encrypt, set a tier, attach license terms, and register your IP — lands next. For now, browse the seeded catalog."
-    />
-  );
+  return <UploadWizard />;
 }

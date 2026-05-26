@@ -7,9 +7,36 @@
 // (01-upload then 02-download) — observe the same vault. In-process tests are
 // unaffected: the file simply round-trips the same data.
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+// node:fs/os/path are loaded lazily (only in a Node context) so this module can
+// also be pulled into a browser bundle — the mock CDR is reachable from client
+// components. In the browser the filesystem mirror simply no-ops and state lives
+// in-process for the lifetime of the page.
+
+type FsLike = {
+  existsSync: (p: string) => boolean;
+  mkdirSync: (p: string, o: { recursive: boolean }) => void;
+  readFileSync: (p: string, enc: string) => string;
+  writeFileSync: (p: string, data: string) => void;
+};
+
+function nodeFs(): { fs: FsLike; dir: string; file: string } | null {
+  // Only attempt persistence when a real Node process is present.
+  const hasProcess =
+    typeof process !== "undefined" &&
+    !!(process as { versions?: { node?: string } }).versions?.node;
+  if (!hasProcess) return null;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const req = eval("require") as (m: string) => unknown;
+    const fs = req("node:fs") as FsLike;
+    const os = req("node:os") as { tmpdir: () => string };
+    const path = req("node:path") as { join: (...p: string[]) => string };
+    const dir = path.join(os.tmpdir(), "openvault-mock");
+    return { fs, dir, file: path.join(dir, "cdr-state.json") };
+  } catch {
+    return null;
+  }
+}
 
 interface StoredEntry {
   ct: number[]; // bytes (JSON-serializable)
@@ -35,27 +62,40 @@ interface PersistState {
   tokenCounter: number;
 }
 
-const STATE_DIR = join(tmpdir(), "openvault-mock");
-const STATE_FILE = join(STATE_DIR, "cdr-state.json");
+// In-process fallback store (used in the browser, or if fs is unavailable).
+let _memState: PersistState | null = null;
 
 function loadState(): PersistState {
-  try {
-    if (existsSync(STATE_FILE)) {
-      return JSON.parse(readFileSync(STATE_FILE, "utf8")) as PersistState;
+  const node = nodeFs();
+  if (node) {
+    try {
+      if (node.fs.existsSync(node.file)) {
+        return JSON.parse(node.fs.readFileSync(node.file, "utf8")) as PersistState;
+      }
+    } catch {
+      /* fall through to empty */
     }
-  } catch {
-    /* fall through to empty */
+    return { store: {}, tokens: {}, uuidCounter: 0, tokenCounter: 0 };
   }
-  return { store: {}, tokens: {}, uuidCounter: 0, tokenCounter: 0 };
+  // Browser / no-fs: keep state in-process for the page lifetime.
+  if (!_memState) {
+    _memState = { store: {}, tokens: {}, uuidCounter: 0, tokenCounter: 0 };
+  }
+  return _memState;
 }
 
 function saveState(s: PersistState) {
-  try {
-    mkdirSync(STATE_DIR, { recursive: true });
-    writeFileSync(STATE_FILE, JSON.stringify(s));
-  } catch {
-    /* best-effort: persistence is only needed for cross-process scripts */
+  const node = nodeFs();
+  if (node) {
+    try {
+      node.fs.mkdirSync(node.dir, { recursive: true });
+      node.fs.writeFileSync(node.file, JSON.stringify(s));
+    } catch {
+      /* best-effort: persistence is only needed for cross-process scripts */
+    }
+    return;
   }
+  _memState = s;
 }
 
 export class MockCdr {
