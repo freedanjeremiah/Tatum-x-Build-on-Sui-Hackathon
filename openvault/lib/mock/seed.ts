@@ -15,7 +15,7 @@ export const SEED_ARTIFACTS: Artifact[] = [
     licenseTermsId: "1001",
     ownerNftTokenId: BigInt(1),
     createdTx: "0xmockregip1",
-    score: 0,
+    score: 1480,
   },
   {
     ipId: "0xprv0000000000000000000000000000000000002",
@@ -31,7 +31,7 @@ export const SEED_ARTIFACTS: Artifact[] = [
     licenseTermsId: "1002",
     ownerNftTokenId: BigInt(2),
     createdTx: "0xmockregip2",
-    score: 0,
+    score: 210,
   },
   {
     ipId: "0xgat0000000000000000000000000000000000003",
@@ -47,7 +47,7 @@ export const SEED_ARTIFACTS: Artifact[] = [
     licenseTermsId: "1003",
     ownerNftTokenId: BigInt(3),
     createdTx: "0xmockregip3",
-    score: 0,
+    score: 3120,
   },
   {
     ipId: "0xgrp0000000000000000000000000000000000004",
@@ -64,7 +64,7 @@ export const SEED_ARTIFACTS: Artifact[] = [
     groupId: "0xgroup0000000000000000000000000000000004",
     ownerNftTokenId: BigInt(4),
     createdTx: "0xmockregip4",
-    score: 0,
+    score: 870,
   },
   {
     ipId: "0xcmp0000000000000000000000000000000000005",
@@ -83,7 +83,7 @@ export const SEED_ARTIFACTS: Artifact[] = [
     createdTx: "0xmockregip5",
     computeEnabled: true,
     allowedAlgoHashes: ["sha256:mean-aggregate", "sha256:logistic-regression"],
-    score: 0,
+    score: 2050,
   },
   {
     ipId: "0xder0000000000000000000000000000000000006",
@@ -100,6 +100,6 @@ export const SEED_ARTIFACTS: Artifact[] = [
     parentIpId: "0xgat0000000000000000000000000000000000003",
     ownerNftTokenId: BigInt(6),
     createdTx: "0xmockderiv1",
-    score: 0,
+    score: 640,
   },
 ];
