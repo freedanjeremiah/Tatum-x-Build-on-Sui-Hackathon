@@ -1,3 +1,5 @@
+"use client";
+
 import { EXPLORER_IPA, STORYSCAN_TX } from "@/lib/constants";
 
 interface TxLinkProps {
