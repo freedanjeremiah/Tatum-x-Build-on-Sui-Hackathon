@@ -1,36 +1,72 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# OpenVault
 
-## Getting Started
+A decentralized Kaggle + Hugging Face. Datasets and ML models are Story Protocol **IP Assets**;
+heavy files are **threshold-encrypted on IPFS** via CDR; access tiers are enforced **on-chain** —
+no auth server, no platform that can hand out access. Testnet (Story **Aeneid**) prototype.
 
-First, run the development server:
+> **The thesis:** access control is a property of the *data*, not the *platform*. The license token
+> *is* the decryption credential.
 
+## Access tiers
+- **Public** — open; IP Asset registered for provenance, attribution-only license.
+- **Private** — owner-only; vault gated to the owner's wallet (EOA condition).
+- **Gated** — pay/license to decrypt; CDR vault + `LicenseReadCondition(LICENSE_TOKEN, ipId)`.
+- **Group** — one license unlocks a family (per-IP gating fallback; see open item below).
+- **Compute** — *computable, never downloadable*. A consumer runs an **allowlisted** algorithm on the
+  data inside a worker; only the result (a derivative IP) leaves. Royalties route to the data owner.
+
+## Honesty (read this)
+CDR does **threshold encryption + on-chain-gated key delivery** only. It does **not** run user
+algorithms on plaintext. "Private but computable" is OpenVault's **own** compute worker that uses CDR
+for gated decryption; the compute-privacy guarantee comes from the worker's isolation + the algorithm
+allowlist, **not** CDR. The demo worker runs on a plain server (operator-trusted) — a production
+deployment would run in an attested SGX/TDX enclave. The UI discloses this everywhere it matters.
+
+## Run it
+
+### Mock mode (no credentials — for demo/verification)
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+cd openvault
+pnpm install
+NEXT_PUBLIC_MOCK=1 pnpm dev        # http://localhost:3000
+```
+Deterministic data, fake tx hashes, in-memory vault. Every flow works end-to-end.
+
+### Real mode (Story Aeneid testnet)
+```bash
+cp .env.local.example .env.local   # fill NEXT_PUBLIC_PRIVY_APP_ID, PINATA_JWT, WALLET_PRIVATE_KEY
 pnpm dev
-# or
-bun dev
+```
+Real mode is wired but unverified without testnet keys; SDK call sites that need live confirmation
+are marked `// VERIFY:` (see `../docs/RUN-LOG.md` and the open items below). **Node 22+** required (Helia).
+
+## Headless flow proofs (run before trusting the UI)
+```bash
+NEXT_PUBLIC_MOCK=1 pnpm tsx scripts/01-upload-gated.ts     # … 02..08
+NEXT_PUBLIC_MOCK=1 pnpm worker                             # compute worker demo
+pnpm test                                                  # 47 unit tests
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Architecture
+- `lib/clients.ts` — mock or real Story + CDR clients (same interface).
+- `lib/artifacts.ts` — high-level upload*/download/derivative API; enforces register → ipId → upload.
+- `lib/{licensing,royalty,dispute,group,compute,storage,metadata}.ts` — focused helpers.
+- `indexer/` — **index-only** SQLite mirror; `app/api/index` (read-only) + `app/api/pin` (public JSON).
+- `worker/` — confidential-compute worker: allowlist gate → decrypt-in-worker → run algo → derivative
+  → wipe plaintext → metrics only.
+- `app/` + `components/` — Next.js App Router UI (browse, upload wizard, artifact, compute, group,
+  leaderboard) wrapped in `WasmGate` (no CDR call before `initWasm()`).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Invariants enforced
+Backend never holds keys/plaintext/gating · CDR crypto client-side · register before upload ·
+`licenseTermsId` always threaded (never hardcoded) · fresh dispute CID each report · every tx/ipId
+surfaced via `TxLink` · no localStorage · compute-only has no download path.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Open items (verify against live SDKs)
+1. `registerIpAsset` license-terms-id return field · 2. `mintLicenseTokens` response shape ·
+3. group-license → member-vault read condition (currently per-IP gating fallback) · 4. min dispute
+bond · 5. CDR delegated decryption vs worker-holds-token · 6. compute vs download license encoding.
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Out of scope (testnet prototype)
+Mainnet/production confidentiality · hiding metadata (CIDs/vault ids public by design) · decryption
+revocation (rotate by re-encrypting).
