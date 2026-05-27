@@ -6,23 +6,15 @@
 
 export const runtime = "nodejs"; // Edge unsupported for sqlite/CDR
 
-import { openDb, getArtifact, listArtifacts, upsertArtifact } from "@/indexer/db";
-import { SEED_ARTIFACTS } from "@/lib/mock/seed";
-import { IS_MOCK } from "@/lib/env";
+import { openDb, getArtifact, listArtifacts } from "@/indexer/db";
 import type { DB } from "@/indexer/db";
 
 let _db: DB | null = null;
 
 function db(): DB {
   if (_db) return _db;
-  const d = openDb();
-  // In mock, auto-seed an empty db so the UI has data without running the
-  // indexer separately. (Index-only: seed is PUBLIC demo metadata.)
-  if (IS_MOCK && listArtifacts(d, {}).length === 0) {
-    for (const a of SEED_ARTIFACTS) upsertArtifact(d, a);
-  }
-  _db = d;
-  return d;
+  _db = openDb();
+  return _db;
 }
 
 // JSON.stringify replacer: bigint (ownerNftTokenId) → decimal string.

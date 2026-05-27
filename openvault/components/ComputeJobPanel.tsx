@@ -31,16 +31,23 @@ export default function ComputeJobPanel({ artifact }: { artifact: Artifact }) {
     setResult(null);
     setLicenseTokenId(null);
 
-    // STEP 1: mint a compute license (mock via getClients).
+    // STEP 1: mint a compute license for the dataset.
     setPhase("minting");
     try {
       const clients = await getClients();
-      // Mock: synthesize a deterministic compute-license token id. In real mode
-      // this would mint against artifact.computeLicenseTermsId.
-      const tokenId =
-        typeof clients.cdr?.__mintFor === "function"
-          ? String(await clients.cdr.__mintFor(artifact.ipId)).slice(0, 18)
-          : "compute-" + artifact.ipId.slice(2, 10);
+      let tokenId: string;
+      if (typeof clients.cdr?.__mintFor === "function") {
+        // Mock vault: deterministic compute-license token id.
+        tokenId = String(await clients.cdr.__mintFor(artifact.ipId)).slice(0, 18);
+      } else {
+        // Real: mint against the dataset's compute license terms (distinct from
+        // a download license). Falls back to the standard terms id if unset.
+        const termsId =
+          artifact.computeLicenseTermsId ?? artifact.licenseTermsId ?? "";
+        if (!termsId) throw new Error("This dataset has no compute license terms.");
+        const { mintLicense } = await import("@/lib/licensing");
+        tokenId = String(await mintLicense(clients.story, artifact.ipId, termsId));
+      }
       setLicenseTokenId(tokenId);
     } catch (e) {
       if (e instanceof WalletNotConnectedError) {

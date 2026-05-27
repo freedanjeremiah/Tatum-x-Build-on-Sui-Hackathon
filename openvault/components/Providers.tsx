@@ -2,29 +2,22 @@
 
 import dynamic from "next/dynamic";
 import { IS_MOCK, PRIVY_APP_ID } from "@/lib/env";
-import WasmGate from "./WasmGate";
 
 // Privy is only needed in real mode. Load it lazily (client-only) so mock
-// builds never instantiate the auth shell and never pay its bundle cost.
+// test builds never instantiate the auth shell and never pay its bundle cost.
 const PrivyAuthProvider = dynamic(() => import("./PrivyAuthProvider"), {
   ssr: false,
 });
 
 /**
- * Top-level client providers.
- *
- * - Mock mode (or no Privy app id): render children directly behind WasmGate.
- * - Real mode: wrap in Privy auth, then WasmGate (so CDR never renders before
- *   the secure runtime is ready).
+ * Top-level auth context. Must wrap the ENTIRE app (header included) so the
+ * header's wallet button can call usePrivy() — it has to be inside PrivyProvider.
+ * WasmGate is applied separately (in layout) around <main> only, so the header
+ * and nav stay visible while the CDR WASM runtime initializes.
  */
 export default function Providers({ children }: { children: React.ReactNode }) {
   if (IS_MOCK || !PRIVY_APP_ID) {
-    return <WasmGate>{children}</WasmGate>;
+    return <>{children}</>;
   }
-
-  return (
-    <PrivyAuthProvider>
-      <WasmGate>{children}</WasmGate>
-    </PrivyAuthProvider>
-  );
+  return <PrivyAuthProvider>{children}</PrivyAuthProvider>;
 }

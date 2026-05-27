@@ -1,0 +1,12 @@
+import { chromium } from "playwright";
+const SHOTS = new URL("./shots/", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
+const ctx = await chromium.launchPersistentContext("C:/Users/freed/OneDrive/Desktop/CDR-hackathon/verify/.privy-profile", { headless: false, viewport: { width: 1280, height: 900 } });
+const p = ctx.pages()[0] || (await ctx.newPage());
+await p.goto("http://localhost:3000/", { waitUntil: "domcontentloaded" });
+await p.waitForTimeout(5000);
+const t = (await p.textContent("body")) || "";
+console.log("empty-state CTA present:", /Publish an artifact|No artifacts published yet/i.test(t));
+console.log("no mock banner:", !/MOCK MODE/i.test(t));
+console.log("connect present:", (await p.locator("button",{hasText:/^connect$/i}).count())>0);
+await p.screenshot({ path: SHOTS + "r-home-final.png", fullPage: true });
+await ctx.close();

@@ -2,6 +2,7 @@
 
 import { PrivyProvider } from "@privy-io/react-auth";
 import { PRIVY_APP_ID } from "@/lib/env";
+import WalletBridge from "./WalletBridge";
 
 /**
  * Real-mode auth shell. Social/email login mints an embedded wallet so users
@@ -33,6 +34,7 @@ export default function PrivyAuthProvider({
         },
       }}
     >
+      <WalletBridge />
       {children}
     </PrivyProvider>
   );

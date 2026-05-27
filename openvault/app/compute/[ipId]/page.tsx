@@ -5,9 +5,7 @@
 export const runtime = "nodejs";
 
 import Link from "next/link";
-import { openDb, getArtifact, listArtifacts, upsertArtifact } from "@/indexer/db";
-import { SEED_ARTIFACTS } from "@/lib/mock/seed";
-import { IS_MOCK } from "@/lib/env";
+import { openDb, getArtifact } from "@/indexer/db";
 import type { DB } from "@/indexer/db";
 import type { Artifact } from "@/types/artifact";
 import { TierBadge } from "@/components/ModelCard";
@@ -19,12 +17,8 @@ let _db: DB | null = null;
 
 function db(): DB {
   if (_db) return _db;
-  const d = openDb();
-  if (IS_MOCK && listArtifacts(d, {}).length === 0) {
-    for (const a of SEED_ARTIFACTS) upsertArtifact(d, a);
-  }
-  _db = d;
-  return d;
+  _db = openDb();
+  return _db;
 }
 
 export default async function ComputePage({

@@ -100,7 +100,7 @@ export default function BrowsePage() {
           ))}
         </Grid>
       ) : artifacts.length === 0 ? (
-        <EmptyState />
+        <EmptyState filtered={!!tier || !!modality || !!q.trim()} />
       ) : (
         <Grid>
           {artifacts.map((a, i) => (
@@ -209,18 +209,38 @@ function SkeletonCard() {
   );
 }
 
-function EmptyState() {
+function EmptyState({ filtered }: { filtered: boolean }) {
   return (
     <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-[var(--ov-line)] py-20 text-center">
       <div className="text-[var(--ov-text-faint)]">
         <SearchIcon large />
       </div>
-      <p className="text-sm font-medium text-[var(--ov-text)]">
-        No artifacts match these filters
-      </p>
-      <p className="text-[13px] text-[var(--ov-text-dim)]">
-        Try clearing the tier or modality, or searching a different term.
-      </p>
+      {filtered ? (
+        <>
+          <p className="text-sm font-medium text-[var(--ov-text)]">
+            No artifacts match these filters
+          </p>
+          <p className="text-[13px] text-[var(--ov-text-dim)]">
+            Try clearing the tier or modality, or searching a different term.
+          </p>
+        </>
+      ) : (
+        <>
+          <p className="text-sm font-medium text-[var(--ov-text)]">
+            No artifacts published yet
+          </p>
+          <p className="max-w-sm text-[13px] text-[var(--ov-text-dim)]">
+            Be the first to register a dataset or model as an on-chain IP Asset,
+            encrypted and gated by license.
+          </p>
+          <a
+            href="/upload"
+            className="mt-2 inline-flex items-center gap-2 rounded-lg bg-[var(--ov-accent)] px-4 py-2 text-[13px] font-semibold text-[var(--ov-accent-ink)] transition-opacity hover:opacity-90"
+          >
+            Publish an artifact
+          </a>
+        </>
+      )}
     </div>
   );
 }

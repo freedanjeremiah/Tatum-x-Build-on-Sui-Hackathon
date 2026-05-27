@@ -39,10 +39,26 @@ export async function getClients(): Promise<Clients> {
     return (await makeClientsFromKey(MOCK_PK)) as unknown as Clients;
   }
 
+  // Prefer the Privy embedded/connected wallet (set by <WalletBridge> after
+  // login). Social/email logins have no window.ethereum — this is the only
+  // provider those users have. Fall back to an injected extension wallet.
+  const { getActiveWallet } = await import("./walletBridge");
+  const privy = getActiveWallet();
+  if (privy?.provider && privy.address) {
+    return (await makeClientsFromProvider(
+      privy.provider,
+      privy.address
+    )) as unknown as Clients;
+  }
+
   const eth = (globalThis as { ethereum?: unknown }).ethereum as
-    | { request: (args: { method: string }) => Promise<string[]> }
+    | { request: (args: { method: string; params?: unknown[] }) => Promise<string[]> }
     | undefined;
-  if (!eth) throw new WalletNotConnectedError("No wallet provider detected.");
+  if (!eth) {
+    throw new WalletNotConnectedError(
+      "Connect a wallet first (use the Connect button in the header)."
+    );
+  }
 
   const accounts = await eth.request({ method: "eth_requestAccounts" });
   const address = accounts?.[0] as `0x${string}` | undefined;

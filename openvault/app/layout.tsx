@@ -3,7 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Providers from "@/components/Providers";
 import Header from "@/components/Header";
-import MockBanner from "@/components/MockBanner";
+import WasmGate from "@/components/WasmGate";
 import CdrLimitsNotice from "@/components/CdrLimitsNotice";
 
 const geistSans = Geist({
@@ -34,12 +34,13 @@ export default function RootLayout({
     >
       <body className="flex min-h-full flex-col">
         <div id="ov-root" className="flex min-h-screen flex-col">
-          <MockBanner />
-          <Header />
           <Providers>
-            <main className="flex-1">{children}</main>
+            <Header />
+            <WasmGate>
+              <main className="flex-1">{children}</main>
+            </WasmGate>
+            <Footer />
           </Providers>
-          <Footer />
         </div>
       </body>
     </html>
