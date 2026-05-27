@@ -19,6 +19,56 @@ export interface StorageProvider {
 
 const PIN_FILE_URL = "https://api.pinata.cloud/pinning/pinFileToIPFS";
 const PIN_JSON_URL = "https://api.pinata.cloud/pinning/pinJSONToIPFS";
+const GATEWAY = "https://gateway.pinata.cloud/ipfs/";
+
+// PINATA_JWT is a SERVER-ONLY secret — it must NEVER ship to the browser. When
+// real code runs in the browser (the upload wizard pins from a client component),
+// we route pinning through our own /api/pin + /api/pin-file routes, which pin
+// server-side with the JWT. Direct Pinata calls happen only in Node (scripts,
+// worker, API routes). `isBrowser` selects the path; `nodeJwt()` reads the JWT
+// live from the environment so server runtimes always get the current value.
+const isBrowser = typeof window !== "undefined";
+function nodeJwt(): string {
+  return (
+    (typeof process !== "undefined" && process.env && process.env.PINATA_JWT) ||
+    PINATA_JWT ||
+    ""
+  );
+}
+
+/**
+ * Browser StorageProvider for CDR: uploads CIPHERTEXT bytes (already encrypted
+ * client-side — the server never sees plaintext) via our /api/pin-file route so
+ * the JWT stays server-side; downloads via a public gateway (no secret needed).
+ */
+function remotePinProvider(): StorageProvider {
+  return {
+    CID: (s: string) => s,
+    async upload(data: Uint8Array): Promise<string> {
+      const buf = data.buffer.slice(
+        data.byteOffset,
+        data.byteOffset + data.byteLength
+      ) as ArrayBuffer;
+      const res = await fetch("/api/pin-file", {
+        method: "POST",
+        headers: { "Content-Type": "application/octet-stream" },
+        body: buf,
+      });
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        throw new Error(`pin-file failed (${res.status}): ${body}`);
+      }
+      const out = (await res.json()) as { cid?: string };
+      if (!out.cid) throw new Error("pin-file: response missing cid");
+      return out.cid;
+    },
+    async download(cid: string): Promise<Uint8Array> {
+      const res = await fetch(GATEWAY + cid);
+      if (!res.ok) throw new Error(`gateway fetch failed (${res.status})`);
+      return new Uint8Array(await res.arrayBuffer());
+    },
+  };
+}
 
 /** A pinned-content reference: an ipfs:// uri and a 0x-prefixed content hash. */
 export interface PinResult {
@@ -131,8 +181,11 @@ export async function heliaProvider(): Promise<StorageProvider> {
       getFile: async (_cid: string) => new Uint8Array(),
     };
   }
+  // Browser real mode: pin via our server route (JWT stays server-side).
+  if (isBrowser) return remotePinProvider();
+  // Node real mode (scripts, worker, API routes): direct Pinata with the JWT.
   const { pinataStorageProvider } = await import("./pinataStorage");
-  return pinataStorageProvider(PINATA_JWT) as unknown as StorageProvider;
+  return pinataStorageProvider(nodeJwt()) as unknown as StorageProvider;
 }
 
 /**
@@ -147,10 +200,26 @@ export async function pinJSON(obj: unknown): Promise<PinResult> {
   if (IS_MOCK) {
     return { uri: "ipfs://mock" + hash.slice(2), hash };
   }
+  // Browser: pin through our server route (JWT never reaches the client).
+  if (isBrowser) {
+    const res = await fetch("/api/pin", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: json,
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`pin (server) failed (${res.status}): ${body}`);
+    }
+    const out = (await res.json()) as { uri?: string; hash?: `0x${string}` };
+    if (!out.uri) throw new Error("pin (server): response missing uri");
+    return { uri: out.uri, hash: out.hash ?? hash };
+  }
+  // Node: direct Pinata with the live JWT.
   const res = await fetch(PIN_JSON_URL, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${PINATA_JWT}`,
+      Authorization: `Bearer ${nodeJwt()}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ pinataContent: obj }),
@@ -173,15 +242,31 @@ export async function pinFile(bytes: Uint8Array): Promise<PinResult> {
   if (IS_MOCK) {
     return { uri: "ipfs://mock" + hash.slice(2), hash };
   }
-  const form = new FormData();
   const buf = bytes.buffer.slice(
     bytes.byteOffset,
     bytes.byteOffset + bytes.byteLength
   ) as ArrayBuffer;
+  // Browser: pin bytes through our server route (JWT stays server-side).
+  if (isBrowser) {
+    const res = await fetch("/api/pin-file", {
+      method: "POST",
+      headers: { "Content-Type": "application/octet-stream" },
+      body: buf,
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`pin-file (server) failed (${res.status}): ${body}`);
+    }
+    const out = (await res.json()) as { cid?: string };
+    if (!out.cid) throw new Error("pin-file (server): response missing cid");
+    return { uri: "ipfs://" + out.cid, hash };
+  }
+  // Node: direct Pinata with the live JWT.
+  const form = new FormData();
   form.append("file", new Blob([buf]), "artifact.bin");
   const res = await fetch(PIN_FILE_URL, {
     method: "POST",
-    headers: { Authorization: `Bearer ${PINATA_JWT}` },
+    headers: { Authorization: `Bearer ${nodeJwt()}` },
     body: form,
   });
   if (!res.ok) {
