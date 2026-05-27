@@ -16,6 +16,7 @@
 
 import { allowlistCheck } from "../lib/compute";
 import { registerDerivative, type Clients } from "../lib/artifacts";
+import { heliaProvider } from "../lib/storage";
 import { getAlgo } from "./algoRegistry";
 import type { ComputeJobResult, Artifact } from "../types/artifact";
 
@@ -60,13 +61,19 @@ async function decryptDataset(
     if (uuid !== undefined && clients.cdr?.consumer?.downloadFile) {
       // Mock vault accepts a token minted via __mintFor(ipId); real path would
       // present the compute license token as accessAuxData.
+      // VERIFY: delegated decryption vs worker-holds-token (SPEC §C9) — in real
+      // mode the worker must present a COMPUTE license the operator is permitted
+      // to use to collect the threshold key. Here we mint via the mock helper.
       const accessAuxData =
         typeof clients.cdr.__mintFor === "function"
           ? await clients.cdr.__mintFor(datasetIpId)
           : "0x";
+      const storageProvider = await heliaProvider();
       const out = await clients.cdr.consumer.downloadFile({
         uuid,
         accessAuxData,
+        storageProvider,
+        timeoutMs: 120000,
       });
       plaintext = out?.content as Uint8Array;
     } else if (clients.cdr?.consumer?.downloadFile) {

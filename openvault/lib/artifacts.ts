@@ -15,9 +15,7 @@ import { buildIpaMetadata, type BuildIpaMetadataArgs } from "./metadata";
 import { pinFile } from "./storage";
 import { heliaProvider } from "./storage";
 import {
-  commercialRemixTerms,
-  attributionTerms,
-  computeTerms,
+  resolveTerms,
   encodeAccessAuxData,
   mintLicense,
 } from "./licensing";
@@ -76,9 +74,10 @@ export async function uploadGated(clients: Clients, input: UploadInput): Promise
   const owner = ownerOf(clients);
 
   const md = await buildIpaMetadata({ ...input.meta, commercial: true });
+  const terms = await resolveTerms("commercialRemix", input.terms ?? DEFAULT_TERMS);
   const reg = await story.ipAsset.registerIpAsset({
     nft: { type: "mint", spgNftContract: PUBLIC_SPG_COLLECTION },
-    licenseTermsData: [{ terms: commercialRemixTerms(input.terms ?? DEFAULT_TERMS) }],
+    licenseTermsData: [{ terms }],
     ipMetadata: {
       ipMetadataURI: md.ipMetadataURI,
       ipMetadataHash: md.ipMetadataHash,
@@ -133,7 +132,7 @@ export async function uploadPublic(clients: Clients, input: UploadInput): Promis
   const md = await buildIpaMetadata({ ...input.meta, commercial: false });
   const reg = await story.ipAsset.registerIpAsset({
     nft: { type: "mint", spgNftContract: PUBLIC_SPG_COLLECTION },
-    licenseTermsData: [{ terms: attributionTerms() }],
+    licenseTermsData: [{ terms: await resolveTerms("attribution") }],
     ipMetadata: {
       ipMetadataURI: md.ipMetadataURI,
       ipMetadataHash: md.ipMetadataHash,
@@ -170,7 +169,7 @@ export async function uploadPrivate(clients: Clients, input: UploadInput): Promi
   const md = await buildIpaMetadata({ ...input.meta, commercial: false });
   const reg = await story.ipAsset.registerIpAsset({
     nft: { type: "mint", spgNftContract: PUBLIC_SPG_COLLECTION },
-    licenseTermsData: [{ terms: attributionTerms() }],
+    licenseTermsData: [{ terms: await resolveTerms("attribution") }],
     ipMetadata: {
       ipMetadataURI: md.ipMetadataURI,
       ipMetadataHash: md.ipMetadataHash,
@@ -183,17 +182,40 @@ export async function uploadPrivate(clients: Clients, input: UploadInput): Promi
 
   const storageProvider = await heliaProvider();
   const ownerCondData = encodeAbiParameters([{ type: "address" }], [owner]);
-  // Allocate-then-write with EOA owner read/write conditions.
-  const alloc = await cdr.uploader.allocate({
-    updatable: false,
-    writeConditionAddr: OWNER_WRITE_CONDITION,
-    readConditionAddr: OWNER_WRITE_CONDITION, // owner-gated read
-    writeConditionData: ownerCondData,
-    readConditionData: IS_MOCK ? owner : ownerCondData,
-    skipConditionValidation: true,
-  });
-  const uuid = alloc.uuid;
-  const wr = await cdr.uploader.write({ uuid, content: input.bytes, storageProvider });
+
+  let uuid: number;
+  let cid: string;
+  if (IS_MOCK) {
+    // MOCK: allocate-then-write (the mock vault stores plaintext + gate ipId).
+    const alloc = await cdr.uploader.allocate({
+      updatable: false,
+      writeConditionAddr: OWNER_WRITE_CONDITION,
+      readConditionAddr: OWNER_WRITE_CONDITION, // owner-gated read
+      writeConditionData: ownerCondData,
+      readConditionData: owner,
+      skipConditionValidation: true,
+    });
+    uuid = alloc.uuid;
+    const wr = await cdr.uploader.write({ uuid, content: input.bytes, storageProvider });
+    cid = wr.cid;
+  } else {
+    // REAL: the real write() takes encryptedData hex, not a file+provider — so
+    // use uploadFile (encrypt → store via provider → write CID ref) with
+    // OWNER-gated read+write conditions (only the owner can read).
+    const up = await cdr.uploader.uploadFile({
+      content: input.bytes,
+      storageProvider,
+      globalPubKey: await cdr.observer.getGlobalPubKey(),
+      updatable: false,
+      writeConditionAddr: OWNER_WRITE_CONDITION,
+      readConditionAddr: OWNER_WRITE_CONDITION, // owner-gated read
+      writeConditionData: ownerCondData,
+      readConditionData: ownerCondData,
+      accessAuxData: "0x",
+    });
+    uuid = up.uuid;
+    cid = up.cid;
+  }
 
   return {
     ipId,
@@ -204,7 +226,7 @@ export async function uploadPrivate(clients: Clients, input: UploadInput): Promi
     tags: input.meta.tags,
     ipMetadataURI: md.ipMetadataURI,
     vaultUuid: uuid,
-    cid: wr.cid,
+    cid,
     licenseTermsId: termsIdOf(reg),
     createdTx: reg.txHash,
   };
@@ -219,10 +241,11 @@ interface ComputeInput extends UploadInput {
 export async function uploadCompute(clients: Clients, input: ComputeInput): Promise<Artifact> {
   const { cdr, story } = clients;
 
+  const owner = ownerOf(clients);
   const md = await buildIpaMetadata({ ...input.meta, commercial: true });
   const reg = await story.ipAsset.registerIpAsset({
     nft: { type: "mint", spgNftContract: PUBLIC_SPG_COLLECTION },
-    licenseTermsData: [{ terms: computeTerms(input.terms ?? DEFAULT_TERMS) }],
+    licenseTermsData: [{ terms: await resolveTerms("compute", input.terms ?? DEFAULT_TERMS) }],
     ipMetadata: {
       ipMetadataURI: md.ipMetadataURI,
       ipMetadataHash: md.ipMetadataHash,
@@ -235,6 +258,7 @@ export async function uploadCompute(clients: Clients, input: ComputeInput): Prom
   const computeLicenseTermsId = termsIdOf(reg);
 
   const storageProvider = await heliaProvider();
+  const writeConditionData = encodeAbiParameters([{ type: "address" }], [owner]);
   const readConditionDataReal = encodeAbiParameters(
     [{ type: "address" }, { type: "address" }],
     [LICENSE_TOKEN, ipId]
@@ -244,7 +268,9 @@ export async function uploadCompute(clients: Clients, input: ComputeInput): Prom
     storageProvider,
     globalPubKey: await cdr.observer.getGlobalPubKey(),
     updatable: false,
+    writeConditionAddr: OWNER_WRITE_CONDITION,
     readConditionAddr: LICENSE_READ_CONDITION,
+    writeConditionData,
     readConditionData: IS_MOCK ? ipId : readConditionDataReal,
     accessAuxData: "0x",
   });
@@ -303,7 +329,7 @@ export async function registerProvenanceParent(
 
   const reg = await story.ipAsset.registerIpAsset({
     nft: { type: "mint", spgNftContract: PUBLIC_SPG_COLLECTION },
-    licenseTermsData: [{ terms: attributionTerms() }],
+    licenseTermsData: [{ terms: await resolveTerms("attribution") }],
     ipMetadata: {
       ipMetadataURI: md.ipMetadataURI,
       ipMetadataHash: md.ipMetadataHash,
@@ -406,10 +432,21 @@ export async function download(clients: Clients, input: DownloadInput): Promise<
     });
     return out.content as Uint8Array;
   } catch (e) {
-    const name = (e as { name?: string })?.name ?? "";
-    if (name === "PartialCollectionTimeoutError") {
+    // CDR errors all share name "CDRError" but carry a distinct `.code`. Detect
+    // by `.code` (the most robust check) and map to friendly gate messages.
+    const code = (e as { code?: string })?.code ?? "";
+    if (code === "PARTIAL_COLLECTION_TIMEOUT") {
       throw new DownloadGateError(
-        "Vault read timed out before the decryption key could be collected.",
+        "Vault read timed out before the decryption key could be collected. Try again.",
+        e
+      );
+    }
+    if (code === "EMPTY_VAULT") {
+      throw new DownloadGateError("Vault empty — nothing has been written to it.", e);
+    }
+    if (code === "CID_INTEGRITY") {
+      throw new DownloadGateError(
+        "Downloaded ciphertext tampered — CID mismatch.",
         e
       );
     }
