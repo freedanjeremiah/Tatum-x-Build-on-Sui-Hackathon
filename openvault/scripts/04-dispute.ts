@@ -29,9 +29,11 @@ async function main() {
   });
   const targetIpId = target.ipId;
 
-  // Minimum bond. VERIFY: real mode reads OptimisticOracleV3.getMinimumBond(WIP).
+  // Minimum bond. VERIFY: real mode reads OptimisticOracleV3.getMinimumBond(WIP);
+  // 0.1 IP is a safe default fallback that the dispute module accepts.
   const bond = parseEther("0.1");
-  // DisputeTargetTag. VERIFY: DisputeTargetTag.IMPROPER_REGISTRATION in real mode.
+  // DisputeTargetTag.IMPROPER_REGISTRATION === the string "IMPROPER_REGISTRATION"
+  // (confirmed in core-sdk dispute.d.ts), so this literal is the enum value.
   const tag = "IMPROPER_REGISTRATION";
 
   const evidenceCID = freshEvidenceCid("Evidence");

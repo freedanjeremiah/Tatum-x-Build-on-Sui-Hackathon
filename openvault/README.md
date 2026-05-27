@@ -37,8 +37,10 @@ Deterministic data, fake tx hashes, in-memory vault. Every flow works end-to-end
 cp .env.local.example .env.local   # fill NEXT_PUBLIC_PRIVY_APP_ID, PINATA_JWT, WALLET_PRIVATE_KEY
 pnpm dev
 ```
-Real mode is wired but unverified without testnet keys; SDK call sites that need live confirmation
-are marked `// VERIFY:` (see `../docs/RUN-LOG.md` and the open items below). **Node 22+** required (Helia).
+Real mode is wired against the installed SDKs; the few call sites that still need live testnet
+confirmation are marked `// VERIFY:` (see `../docs/RUN-LOG.md` and the open items below). Real-mode
+IPFS storage is **Pinata** (set `PINATA_JWT`) — chosen over an in-process Helia node so uploads
+survive across processes (worker/consumer can retrieve them). **Node 22+** required.
 
 ## Headless flow proofs (run before trusting the UI)
 ```bash
