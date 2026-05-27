@@ -61,4 +61,6 @@ export interface ComputeJobResult {
   decryptCalled?: boolean;
   /** Tx hash for the derivative registration, when available. */
   resultTx?: `0x${string}`;
+  /** True once the worker has zeroed the decrypted plaintext + scratch buffers. */
+  scratchCleared?: boolean;
 }

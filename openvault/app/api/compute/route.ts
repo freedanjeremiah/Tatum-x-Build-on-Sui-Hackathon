@@ -16,7 +16,7 @@ export const runtime = "nodejs"; // Edge unsupported for sqlite/CDR
 import { openDb, getArtifact, listArtifacts, upsertArtifact } from "@/indexer/db";
 import { SEED_ARTIFACTS } from "@/lib/mock/seed";
 import { IS_MOCK } from "@/lib/env";
-import { runComputeJobInline } from "@/lib/compute";
+import { runComputeJob } from "@/worker/compute-worker";
 import type { DB } from "@/indexer/db";
 import type { Artifact, ComputeJobResult } from "@/types/artifact";
 
@@ -70,17 +70,18 @@ export async function POST(req: Request): Promise<Response> {
 
   const allowed = dataset.allowedAlgoHashes ?? [];
 
-  // STEP 2: delegate to the worker contract. Inline mock today; Phase 5 swaps in
-  // worker/compute-worker.ts (same RunComputeJob signature). The runner itself
-  // re-checks the allowlist BEFORE any decryption and never returns raw rows.
-  const result = await runComputeJobInline(
-    {
-      datasetIpId: datasetIpId as `0x${string}`,
-      algoHash,
-      params,
-    },
-    allowed
-  );
+  // STEP 2: delegate to the REAL confidential-compute worker (Phase 5). The
+  // worker re-checks the allowlist BEFORE any decryption, decrypts the dataset
+  // INSIDE the worker, runs the allowlisted algo, registers the result as a
+  // derivative, wipes the plaintext, and returns metrics only (never raw rows).
+  // (worker/compute-worker is server/node-only; imported here on the server.)
+  const result = await runComputeJob({
+    datasetIpId: datasetIpId as `0x${string}`,
+    algoHash,
+    params,
+    allowedAlgoHashes: allowed,
+    dataset,
+  });
 
   return json(result, result.status === "failed" ? 500 : 200);
 }
