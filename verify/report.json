@@ -1,0 +1,125 @@
+{
+  "results": [
+    {
+      "name": "Browse: landing renders >=6 artifact cards",
+      "ok": true,
+      "detail": "found 6"
+    },
+    {
+      "name": "Browse: hero/value-prop present",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Browse: tier filter responds",
+      "ok": true,
+      "detail": "gated cards=2"
+    },
+    {
+      "name": "Browse: search narrows results",
+      "ok": true,
+      "detail": "results=2"
+    },
+    {
+      "name": "API: 6 seed artifacts incl all tiers",
+      "ok": {
+        "ipId": "0xgrp0000000000000000000000000000000000004",
+        "tier": "group",
+        "modality": "model",
+        "title": "VisionEnsemble (Group)",
+        "description": "Community ensemble of vision models sharing revenue via an even-split group pool.",
+        "tags": [
+          "vision",
+          "ensemble",
+          "group",
+          "community"
+        ],
+        "ipMetadataURI": "ipfs://bafyMockMetaGrp4",
+        "createdTx": "0xmockregip4",
+        "vaultUuid": 4,
+        "cid": "bafyMockGrp4",
+        "licenseTermsId": "1004",
+        "groupId": "0xgroup0000000000000000000000000000000004",
+        "ownerNftTokenId": "4",
+        "score": 870
+      },
+      "detail": "n=6"
+    },
+    {
+      "name": "Artifact(gated): detail renders w/ unlock CTA",
+      "ok": true,
+      "detail": "SentimentLLM-7B"
+    },
+    {
+      "name": "Artifact(gated): tx/ipId provenance link present",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Artifact(gated): unlock/download flow reacts",
+      "ok": true,
+      "detail": "clicked CTA"
+    },
+    {
+      "name": "Report: dialog opens (evidence/bond)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Report: raises dispute (id/tx shown)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Artifact(public): shows free download, no mint",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Lineage: derivative shows parent->child graph",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Compute: page shows allowlist + run panel",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Compute: NO download path on compute page",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Compute: isolation mode disclosed",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Compute: job runs, returns metrics only",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Group: bundle page lists members + open-item notice",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Leaderboard: renders ranked table",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Upload: wizard renders (file/tier step)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Console: no uncaught page errors",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "consoleErrors": []
+}

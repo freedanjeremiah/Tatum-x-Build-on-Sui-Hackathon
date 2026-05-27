@@ -45,9 +45,9 @@ export default function LeaderboardPage() {
         </p>
       </header>
 
-      <div className="ov-anim-up overflow-hidden rounded-2xl border border-[var(--ov-line)] bg-[var(--ov-panel)]/50">
+      <div role="table" aria-label="Artifact leaderboard" className="ov-anim-up overflow-hidden rounded-2xl border border-[var(--ov-line)] bg-[var(--ov-panel)]/50">
         {/* head */}
-        <div className="grid grid-cols-[48px_1fr_96px_110px_88px_minmax(0,150px)] items-center gap-3 border-b border-[var(--ov-line)] px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-[var(--ov-text-faint)]">
+        <div role="row" className="grid grid-cols-[48px_1fr_96px_110px_88px_minmax(0,150px)] items-center gap-3 border-b border-[var(--ov-line)] px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-[var(--ov-text-faint)]">
           <span className="text-center">#</span>
           <span>Title</span>
           <span>Modality</span>
@@ -79,6 +79,7 @@ function Row({ artifact: a, rank }: { artifact: Artifact; rank: number }) {
   const meta = tierMeta(a.tier);
   return (
     <div
+      role="row"
       className="group grid grid-cols-[48px_1fr_96px_110px_88px_minmax(0,150px)] items-center gap-3 border-b border-[var(--ov-line-soft)] px-4 py-3 transition-colors last:border-0 hover:bg-[var(--ov-panel-2)]/50"
       style={{ "--tier-color": meta.color } as React.CSSProperties}
     >

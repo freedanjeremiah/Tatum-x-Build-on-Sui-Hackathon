@@ -1,0 +1,5 @@
+
+# verification harness
+/verify/node_modules/
+/verify/shots/
+/verify/package-lock.json
