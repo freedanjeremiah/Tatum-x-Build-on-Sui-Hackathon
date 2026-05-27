@@ -33,5 +33,5 @@ test("heliaProvider() returns an object exposing a CID function", async () => {
   const p = await heliaProvider();
   expect(typeof p.CID).toBe("function");
   // mock CID is identity over a string
-  expect(p.CID("bafyabc")).toBe("bafyabc");
+  expect(p.CID!("bafyabc")).toBe("bafyabc");
 });
