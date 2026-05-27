@@ -37,7 +37,11 @@ export type UploadMeta = BuildIpaMetadataArgs;
 interface UploadInput {
   bytes: Uint8Array;
   meta: UploadMeta;
+  /** Commercial terms for gated/compute tiers (rev share %, minting fee in WIP wei). */
+  terms?: { rev: number; fee: bigint };
 }
+
+const DEFAULT_TERMS = { rev: 5, fee: 1n };
 
 /** Thrown when a gated download fails (no license, or a vault timeout). */
 export class DownloadGateError extends Error {
@@ -74,7 +78,7 @@ export async function uploadGated(clients: Clients, input: UploadInput): Promise
   const md = await buildIpaMetadata({ ...input.meta, commercial: true });
   const reg = await story.ipAsset.registerIpAsset({
     nft: { type: "mint", spgNftContract: PUBLIC_SPG_COLLECTION },
-    licenseTermsData: [{ terms: commercialRemixTerms({ rev: 5, fee: 1n }) }],
+    licenseTermsData: [{ terms: commercialRemixTerms(input.terms ?? DEFAULT_TERMS) }],
     ipMetadata: {
       ipMetadataURI: md.ipMetadataURI,
       ipMetadataHash: md.ipMetadataHash,
@@ -218,7 +222,7 @@ export async function uploadCompute(clients: Clients, input: ComputeInput): Prom
   const md = await buildIpaMetadata({ ...input.meta, commercial: true });
   const reg = await story.ipAsset.registerIpAsset({
     nft: { type: "mint", spgNftContract: PUBLIC_SPG_COLLECTION },
-    licenseTermsData: [{ terms: computeTerms({ rev: 5, fee: 1n }) }],
+    licenseTermsData: [{ terms: computeTerms(input.terms ?? DEFAULT_TERMS) }],
     ipMetadata: {
       ipMetadataURI: md.ipMetadataURI,
       ipMetadataHash: md.ipMetadataHash,

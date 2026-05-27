@@ -4,7 +4,6 @@ import { useState } from "react";
 import type { Artifact } from "@/types/artifact";
 import { getClients, WalletNotConnectedError } from "@/lib/useClients";
 import { tierMeta } from "@/lib/tiers";
-import TxLink from "./TxLink";
 import DecryptProgress from "./DecryptProgress";
 
 interface DownloadButtonProps {
@@ -27,7 +26,6 @@ function isGateError(e: unknown): boolean {
 export default function DownloadButton({ artifact }: DownloadButtonProps) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
-  const [mintTx, setMintTx] = useState<`0x${string}` | null>(null);
 
   const meta = tierMeta(artifact.tier);
   const isPublic = artifact.tier === "public";
@@ -69,7 +67,6 @@ export default function DownloadButton({ artifact }: DownloadButtonProps) {
 
   async function handleGated() {
     setError(null);
-    setMintTx(null);
     setPhase("decrypting");
     try {
       const clients = await getClients();
@@ -140,13 +137,6 @@ export default function DownloadButton({ artifact }: DownloadButtonProps) {
           timedOut={phase === "timeout"}
           onRetry={handleGated}
         />
-      )}
-
-      {phase === "done" && mintTx && (
-        <div className="flex items-center gap-2 text-[12px] text-[var(--ov-text-dim)]">
-          <span>License minted</span>
-          <TxLink hash={mintTx} />
-        </div>
       )}
 
       {phase === "error" && error && (

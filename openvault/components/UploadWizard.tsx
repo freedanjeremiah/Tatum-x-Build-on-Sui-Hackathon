@@ -119,7 +119,12 @@ export default function UploadWizard() {
       setProgress("Connecting…");
       const clients = await getClients();
       const meta = buildMeta(clients);
-      const input = { bytes: bytes ?? new Uint8Array([0]), meta };
+      // Thread the user's fee/revshare into the published license terms.
+      const { parseEther } = await import("viem");
+      let feeWei = 1n;
+      try { feeWei = parseEther((fee || "1").trim()); } catch { feeWei = 1n; }
+      const rev = Math.min(100, Math.max(0, Number(revshare) || 5));
+      const input = { bytes: bytes ?? new Uint8Array([0]), meta, terms: { rev, fee: feeWei } };
 
       // Dynamic import keeps the node-touching artifacts lib out of the static
       // client bundle (it reaches node:fs/node:crypto at module scope).
@@ -290,7 +295,8 @@ export default function UploadWizard() {
                 </div>
                 <p className="text-[11px] text-[var(--ov-text-faint)]">
                   Compute-tier data is never downloadable — consumers run only
-                  these whitelisted algorithms inside the enclave.
+                  these allowlisted algorithms inside the compute worker (a plain
+                  server in this demo; an attested enclave in production).
                 </p>
               </div>
             )}

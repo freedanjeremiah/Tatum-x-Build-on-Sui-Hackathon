@@ -222,14 +222,17 @@ export async function runComputeJob(
       scratchCleared,
     };
   } catch (e) {
-    // On any failure, still wipe whatever plaintext we hold.
+    // On any failure, still wipe whatever plaintext we hold — then verify it.
     wipe(plaintext, rows);
+    const cleared = isCleared(plaintext, rows);
+    plaintext = null;
+    rows = null;
     return {
       status: "failed",
       reason: (e as Error).message,
       isolationMode: ISOLATION_MODE,
       decryptCalled: true,
-      scratchCleared: true,
+      scratchCleared: cleared,
     };
   }
 }

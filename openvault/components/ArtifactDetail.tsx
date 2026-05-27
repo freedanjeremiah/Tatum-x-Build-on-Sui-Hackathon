@@ -180,7 +180,7 @@ function ComputeCta({ artifact }: { artifact: Artifact }) {
           <span className="font-medium text-[var(--tier-compute)]">
             computable, never downloadable
           </span>
-          . The data never leaves the enclave — run a confidential job instead.
+          . The data never leaves the compute worker — run a confidential job instead.
         </p>
       </div>
 
