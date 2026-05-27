@@ -10,7 +10,11 @@
     "smoke": "tsx",
     "indexer": "tsx indexer/listen.ts",
     "worker": "tsx worker/compute-worker.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "real": "node --env-file=.env.local --import tsx",
+    "probe:real": "node --env-file=.env.local --import tsx scripts/_probe-real.ts",
+    "worker:real": "node --env-file=.env.local --import tsx worker/compute-worker.ts",
+    "indexer:real": "node --env-file=.env.local --import tsx indexer/listen.ts"
   },
   "dependencies": {
     "@helia/unixfs": "^7.2.1",
