@@ -1,21 +1,17 @@
-// Returns real Story/CDR clients when keyed, deterministic mocks otherwise.
-// The real SDKs are dynamically imported inside the non-mock branch so that in
-// mock mode they are never loaded — the app (and tests) work even if the real
-// SDK packages have runtime issues.
+// Returns real Story/CDR clients (real mode only).
+// The real SDKs are dynamically imported so they are only loaded when needed.
 //
 // Real mode: viem clients are bound to the Story Aeneid chain (id 1315) so the
 // wallet can sign + send txs; the Story client is wrapped by wrapStory so
 // callers get the friendly `registerIpAsset` names with normalized returns.
 
-import { IS_MOCK } from "./env";
 import { RPC_URL, CDR_API_URL } from "./constants";
-import { makeMockClients } from "./mock/story";
 import { aeneid } from "./chains";
 import { wrapStory } from "./storyAdapter";
 
 // --- Script / server context (private key) ---
 export async function makeClientsFromKey(pk: `0x${string}`) {
-  if (IS_MOCK) return makeMockClients(pk);
+  if (!pk) throw new Error("Missing WALLET_PRIVATE_KEY — real mode requires a funded signer key");
 
   const { CDRClient, initWasm } = await import("@piplabs/cdr-sdk");
   const { StoryClient } = await import("@story-protocol/core-sdk");
@@ -36,8 +32,6 @@ export async function makeClientsFromKey(pk: `0x${string}`) {
 
 // --- Browser context (wallet connector via EIP-1193 provider) ---
 export async function makeClientsFromProvider(provider: any, address: `0x${string}`) {
-  if (IS_MOCK) return makeMockClients(address);
-
   const { CDRClient, initWasm } = await import("@piplabs/cdr-sdk");
   const { StoryClient } = await import("@story-protocol/core-sdk");
   const { createPublicClient, createWalletClient, custom, http } = await import("viem");
@@ -55,8 +49,6 @@ export async function makeClientsFromProvider(provider: any, address: `0x${strin
 
 // Read-only CDR (browse without wallet)
 export async function makeReadOnlyCdr() {
-  if (IS_MOCK) return makeMockClients("readonly").cdr;
-
   const { CDRClient } = await import("@piplabs/cdr-sdk");
   const { createPublicClient, http } = await import("viem");
   const publicClient = createPublicClient({ chain: aeneid, transport: http(RPC_URL) });
