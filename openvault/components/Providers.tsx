@@ -1,10 +1,10 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { IS_MOCK, PRIVY_APP_ID } from "@/lib/env";
+import { PRIVY_APP_ID } from "@/lib/env";
 
-// Privy is only needed in real mode. Load it lazily (client-only) so mock
-// test builds never instantiate the auth shell and never pay its bundle cost.
+// Privy is only needed when PRIVY_APP_ID is configured. Load it lazily
+// (client-only) so builds without credentials never instantiate the auth shell.
 const PrivyAuthProvider = dynamic(() => import("./PrivyAuthProvider"), {
   ssr: false,
 });
@@ -16,7 +16,7 @@ const PrivyAuthProvider = dynamic(() => import("./PrivyAuthProvider"), {
  * and nav stay visible while the CDR WASM runtime initializes.
  */
 export default function Providers({ children }: { children: React.ReactNode }) {
-  if (IS_MOCK || !PRIVY_APP_ID) {
+  if (!PRIVY_APP_ID) {
     return <>{children}</>;
   }
   return <PrivyAuthProvider>{children}</PrivyAuthProvider>;

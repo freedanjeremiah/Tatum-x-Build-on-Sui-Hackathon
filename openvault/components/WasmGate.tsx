@@ -1,21 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { IS_MOCK } from "@/lib/env";
 
 /**
  * Nothing that uses CDR may render before initWasm() resolves. WasmGate blocks
  * its children until the secure runtime is ready.
- *
- * In mock mode there is no CDR; we resolve immediately but keep the exact same
- * component shape so the real and mock trees are structurally identical.
  */
 export default function WasmGate({ children }: { children: React.ReactNode }) {
-  const [ready, setReady] = useState(IS_MOCK);
+  const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (IS_MOCK) return;
     let cancelled = false;
     (async () => {
       try {
