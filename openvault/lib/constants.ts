@@ -17,6 +17,8 @@ export const EVEN_SPLIT_GROUP_POOL =
   "0xf96f2c30b41Cb6e0290de43C8528ae83d4f33F89" as `0x${string}`;
 export const PUBLIC_SPG_COLLECTION =
   "0xc32A8a0FF3beDDDa58393d022aF433e78739FAbc" as `0x${string}`;
+export const IP_ASSET_REGISTRY =
+  "0x77319B4031e6eF1250907aa00018B8B1c67a244b" as `0x${string}`;
 
 export const EXPLORER_IPA = "https://aeneid.explorer.story.foundation/ipa/";
 export const STORYSCAN_TX = "https://aeneid.storyscan.io/tx/";
