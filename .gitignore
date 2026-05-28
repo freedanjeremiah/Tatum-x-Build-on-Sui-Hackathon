@@ -3,3 +3,6 @@
 /verify/node_modules/
 /verify/shots/
 /verify/package-lock.json
+/verify/.cf-profile/
+/verify/.privy-profile/
+/verify/*-headed.mjs
