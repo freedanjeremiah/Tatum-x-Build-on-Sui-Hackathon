@@ -76,7 +76,13 @@ async function decryptDataset(
   const plaintext = out?.content as Uint8Array;
   if (!plaintext) throw new Error("compute: CDR returned no content");
 
-  const rows = parseRows(plaintext);
+  let rows: number[][];
+  try {
+    rows = parseRows(plaintext);
+  } catch (e) {
+    plaintext.fill(0); // wipe before propagating — never leave decrypted bytes in memory
+    throw e;
+  }
   return { rows, plaintext };
 }
 
