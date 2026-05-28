@@ -13,7 +13,7 @@
 
 import { encodeAbiParameters } from "viem";
 import { IS_MOCK } from "./env";
-import { ROYALTY_MODULE } from "./constants";
+import { ROYALTY_MODULE, ROYALTY_POLICY_LAP } from "./constants";
 
 // WIP token (Story's wrapped IP). Mirrors WIP_TOKEN_ADDRESS exported by
 // @story-protocol/core-sdk; in real mode we import that constant directly.
@@ -79,10 +79,13 @@ export async function resolveTerms(
     return commercialRemixTerms(opts);
   }
   const { PILFlavor, WIP_TOKEN_ADDRESS } = await import("@story-protocol/core-sdk");
+  // royaltyPolicy must be an ADDRESS (RoyaltyPolicyInput = Address | enum). The
+  // string "LAP" is parsed as an address → "Invalid address: LAP". Use the
+  // deployed LAP policy address on Aeneid.
   if (kind === "attribution") {
     return PILFlavor.creativeCommonsAttribution({
       currency: WIP_TOKEN_ADDRESS,
-      royaltyPolicy: "LAP",
+      royaltyPolicy: ROYALTY_POLICY_LAP,
     } as any);
   }
   // commercialRemix + compute both use commercialRemix; distinct fee/rev yield
@@ -91,7 +94,7 @@ export async function resolveTerms(
     defaultMintingFee: opts.fee,
     commercialRevShare: opts.rev,
     currency: WIP_TOKEN_ADDRESS,
-    royaltyPolicy: "LAP",
+    royaltyPolicy: ROYALTY_POLICY_LAP,
   } as any);
 }
 
