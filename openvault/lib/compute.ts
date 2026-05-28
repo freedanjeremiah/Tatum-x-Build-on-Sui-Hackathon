@@ -1,6 +1,5 @@
 // Compute helpers: allowlist gating, ComputeJob construction, the runComputeJob
-// worker contract (with an inline mock impl), and a browser-facing runJob that
-// POSTs to /api/compute.
+// worker contract, and a browser-facing runJob that POSTs to /api/compute.
 //
 // HONESTY: CDR does key-delivery ONLY. Compute privacy = worker isolation +
 // the per-dataset algorithm allowlist, NOT CDR. A compute result returns ONLY
@@ -75,8 +74,6 @@ export type RunComputeJob = (
   input: RunComputeJobInput
 ) => Promise<ComputeJobResult>;
 
-const ISOLATION_MODE = "plain-server (operator-trusted, demo)";
-
 /** Human-friendly names for the seed's hash-pinned algorithms. */
 export const ALGO_NAMES: Record<string, string> = {
   "sha256:mean-aggregate": "Mean aggregate (DP-friendly)",
@@ -87,84 +84,12 @@ export function algoName(hash: string): string {
   return ALGO_NAMES[hash] ?? hash.replace(/^sha256:/, "");
 }
 
-/**
- * Inline mock implementation of the worker contract.
- *
- * 1. allowlistCheck(algoHash, allowed) — if NOT allowed: return rejected with
- *    decryptCalled:false and NO decryption performed.
- * 2. if allowed: simulate verify-token → decrypt-in-worker (mock) → run a
- *    trivial aggregate over fake numeric rows → produce metrics (NO raw rows) →
- *    register the result as a derivative of datasetIpId (mock) → return done.
- */
-export async function runComputeJobInline(
-  input: RunComputeJobInput,
-  allowed: string[]
-): Promise<ComputeJobResult> {
-  // STEP 1: allowlist gate — BEFORE any decryption.
-  if (!allowlistCheck(input.algoHash, allowed)) {
-    return {
-      status: "rejected",
-      reason: "algorithm not on dataset allowlist",
-      decryptCalled: false,
-    };
-  }
-
-  // STEP 2: verify license token (mock) → decrypt-in-worker (mock). In a real
-  // deployment this is where CDR delivers the key INTO the isolated worker; the
-  // plaintext never leaves the worker boundary.
-  const decryptCalled = true;
-
-  // STEP 3: run a trivial aggregate over fake numeric rows (never returned).
-  const fakeRows = [12, 18, 23, 31, 7, 19, 27, 14, 22, 9];
-  const n = fakeRows.length;
-  const sum = fakeRows.reduce((acc, v) => acc + v, 0);
-  const mean = sum / n;
-
-  let metrics: Record<string, number>;
-  if (input.algoHash === "sha256:logistic-regression") {
-    // Coefficients only — no rows, no per-record output.
-    metrics = {
-      n,
-      intercept: Number((mean / 10).toFixed(4)),
-      coefficient: Number((1 / (1 + Math.exp(-mean / 10))).toFixed(4)),
-      accuracy: 0.84,
-    };
-  } else {
-    // mean-aggregate (default)
-    const variance = fakeRows.reduce((a, v) => a + (v - mean) ** 2, 0) / n;
-    metrics = {
-      n,
-      mean: Number(mean.toFixed(4)),
-      stddev: Number(Math.sqrt(variance).toFixed(4)),
-      min: Math.min(...fakeRows),
-      max: Math.max(...fakeRows),
-    };
-  }
-
-  // STEP 4: register the result as a derivative of the dataset (mock) so
-  // royalties flow upstream to datasetIpId.
-  const resultIpId = ("0xresult" +
-    input.datasetIpId.slice(2, 36)).slice(0, 42) as `0x${string}`;
-  const resultTx = ("0xresulttx" +
-    uuid().replace(/-/g, "")).slice(0, 66) as `0x${string}`;
-
-  return {
-    status: "done",
-    metrics,
-    resultIpId,
-    resultTx,
-    metricsURI: `ipfs://bafyMetrics${input.algoHash.replace(/[^a-z0-9]/gi, "")}`,
-    isolationMode: ISOLATION_MODE,
-    decryptCalled,
-  };
-}
-
 // --- Browser-facing runJob (POST /api/compute) -------------------------
 
 /**
  * Run a compute job from the browser by POSTing to /api/compute. Returns the
- * parsed ComputeJobResult. The route delegates to runComputeJob (inline mock now;
- * the Phase 5 worker later). Raw rows are never part of the response.
+ * parsed ComputeJobResult. The route delegates to the worker's runComputeJob.
+ * Raw rows are never part of the response.
  */
 export async function runJob(
   input: RunComputeJobInput

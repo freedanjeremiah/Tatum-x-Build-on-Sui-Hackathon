@@ -38,71 +38,45 @@ export interface WorkerInput {
 /**
  * Decrypt the dataset INSIDE the worker via CDR's gated download, then parse the
  * plaintext into numeric rows. Returns the rows AND the raw plaintext buffer so
- * the caller can wipe both. THROWS nothing for the demo: if the mock vault has
- * no entry for this dataset (e.g. seed-only metadata), we fall back to a small
- * deterministic demo cohort — but the (gated) download is still ATTEMPTED first,
- * so `decryptCalled` and any spy on consumer.downloadFile observe a real call.
+ * the caller can wipe both.
  *
- * VERIFY: delegated decryption vs worker-holds-token (SPEC §C9). In real mode
- * the worker must present a COMPUTE license the operator is permitted to use to
- * collect the threshold key; here we attempt the gated download and, lacking a
- * provisioned vault entry, synthesize demo rows so the flow is demonstrable.
+ * REAL-ONLY: there is NO synthetic fallback. The worker mints a real COMPUTE
+ * license token for the dataset IP, encodes it as accessAuxData, and presents it
+ * to the CDR consumer's gated download to collect the threshold key and decrypt
+ * the real vault entry. If the dataset has no CDR vault, no compute license terms,
+ * or CDR returns nothing, this THROWS — the caller turns that into status:"failed".
  */
 async function decryptDataset(
   clients: Clients,
   dataset: Artifact | undefined,
   datasetIpId: `0x${string}`
 ): Promise<{ rows: number[][]; plaintext: Uint8Array }> {
-  // Attempt the gated CDR download (this is the KEY-DELIVERY-gated read). The
-  // call is made unconditionally on the allowed path so isolation + spies see it.
-  let plaintext: Uint8Array | null = null;
-  try {
-    const uuid = dataset?.vaultUuid;
-    if (uuid !== undefined && clients.cdr?.consumer?.downloadFile) {
-      // Mock vault accepts a token minted via __mintFor(ipId); real path would
-      // present the compute license token as accessAuxData.
-      // VERIFY: delegated decryption vs worker-holds-token (SPEC §C9) — in real
-      // mode the worker must present a COMPUTE license the operator is permitted
-      // to use to collect the threshold key. Here we mint via the mock helper.
-      const accessAuxData =
-        typeof clients.cdr.__mintFor === "function"
-          ? await clients.cdr.__mintFor(datasetIpId)
-          : "0x";
-      const storageProvider = await heliaProvider();
-      const out = await clients.cdr.consumer.downloadFile({
-        uuid,
-        accessAuxData,
-        storageProvider,
-        timeoutMs: 120000,
-      });
-      plaintext = out?.content as Uint8Array;
-    } else if (clients.cdr?.consumer?.downloadFile) {
-      // No vaultUuid on record — still touch the gate so the attempt is real.
-      await clients.cdr.consumer
-        .downloadFile({ uuid: -1, accessAuxData: "0x" })
-        .catch(() => undefined);
-    }
-  } catch {
-    // Vault entry absent / not provisioned in this demo run — fall through.
-    plaintext = null;
+  const uuid = dataset?.vaultUuid;
+  if (uuid === undefined || dataset === undefined) {
+    throw new Error("compute: dataset has no CDR vault (vaultUuid) — cannot decrypt");
+  }
+  if (!clients.cdr?.consumer?.downloadFile) {
+    throw new Error("compute: CDR consumer unavailable");
   }
 
-  let rows: number[][];
-  if (plaintext) {
-    rows = parseRows(plaintext);
-  } else {
-    // Deterministic demo cohort (2 features + label). Stands in for a real
-    // decrypted dataset when the demo vault has no provisioned entry.
-    rows = [
-      [0.2, 0.1, 0],
-      [0.4, 0.3, 0],
-      [0.9, 0.8, 1],
-      [0.7, 0.95, 1],
-      [0.1, 0.05, 0],
-      [0.85, 0.6, 1],
-    ];
-    plaintext = new TextEncoder().encode(JSON.stringify(rows));
-  }
+  // Mint the real compute license token and encode it as accessAuxData.
+  const { mintLicense, encodeAccessAuxData } = await import("../lib/licensing");
+  const termsId = dataset.computeLicenseTermsId ?? dataset.licenseTermsId;
+  if (!termsId) throw new Error("compute: dataset has no compute license terms id");
+  const licenseTokenId = await mintLicense(clients.story, datasetIpId, termsId);
+  const accessAuxData = encodeAccessAuxData([licenseTokenId]);
+
+  const storageProvider = await heliaProvider();
+  const out = await clients.cdr.consumer.downloadFile({
+    uuid,
+    accessAuxData,
+    storageProvider,
+    timeoutMs: 120000,
+  });
+  const plaintext = out?.content as Uint8Array;
+  if (!plaintext) throw new Error("compute: CDR returned no content");
+
+  const rows = parseRows(plaintext);
   return { rows, plaintext };
 }
 
@@ -262,67 +236,4 @@ function toMetrics(out: Record<string, unknown>): Record<string, number> {
     // Objects / strings are dropped — metrics are numeric aggregates only.
   }
   return metrics;
-}
-
-// --- CLI demo: `NEXT_PUBLIC_MOCK=1 pnpm worker` --------------------------
-// Runs one ALLOWED job + one REJECTED job in mock and prints the results, so the
-// allowlist-gate + decrypt-in-worker + wipe invariants are demonstrable headless.
-
-async function demo() {
-  const { makeMockClients } = await import("../lib/mock/story");
-  const { SEED_ARTIFACTS } = await import("../lib/mock/seed");
-  const clients = makeMockClients("0xdemo") as unknown as Clients;
-  const dataset = SEED_ARTIFACTS.find((a) => a.tier === "compute")!;
-  const allowed = dataset.allowedAlgoHashes ?? [];
-
-  console.log("=== OpenVault confidential-compute worker (mock demo) ===");
-  console.log("dataset:", dataset.ipId, "| allowlist:", allowed.join(", "));
-  console.log("isolation:", ISOLATION_MODE);
-  console.log("");
-
-  const ok = await runComputeJob({
-    datasetIpId: dataset.ipId,
-    algoHash: "sha256:mean-aggregate",
-    allowedAlgoHashes: allowed,
-    dataset,
-    clients,
-  });
-  console.log("[ALLOWED] algo: sha256:mean-aggregate");
-  console.log("  status        :", ok.status);
-  console.log("  decryptCalled :", ok.decryptCalled);
-  console.log("  scratchCleared:", ok.scratchCleared);
-  console.log("  metrics       :", JSON.stringify(ok.metrics));
-  console.log("  resultIpId    :", ok.resultIpId);
-  console.log("");
-
-  const rejected = await runComputeJob({
-    datasetIpId: dataset.ipId,
-    algoHash: "sha256:dump-all-rows",
-    allowedAlgoHashes: allowed,
-    dataset,
-    clients,
-  });
-  console.log("[REJECTED] algo: sha256:dump-all-rows (off-allowlist)");
-  console.log("  status        :", rejected.status);
-  console.log("  reason        :", rejected.reason);
-  console.log("  decryptCalled :", rejected.decryptCalled, "(no decryption happened)");
-  console.log("");
-  console.log("Invariants held: off-allowlist algo rejected BEFORE decrypt;");
-  console.log("allowed algo returned metrics only and wiped its plaintext.");
-}
-
-// Run the demo only when executed directly (tsx/node), not when imported.
-const isMain = (() => {
-  try {
-    const argv1 = process.argv?.[1] ?? "";
-    return /compute-worker\.(ts|js|mjs|cjs)$/.test(argv1);
-  } catch {
-    return false;
-  }
-})();
-if (isMain) {
-  demo().catch((e) => {
-    console.error(e);
-    process.exit(1);
-  });
 }
