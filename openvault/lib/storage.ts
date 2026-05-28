@@ -1,18 +1,18 @@
 // Storage helpers: a StorageProvider for the CDR uploader, plus content pinning
-// (JSON metadata + raw bytes). In mock mode everything is deterministic and
-// offline; the real branch uses Pinata (IPFS) for reliable cross-process
-// retrieval — the CDR uploader hands ciphertext bytes to provider.upload() and
-// the consumer fetches them back by CID via provider.download().
+// (JSON metadata + raw bytes). Storage is always real Pinata (IPFS) for reliable
+// cross-process retrieval — the CDR uploader hands ciphertext bytes to
+// provider.upload() and the consumer fetches them back by CID via
+// provider.download().
 
-import { IS_MOCK, PINATA_JWT } from "./env";
+import { PINATA_JWT } from "./env";
 
 /**
- * Loose StorageProvider shape. The mock keeps a `CID` identity helper (the tests
- * assert on it); the real one (lib/pinataStorage) implements the CDR SDK's
- * `upload(data, opts)→cid` / `download(cid)→bytes` contract. Both satisfy this.
+ * Loose StorageProvider shape. The real provider (lib/pinataStorage) implements
+ * the CDR SDK's `upload(data, opts)→cid` / `download(cid)→bytes` contract.
+ * `CID` is kept optional for interface compatibility with remotePinProvider.
  */
 export interface StorageProvider {
-  /** Mock-only identity helper over a CID string (asserted by storage tests). */
+  /** Optional identity helper over a CID string. */
   CID?: (s: string) => unknown;
   [k: string]: unknown;
 }
@@ -163,43 +163,32 @@ function sha256js(data: Uint8Array): string {
 
 /**
  * Returns the StorageProvider the CDR uploader/consumer need.
- * - Mock: a tiny stub whose `CID` is the identity over a string, with no-op
- *   put/get so callers that touch them don't crash.
- * - Real: a Pinata-backed provider (lib/pinataStorage) implementing the CDR
- *   SDK's `upload(data,opts)→cid` / `download(cid)→bytes` contract. Pinata is
- *   used for reliable cross-process retrieval (the worker/consumer can fetch
- *   ciphertext that another process uploaded).
+ * Always real: a Pinata-backed provider (lib/pinataStorage) implementing the CDR
+ * SDK's `upload(data,opts)→cid` / `download(cid)→bytes` contract. Pinata is used
+ * for reliable cross-process retrieval (the worker/consumer can fetch ciphertext
+ * that another process uploaded).
  *
  * Kept named `heliaProvider` so existing callers (artifacts.ts, worker) need no
  * churn; the name is historical — real mode is Pinata, not Helia.
  */
 export async function heliaProvider(): Promise<StorageProvider> {
-  if (IS_MOCK) {
-    return {
-      CID: (s: string) => s,
-      putFile: async (_bytes: Uint8Array) => undefined,
-      getFile: async (_cid: string) => new Uint8Array(),
-    };
-  }
-  // Browser real mode: pin via our server route (JWT stays server-side).
+  // Browser: pin via our server route (JWT stays server-side).
   if (isBrowser) return remotePinProvider();
-  // Node real mode (scripts, worker, API routes): direct Pinata with the JWT.
+  // Node (scripts, worker, API routes): direct Pinata with the JWT.
+  if (!nodeJwt()) throw new Error("Missing PINATA_JWT — real storage requires a Pinata JWT");
   const { pinataStorageProvider } = await import("./pinataStorage");
   return pinataStorageProvider(nodeJwt()) as unknown as StorageProvider;
 }
 
 /**
- * Pin a JSON object to IPFS.
- * - Mock: deterministic `uri="ipfs://mock"+sha256hex`, `hash="0x"+sha256hex`.
- * - Real: POST to Pinata's pinJSONToIPFS with the JWT; uri is the REAL ipfs cid.
- *   `hash` is always sha256 of the canonical JSON (same field semantics as mock).
+ * Pin a JSON object to IPFS via Pinata.
+ * Browser: POST via our /api/pin route (JWT stays server-side).
+ * Node: POST directly to Pinata's pinJSONToIPFS with the JWT.
+ * `uri` is the real ipfs:// CID; `hash` is sha256 of the canonical JSON.
  */
 export async function pinJSON(obj: unknown): Promise<PinResult> {
   const json = JSON.stringify(obj);
   const hash = sha256hex(json);
-  if (IS_MOCK) {
-    return { uri: "ipfs://mock" + hash.slice(2), hash };
-  }
   // Browser: pin through our server route (JWT never reaches the client).
   if (isBrowser) {
     const res = await fetch("/api/pin", {
@@ -216,6 +205,7 @@ export async function pinJSON(obj: unknown): Promise<PinResult> {
     return { uri: out.uri, hash: out.hash ?? hash };
   }
   // Node: direct Pinata with the live JWT.
+  if (!nodeJwt()) throw new Error("Missing PINATA_JWT — real storage requires a Pinata JWT");
   const res = await fetch(PIN_JSON_URL, {
     method: "POST",
     headers: {
@@ -234,14 +224,13 @@ export async function pinJSON(obj: unknown): Promise<PinResult> {
 }
 
 /**
- * Pin raw bytes to IPFS (used by the public tier "pin in clear").
- * Same result shape as pinJSON; real uri is the REAL ipfs cid.
+ * Pin raw bytes to IPFS via Pinata (used by the public tier "pin in clear").
+ * Browser: POST via our /api/pin-file route (JWT stays server-side).
+ * Node: POST directly to Pinata's pinFileToIPFS with the JWT.
+ * `uri` is the real ipfs:// CID; `hash` is sha256 of the bytes.
  */
 export async function pinFile(bytes: Uint8Array): Promise<PinResult> {
   const hash = sha256hex(bytes);
-  if (IS_MOCK) {
-    return { uri: "ipfs://mock" + hash.slice(2), hash };
-  }
   const buf = bytes.buffer.slice(
     bytes.byteOffset,
     bytes.byteOffset + bytes.byteLength
@@ -262,6 +251,7 @@ export async function pinFile(bytes: Uint8Array): Promise<PinResult> {
     return { uri: "ipfs://" + out.cid, hash };
   }
   // Node: direct Pinata with the live JWT.
+  if (!nodeJwt()) throw new Error("Missing PINATA_JWT — real storage requires a Pinata JWT");
   const form = new FormData();
   form.append("file", new Blob([buf]), "artifact.bin");
   const res = await fetch(PIN_FILE_URL, {
