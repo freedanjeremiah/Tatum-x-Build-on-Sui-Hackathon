@@ -14,6 +14,8 @@
 // Typed `any` where the SDK generics are awkward — the mapping is exact and the
 // real shapes are confirmed in node_modules .d.ts (ipAsset.d.ts).
 
+import { WIP_OPTIONS } from "./constants";
+
 export function wrapStory(real: any): any {
   return {
     ipAsset: {
@@ -23,6 +25,7 @@ export function wrapStory(real: any): any {
           spgNftContract: req.nft.spgNftContract,
           licenseTermsData: req.licenseTermsData,
           ipMetadata: req.ipMetadata,
+          ...WIP_OPTIONS,
         });
         return {
           ipId: r.ipId,
@@ -38,6 +41,7 @@ export function wrapStory(real: any): any {
           spgNftContract: req.nft.spgNftContract,
           derivData: req.derivData,
           ipMetadata: req.ipMetadata,
+          ...WIP_OPTIONS,
         });
         return {
           ipId: r.ipId,

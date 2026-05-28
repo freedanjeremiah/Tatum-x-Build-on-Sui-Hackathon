@@ -20,3 +20,13 @@ export const PUBLIC_SPG_COLLECTION =
 
 export const EXPLORER_IPA = "https://aeneid.explorer.story.foundation/ipa/";
 export const STORYSCAN_TX = "https://aeneid.storyscan.io/tx/";
+
+// Auto-wrap native IP -> WIP (and auto-approve) for any fee-bearing call. Fees
+// (minting fee, royalties, dispute bonds) are denominated in WIP, but wallets
+// hold native IP. With this, the SDK wraps exactly the shortfall in the same
+// multicall and approves spending — caller never pre-wraps, so native IP is left
+// for gas. Defaults are already true in core-sdk 1.4.4; set explicitly so the
+// behavior survives SDK default changes. Nested under `options` per WithWipOptions.
+export const WIP_OPTIONS = {
+  options: { wipOptions: { enableAutoWrapIp: true, enableAutoApprove: true } },
+} as const;

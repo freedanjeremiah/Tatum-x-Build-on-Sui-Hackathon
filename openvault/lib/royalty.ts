@@ -2,7 +2,7 @@
 // revenue, and claim all revenue flowing up from children.
 
 import { zeroAddress } from "viem";
-import { ROYALTY_POLICY_LAP } from "./constants";
+import { ROYALTY_POLICY_LAP, WIP_OPTIONS } from "./constants";
 import { WIP_TOKEN } from "./licensing";
 
 /** Pay royalties on behalf of (to) a child IP. */
@@ -15,6 +15,7 @@ export async function payRoyalty(
     payerIpId: zeroAddress,
     token: WIP_TOKEN,
     amount,
+    ...WIP_OPTIONS,
   });
 }
 

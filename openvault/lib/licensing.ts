@@ -13,7 +13,7 @@
 
 import { encodeAbiParameters } from "viem";
 import { IS_MOCK } from "./env";
-import { ROYALTY_MODULE, ROYALTY_POLICY_LAP } from "./constants";
+import { ROYALTY_MODULE, ROYALTY_POLICY_LAP, WIP_OPTIONS } from "./constants";
 
 // WIP token (Story's wrapped IP). Mirrors WIP_TOKEN_ADDRESS exported by
 // @story-protocol/core-sdk; in real mode we import that constant directly.
@@ -104,10 +104,12 @@ export function encodeAccessAuxData(tokenIds: bigint[]): `0x${string}` {
 }
 
 /**
- * Mint a license token for `ipId` under `termsId`. REAL: deposit WIP, approve the
- * royalty module, then mint (maxMintingFee = the deposited fee, maxRevenueShare =
- * 100). MOCK: the mock SDK's mintLicenseTokens ignores fee args. Returns the
- * first minted licenseTokenId.
+ * Mint a license token for `ipId` under `termsId`. REAL: the SDK auto-wraps the
+ * exact minting fee from native IP -> WIP and auto-approves the royalty module in
+ * the same multicall (via WIP_OPTIONS), then mints (maxMintingFee = `fee`,
+ * maxRevenueShare = 100). We no longer pre-`deposit` the full `fee`, which used to
+ * wrap the wallet's entire native balance and starve gas. MOCK: the mock SDK's
+ * mintLicenseTokens ignores fee args. Returns the first minted licenseTokenId.
  */
 export async function mintLicense(
   story: any,
@@ -116,14 +118,13 @@ export async function mintLicense(
   fee: bigint = 1_000_000_000_000_000_000n
 ): Promise<bigint> {
   if (!IS_MOCK) {
-    await story.wipClient.deposit({ amount: fee });
-    await story.wipClient.approve({ spender: ROYALTY_MODULE, amount: fee });
     const res = await story.license.mintLicenseTokens({
       licensorIpId: ipId,
       licenseTermsId: BigInt(termsId),
       amount: 1,
       maxMintingFee: fee,
       maxRevenueShare: 100,
+      ...WIP_OPTIONS,
     });
     return res.licenseTokenIds[0] as bigint;
   }
