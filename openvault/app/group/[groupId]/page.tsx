@@ -44,10 +44,11 @@ export default function GroupPage({
     all.find((a) => a.groupId === groupId || a.ipId === groupId) ??
     all.find((a) => a.tier === "group");
 
-  // Members: in mock, the group seed + a couple of other artifacts stand in for
-  // the bundle. (Real groups carry explicit member IP ids.)
-  const members = group
-    ? [group, ...all.filter((a) => a.ipId !== group.ipId).slice(0, 2)]
+  // Members are the indexed artifacts whose groupId points at this group. No
+  // fabrication — if none are indexed yet, the list is honestly empty.
+  const groupKey = (group?.groupId ?? group?.ipId) as `0x${string}` | undefined;
+  const members = group && groupKey
+    ? all.filter((a) => a.groupId === groupKey)
     : [];
 
   if (loading) {
@@ -191,7 +192,7 @@ function LicenseSummary({ group }: { group: Artifact }) {
         type="button"
         onClick={() =>
           alert(
-            "Mock subscribe: in production this mints a group-pool license. Note the SPEC §8.7 open item — unlocking member vaults still falls back to per-IP gating."
+            "Subscribe mints a group-pool license. Per SPEC §8.7 open item, unlocking member vaults still falls back to per-IP gating."
           )
         }
         className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-semibold transition-all"

@@ -52,11 +52,12 @@ export default function DownloadButton({ artifact }: DownloadButtonProps) {
     setError(null);
     setPhase("decrypting");
     try {
-      // Public artifacts are pinned in the clear — fetch via the gateway CID.
-      // In mock we synthesize representative bytes (no real gateway).
-      const bytes = new TextEncoder().encode(
-        `OpenVault public artifact\nipId: ${artifact.ipId}\ncid: ${artifact.cid ?? ""}\n`
-      );
+      const ref = artifact.cid ?? "";
+      if (!ref) throw new Error("This artifact has no CID to download.");
+      const cidHash = ref.replace(/^ipfs:\/\//, "");
+      const res = await fetch(`https://gateway.pinata.cloud/ipfs/${cidHash}`);
+      if (!res.ok) throw new Error(`Gateway fetch failed (${res.status})`);
+      const bytes = new Uint8Array(await res.arrayBuffer());
       triggerBrowserDownload(bytes);
       setPhase("done");
     } catch (e) {
