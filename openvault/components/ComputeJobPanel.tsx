@@ -9,7 +9,7 @@ import TxLink from "./TxLink";
 type Phase = "idle" | "minting" | "verifying" | "running" | "done" | "rejected" | "error";
 
 /**
- * Pick an allowlisted algorithm + params → mint a compute license (mock) → run
+ * Pick an allowlisted algorithm + params → mint a compute license → run
  * the job via /api/compute → show metrics + the resultIpId (a derivative of the
  * dataset) + the isolation-mode disclosure. NO raw data is ever returned; an
  * off-allowlist request is rejected before any decryption.
@@ -35,19 +35,10 @@ export default function ComputeJobPanel({ artifact }: { artifact: Artifact }) {
     setPhase("minting");
     try {
       const clients = await getClients();
-      let tokenId: string;
-      if (typeof clients.cdr?.__mintFor === "function") {
-        // Mock vault: deterministic compute-license token id.
-        tokenId = String(await clients.cdr.__mintFor(artifact.ipId)).slice(0, 18);
-      } else {
-        // Real: mint against the dataset's compute license terms (distinct from
-        // a download license). Falls back to the standard terms id if unset.
-        const termsId =
-          artifact.computeLicenseTermsId ?? artifact.licenseTermsId ?? "";
-        if (!termsId) throw new Error("This dataset has no compute license terms.");
-        const { mintLicense } = await import("@/lib/licensing");
-        tokenId = String(await mintLicense(clients.story, artifact.ipId, termsId));
-      }
+      const termsId = artifact.computeLicenseTermsId ?? artifact.licenseTermsId ?? "";
+      if (!termsId) throw new Error("This dataset has no compute license terms.");
+      const { mintLicense } = await import("@/lib/licensing");
+      const tokenId = String(await mintLicense(clients.story, artifact.ipId, termsId));
       setLicenseTokenId(tokenId);
     } catch (e) {
       if (e instanceof WalletNotConnectedError) {
