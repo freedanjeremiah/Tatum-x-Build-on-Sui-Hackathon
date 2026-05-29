@@ -1,38 +1,35 @@
-// Addendum §C6 — Confidential compute job (SIMULATED).
+// Addendum §C6 — Confidential compute job (REAL worker).
 //
-// Proves the access + allowlist invariants:
-//   1. consumer mints a COMPUTE license (distinct terms id),
-//   2. worker checks algoHash ∈ allowedAlgoHashes BEFORE any decryption,
-//   3. only on an allowlisted algo does it CDR-decrypt the dataset,
-//   4. it runs the allowlisted algo and registers the result as a derivative,
-//   5. it returns ONLY metrics — never the raw rows.
-// A second job with an off-allowlist algo is rejected and never decrypts.
+// Proves the access + allowlist invariants against the real chain:
+//   1. Upload a compute-enabled dataset to CDR (real vault, real IP registration),
+//   2. Drive runComputeJob from worker/compute-worker with an ALLOWLISTED algo:
+//      - worker checks algoHash ∈ allowedAlgoHashes BEFORE any decryption,
+//      - mints a real compute license token, presents it to CDR for key delivery,
+//      - runs the hash-pinned algo and registers the result as a derivative,
+//      - returns ONLY metrics — never raw rows.
+//   3. Drive a second job with an OFF-allowlist algo: the real worker rejects it
+//      and provably never calls CDR decrypt (decryptCalled: false).
 //
-// Compute helpers (allowlistCheck/submitJob/runJob) live in lib/compute; the
-// dataset upload uses lib/artifacts.uploadCompute. The real worker is Phase 5.
+// Compute helpers live in lib/compute; the dataset upload uses lib/artifacts.uploadCompute.
+// The confidential-compute worker is worker/compute-worker.ts.
 //
-// Run: NEXT_PUBLIC_MOCK=1 pnpm tsx scripts/08-compute-job.ts
+// Run: pnpm tsx scripts/08-compute-job.ts  (requires WALLET_PRIVATE_KEY in .env.local)
 
 import { getClients, logTx } from "./_util";
-import { PUBLIC_SPG_COLLECTION } from "../lib/constants";
 import { uploadCompute } from "../lib/artifacts";
-import { allowlistCheck, submitJob, type ComputeResult } from "../lib/compute";
-import { encodeAccessAuxData } from "../lib/licensing";
-import { heliaProvider } from "../lib/storage";
-import type { ComputeJob } from "../types/artifact";
+import { runComputeJob } from "../worker/compute-worker";
+import type { Clients } from "../lib/artifacts";
 
 const ALLOWED_ALGOS = ["sha256:mean-aggregate", "sha256:logistic-regression"];
 
 async function main() {
   const clients = await getClients();
-  const { cdr, story } = clients as any;
   const owner = (clients.account as any).address as `0x${string}`;
-  const storageProvider = await heliaProvider();
 
   // --- Dataset owner: register a compute-enabled dataset IP and vault its rows ---
   const rows = [10, 20, 30, 40, 50];
   const payload = new TextEncoder().encode(JSON.stringify({ values: rows }));
-  const dataset = await uploadCompute(clients as any, {
+  const dataset = await uploadCompute(clients as unknown as Clients, {
     bytes: payload,
     meta: {
       title: "Confidential Numeric Rows",
@@ -44,86 +41,49 @@ async function main() {
     allowedAlgoHashes: ALLOWED_ALGOS,
   });
   const datasetIpId = dataset.ipId;
-  const datasetUuid = dataset.vaultUuid!;
   logTx("register + vault dataset", dataset.createdTx);
 
-  // Consumer mints a COMPUTE license (distinct terms id from a plain read).
-  const mint = await story.license.mintLicenseTokens({
-    licensorIpId: datasetIpId,
-    licenseTermsId: BigInt(dataset.computeLicenseTermsId!),
-    amount: 1,
-  });
-  const computeLicenseTokenId = mint.licenseTokenIds[0] as bigint;
-  logTx("mint compute license", mint.txHash);
+  console.log("=== 08-compute-job (Addendum §C6, real worker) ===");
+  console.log("datasetIpId:", datasetIpId);
+  console.log("vaultUuid:", dataset.vaultUuid);
+  console.log("computeLicenseTermsId:", dataset.computeLicenseTermsId);
 
-  // The access token the vault will accept for this dataset.
-  const accessAux = encodeAccessAuxData([computeLicenseTokenId]);
-
-  // ---- Worker simulation (real worker = Phase 5) ----
-  async function worker(job: ComputeJob): Promise<ComputeResult> {
-    // (a) verify the license token (mock: presence is enough).
-    if (!job.computeLicenseTokenId) return { status: "rejected" };
-    // (b) allowlist gate — BEFORE any decryption.
-    if (!allowlistCheck(job.algoHash, ALLOWED_ALGOS)) {
-      return { status: "rejected", decryptCalled: false };
-    }
-    // (c) only now CDR-decrypt the dataset.
-    const out = await cdr.consumer.downloadFile({
-      uuid: datasetUuid,
-      accessAuxData: accessAux,
-      storageProvider,
-    });
-    const parsed = JSON.parse(new TextDecoder().decode(out.content)) as { values: number[] };
-    // (d) run the allowlisted algorithm (trivial mean aggregate).
-    const mean = parsed.values.reduce((a, b) => a + b, 0) / parsed.values.length;
-    // (e) register the RESULT as a derivative of the dataset.
-    const res = await story.ipAsset.registerDerivativeIpAsset({
-      nft: { type: "mint", spgNftContract: PUBLIC_SPG_COLLECTION },
-      derivData: { parentIpIds: [datasetIpId], licenseTermsIds: [dataset.computeLicenseTermsId!] },
-      ipMetadata: {},
-    });
-    // (f) return ONLY metrics — never the raw rows.
-    return {
-      status: "done",
-      metrics: { mean, count: parsed.values.length },
-      resultIpId: res.ipId,
-      decryptCalled: true,
-    };
-  }
-
-  console.log("=== 08-compute-job (Addendum §C6, simulated) ===");
-
-  // Job 1: allowlisted algo → completes with metrics only.
-  const job1 = submitJob({
+  // Job 1: allowlisted algo → real worker decrypts via CDR, runs mean-aggregate,
+  // registers the result as a derivative, returns metrics only.
+  console.log("\n--- Job 1: allowlisted algo (sha256:mean-aggregate) ---");
+  const r1 = await runComputeJob({
     datasetIpId,
-    consumer: owner,
     algoHash: "sha256:mean-aggregate",
-    computeLicenseTokenId,
+    allowedAlgoHashes: ALLOWED_ALGOS,
+    dataset,
+    clients: clients as unknown as import("../lib/artifacts").Clients,
   });
-  // runJob now POSTs to /api/compute (browser path); this script drives the
-  // worker fn directly to prove the same allowlist + results-only invariants.
-  const r1 = await worker(job1);
-  if (r1.status !== "done") throw new Error("job1 should have completed");
+  console.log("job1 status:", r1.status);
+  console.log("job1 metrics:", JSON.stringify(r1.metrics));
+  console.log("job1 resultIpId:", r1.resultIpId);
+  console.log("job1 isolationMode:", r1.isolationMode);
+  console.log("job1 decryptCalled:", r1.decryptCalled);
+  console.log("job1 scratchCleared:", r1.scratchCleared);
+  if (r1.resultTx) logTx("job1 derivative tx", r1.resultTx);
+  if (r1.status !== "done") throw new Error(`job1 expected done, got: ${r1.status} — ${r1.reason}`);
   if (r1.metrics && ("values" in r1.metrics || "rows" in r1.metrics)) {
     throw new Error("compute result leaked raw rows");
   }
-  console.log("job1 algo:", job1.algoHash);
-  console.log("job1 status:", r1.status, "| metrics:", JSON.stringify(r1.metrics));
-  console.log("job1 resultIpId:", r1.resultIpId);
   console.log("✓ job1 done — only metrics returned, raw rows never exposed");
 
-  // Job 2: off-allowlist algo → rejected, decrypt never called.
-  const job2 = submitJob({
+  // Job 2: off-allowlist algo → real worker rejects before any CDR decryption.
+  console.log("\n--- Job 2: off-allowlist algo (sha256:dump-all-rows) ---");
+  const r2 = await runComputeJob({
     datasetIpId,
-    consumer: owner,
     algoHash: "sha256:dump-all-rows",
-    computeLicenseTokenId,
+    allowedAlgoHashes: ALLOWED_ALGOS,
+    dataset,
+    clients: clients as unknown as import("../lib/artifacts").Clients,
   });
-  const r2 = await worker(job2);
-  if (r2.status !== "rejected") throw new Error("job2 should have been rejected");
+  console.log("job2 status:", r2.status);
+  console.log("job2 decryptCalled:", r2.decryptCalled);
+  if (r2.status !== "rejected") throw new Error(`job2 expected rejected, got: ${r2.status}`);
   if (r2.decryptCalled) throw new Error("job2 must NOT decrypt off-allowlist data");
-  console.log("job2 algo:", job2.algoHash);
-  console.log("job2 status:", r2.status, "| decryptCalled:", r2.decryptCalled);
   console.log("✓ job2 rejected — off-allowlist algo never triggered decryption");
 }
 

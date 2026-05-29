@@ -135,13 +135,15 @@ export async function runComputeJob(
     };
   }
 
-  // Resolve a client bundle (mock or real) if the caller didn't pass one.
+  // Resolve a real client bundle if the caller didn't pass one. No dummy key:
+  // a missing WALLET_PRIVATE_KEY is a loud configuration error, not a silent
+  // fallback — the outer try/catch returns status:"failed" with this message.
   let clients = input.clients;
   if (!clients) {
     const { makeClientsFromKey } = await import("../lib/clients");
-    const pk = (process.env.WALLET_PRIVATE_KEY ??
-      "0x0000000000000000000000000000000000000000000000000000000000000001") as `0x${string}`;
-    clients = (await makeClientsFromKey(pk)) as unknown as Clients;
+    const pk = process.env.WALLET_PRIVATE_KEY;
+    if (!pk) throw new Error("compute worker: WALLET_PRIVATE_KEY is not set — cannot run a real compute job");
+    clients = (await makeClientsFromKey(pk as `0x${string}`)) as unknown as Clients;
   }
 
   // STEP 3: CDR-decrypt the dataset INSIDE the worker.
