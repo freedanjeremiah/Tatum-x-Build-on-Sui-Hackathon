@@ -33,6 +33,13 @@ export function pinataStorageProvider(jwt: string): StorageProvider {
         data.byteOffset + data.byteLength
       ) as ArrayBuffer;
       form.append("file", new Blob([buf]), "blob");
+      // Force Pinata to use CIDv1 with raw-leaves so the returned CID is the
+      // multihash of the raw bytes — matches what CDR computes locally for
+      // integrity verification on download.
+      form.append(
+        "pinataOptions",
+        JSON.stringify({ cidVersion: 1, wrapWithDirectory: false })
+      );
 
       const res = await fetch(PIN_FILE_URL, {
         method: "POST",

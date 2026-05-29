@@ -50,7 +50,7 @@ async function decryptDataset(
   clients: Clients,
   dataset: Artifact | undefined,
   datasetIpId: `0x${string}`
-): Promise<{ rows: number[][]; plaintext: Uint8Array }> {
+): Promise<{ rows: number[][]; plaintext: Uint8Array; licenseTokenId: bigint }> {
   const uuid = dataset?.vaultUuid;
   if (uuid === undefined || dataset === undefined) {
     throw new Error("compute: dataset has no CDR vault (vaultUuid) — cannot decrypt");
@@ -83,7 +83,7 @@ async function decryptDataset(
     plaintext.fill(0); // wipe before propagating — never leave decrypted bytes in memory
     throw e;
   }
-  return { rows, plaintext };
+  return { rows, plaintext, licenseTokenId };
 }
 
 /** Parse decrypted plaintext into a numeric matrix. Accepts a few shapes. */
@@ -150,10 +150,12 @@ export async function runComputeJob(
   let plaintext: Uint8Array | null = null;
   let rows: number[][] | null = null;
   let scratchCleared = false;
+  let licenseTokenId: bigint | undefined;
   try {
     const dec = await decryptDataset(clients, input.dataset, input.datasetIpId);
     plaintext = dec.plaintext;
     rows = dec.rows;
+    licenseTokenId = dec.licenseTokenId;
 
     // STEP 4: run the ALLOWLISTED algorithm over the plaintext rows.
     const algoOut = algo.run(rows, input.params) as Record<string, unknown>;
@@ -164,34 +166,44 @@ export async function runComputeJob(
 
     // STEP 5: register the RESULT as a DERIVATIVE of the dataset so royalties
     // flow upstream to the dataset IP. Only metrics are persisted, never rows.
+    // Fail loudly if there is no resolvable parent terms id — registering under
+    // wrong terms would route royalties incorrectly.
     const parentTermsId =
-      input.dataset?.computeLicenseTermsId ?? input.dataset?.licenseTermsId ?? "1";
+      input.dataset?.computeLicenseTermsId ?? input.dataset?.licenseTermsId;
     let resultIpId: `0x${string}` | undefined;
     let resultTx: `0x${string}` | undefined;
-    try {
-      const child = await registerDerivative(clients, {
-        parentIpId: input.datasetIpId,
-        parentTermsId,
-        bytes: new TextEncoder().encode(JSON.stringify({ metrics })),
-        meta: {
-          title: `Compute result (${algo.name})`,
-          description:
-            "Aggregate compute result derived in the confidential-compute worker. Metrics only — the source dataset's raw rows never left the worker.",
-          tags: ["compute-result", algo.name, "derivative"],
-          creators: [
-            {
-              name: "OpenVault Compute Worker",
-              address: clients.account.address,
-              contributionPercent: 100,
-            },
-          ],
-          modality: "dataset",
-        },
-      });
-      resultIpId = child.ipId;
-      resultTx = child.createdTx;
-    } catch {
-      // Derivative registration is best-effort in the demo; metrics still return.
+    let warning: string | undefined;
+    if (!parentTermsId) {
+      warning =
+        "derivative not registered: dataset has no resolvable license terms id";
+    } else {
+      try {
+        const child = await registerDerivative(clients, {
+          parentIpId: input.datasetIpId,
+          parentTermsId,
+          bytes: new TextEncoder().encode(JSON.stringify({ metrics })),
+          meta: {
+            title: `Compute result (${algo.name})`,
+            description:
+              "Aggregate compute result derived in the confidential-compute worker. Metrics only — the source dataset's raw rows never left the worker.",
+            tags: ["compute-result", algo.name, "derivative"],
+            creators: [
+              {
+                name: "OpenVault Compute Worker",
+                address: clients.account.address,
+                contributionPercent: 100,
+              },
+            ],
+            modality: "dataset",
+          },
+        });
+        resultIpId = child.ipId;
+        resultTx = child.createdTx;
+      } catch (e) {
+        // Don't fail the whole job — metrics are still safe to return — but
+        // surface the failure clearly so the caller can investigate.
+        warning = `derivative registration failed: ${(e as Error).message}`;
+      }
     }
 
     // STEP 6: WIPE plaintext + scratch (zero buffers, drop references).
@@ -209,6 +221,8 @@ export async function runComputeJob(
       isolationMode: ISOLATION_MODE,
       decryptCalled: true,
       scratchCleared,
+      licenseTokenId: licenseTokenId !== undefined ? licenseTokenId.toString() : undefined,
+      warning,
     };
   } catch (e) {
     // On any failure, still wipe whatever plaintext we hold — then verify it.

@@ -76,5 +76,35 @@ export async function POST(req: Request): Promise<Response> {
     dataset,
   });
 
+  // Self-index the result derivative so the read model (browse, leaderboard,
+  // parent's "claimable derivatives" count) reflects the run immediately.
+  if (result.status === "done" && result.resultIpId && result.resultTx) {
+    try {
+      const { upsertArtifact } = await import("@/indexer/db");
+      upsertArtifact(db(), {
+        ipId: result.resultIpId,
+        tier: "public",
+        modality: "dataset",
+        title: `Compute result · ${algoHash}`,
+        description:
+          "Aggregate compute result derived in the confidential-compute worker. Metrics only.",
+        tags: ["compute-result", "derivative"],
+        ipMetadataURI: "",
+        parentIpId: datasetIpId as `0x${string}`,
+        createdTx: result.resultTx,
+      });
+      // Bump parent compute score (+3) — the indexed-derivative path mirrors
+      // what POST /api/index does for client-side self-index.
+      const { getArtifact } = await import("@/indexer/db");
+      const parent = getArtifact(db(), datasetIpId);
+      if (parent) {
+        parent.score = (parent.score ?? 0) + 3;
+        upsertArtifact(db(), parent);
+      }
+    } catch {
+      // Self-index is best-effort; the metrics + on-chain derivative still stand.
+    }
+  }
+
   return json(result, result.status === "failed" ? 500 : 200);
 }

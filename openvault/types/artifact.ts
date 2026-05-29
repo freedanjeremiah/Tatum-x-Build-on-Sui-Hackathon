@@ -63,4 +63,8 @@ export interface ComputeJobResult {
   resultTx?: `0x${string}`;
   /** True once the worker has zeroed the decrypted plaintext + scratch buffers. */
   scratchCleared?: boolean;
+  /** Compute license token the worker minted to unlock the vault (decimal string). */
+  licenseTokenId?: string;
+  /** Non-fatal warning surfaced from a best-effort step (e.g. derivative reg). */
+  warning?: string;
 }

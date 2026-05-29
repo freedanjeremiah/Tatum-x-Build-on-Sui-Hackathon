@@ -62,6 +62,32 @@ export function readLast(): Record<string, any> {
   return JSON.parse(readFileSync(LAST_FILE, "utf8"));
 }
 
+const INDEX_URL = process.env.OPENVAULT_INDEX_URL ?? "http://localhost:3000/api/index";
+
+/**
+ * POST the public Artifact descriptor to the running dev server's `/api/index`
+ * route so the read model has it immediately. No-op if the server is not up —
+ * scripts must keep working headlessly.
+ */
+export async function selfIndex(artifact: Record<string, unknown>): Promise<void> {
+  try {
+    const body = JSON.stringify(artifact, (_k, v) => (typeof v === "bigint" ? v.toString() : v));
+    const res = await fetch(INDEX_URL, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body,
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      console.warn(`[self-index] ${res.status}: ${text}`);
+    } else {
+      console.log(`[self-index] ok ${(artifact as { ipId?: string }).ipId ?? ""}`);
+    }
+  } catch (e) {
+    console.warn(`[self-index] skipped: ${(e as Error).message}`);
+  }
+}
+
 // Smoke: `pnpm tsx scripts/_util.ts` must not throw.
 if (import.meta.url === `file://${process.argv[1]}` || process.argv[1]?.endsWith("_util.ts")) {
   console.log(`_util ok — explorer=${STORYSCAN_TX}`);

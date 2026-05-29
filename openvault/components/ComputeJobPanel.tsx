@@ -3,10 +3,9 @@
 import { useState } from "react";
 import type { Artifact, ComputeJobResult } from "@/types/artifact";
 import { runJob, algoName } from "@/lib/compute";
-import { getClients, WalletNotConnectedError } from "@/lib/useClients";
 import TxLink from "./TxLink";
 
-type Phase = "idle" | "minting" | "verifying" | "running" | "done" | "rejected" | "error";
+type Phase = "idle" | "verifying" | "running" | "done" | "rejected" | "error";
 
 /**
  * Pick an allowlisted algorithm + params → mint a compute license → run
@@ -21,37 +20,18 @@ export default function ComputeJobPanel({ artifact }: { artifact: Artifact }) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [result, setResult] = useState<ComputeJobResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [licenseTokenId, setLicenseTokenId] = useState<string | null>(null);
 
-  const busy = phase === "minting" || phase === "verifying" || phase === "running";
+  const busy = phase === "verifying" || phase === "running";
 
   async function handleRun() {
     if (!algoHash) return;
     setError(null);
     setResult(null);
-    setLicenseTokenId(null);
 
-    // STEP 1: mint a compute license for the dataset.
-    setPhase("minting");
-    try {
-      const clients = await getClients();
-      const termsId = artifact.computeLicenseTermsId ?? artifact.licenseTermsId ?? "";
-      if (!termsId) throw new Error("This dataset has no compute license terms.");
-      const { mintLicense } = await import("@/lib/licensing");
-      const tokenId = String(await mintLicense(clients.story, artifact.ipId, termsId));
-      setLicenseTokenId(tokenId);
-    } catch (e) {
-      if (e instanceof WalletNotConnectedError) {
-        setError(e.message);
-      } else {
-        setError(e instanceof Error ? e.message : "Failed to mint compute license.");
-      }
-      setPhase("error");
-      return;
-    }
-
-    // STEP 2: submit + run the job (POST /api/compute). The worker re-checks the
-    // allowlist before any decryption and returns metrics only.
+    // Submit + run the job (POST /api/compute). The worker mints ONE compute
+    // license server-side (only on a positive allowlist check), decrypts the
+    // dataset inside the worker, runs the algo, registers the result as a
+    // derivative, wipes plaintext, and returns metrics only.
     setPhase("verifying");
     try {
       let parsedParams: Record<string, unknown> = {};
@@ -69,8 +49,32 @@ export default function ComputeJobPanel({ artifact }: { artifact: Artifact }) {
         params: parsedParams,
       });
       setResult(res);
-      if (res.status === "done") setPhase("done");
-      else if (res.status === "rejected") setPhase("rejected");
+      if (res.status === "done") {
+        setPhase("done");
+        // Self-index the derivative result so it shows up in browse + lineage.
+        if (res.resultIpId && res.resultTx) {
+          try {
+            await fetch("/api/index", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+                ipId: res.resultIpId,
+                tier: "public",
+                modality: "dataset",
+                title: `Compute result · ${algoName(algoHash)}`,
+                description:
+                  "Aggregate compute result derived in the confidential-compute worker. Metrics only.",
+                tags: ["compute-result", "derivative"],
+                ipMetadataURI: "",
+                parentIpId: artifact.ipId,
+                createdTx: res.resultTx,
+              }),
+            });
+          } catch {
+            // Self-index is best-effort.
+          }
+        }
+      } else if (res.status === "rejected") setPhase("rejected");
       else {
         setError(res.reason ?? "Compute job failed.");
         setPhase("error");
@@ -87,8 +91,9 @@ export default function ComputeJobPanel({ artifact }: { artifact: Artifact }) {
         Run a confidential job
       </h2>
       <p className="mb-4 text-[12.5px] leading-relaxed text-[var(--ov-text-dim)]">
-        Mint a compute license, pick a permitted algorithm, and run it inside the
-        worker. You receive{" "}
+        Pick a permitted algorithm and run it inside the worker. The worker
+        mints one compute license, decrypts the dataset in-process, runs the
+        algo, and returns{" "}
         <span className="font-medium text-[var(--tier-compute)]">
           aggregate results only
         </span>{" "}
@@ -161,23 +166,20 @@ export default function ComputeJobPanel({ artifact }: { artifact: Artifact }) {
         style={{ background: "var(--tier-compute)", color: "var(--ov-accent-ink)" }}
       >
         {busy ? <Spinner /> : <ComputeIcon ink />}
-        {phase === "minting"
-          ? "Minting compute license…"
-          : phase === "verifying"
-            ? "Verifying token…"
-            : phase === "running"
-              ? "Running in worker…"
-              : "Mint compute license & run"}
+        {phase === "verifying"
+          ? "Verifying allowlist…"
+          : phase === "running"
+            ? "Running in worker…"
+            : "Run confidential job"}
       </button>
 
       {/* progress trail */}
       {busy && (
         <ol className="mt-4 space-y-1.5 text-[12px] text-[var(--ov-text-dim)]">
-          <Step done={true} active={phase === "minting"} label="Mint compute license" />
           <Step
             done={phase === "running"}
             active={phase === "verifying"}
-            label="Verify token in worker"
+            label="Allowlist check + mint compute license in worker"
           />
           <Step done={false} active={phase === "running"} label="Decrypt + run (no rows leave)" />
         </ol>
@@ -219,10 +221,10 @@ export default function ComputeJobPanel({ artifact }: { artifact: Artifact }) {
                 <TxLink hash={result.resultTx} />
               </Row>
             )}
-            {licenseTokenId && (
+            {result.licenseTokenId && (
               <Row label="Compute license token">
                 <span className="font-mono text-[12px] text-[var(--ov-text-dim)]">
-                  {licenseTokenId}
+                  {result.licenseTokenId}
                 </span>
               </Row>
             )}
@@ -239,6 +241,12 @@ export default function ComputeJobPanel({ artifact }: { artifact: Artifact }) {
             The result is registered as a derivative of this dataset, so royalties
             flow upstream to the data owner. No raw rows were returned.
           </p>
+
+          {result.warning && (
+            <div className="rounded-lg border border-[var(--tier-gated)]/40 bg-[var(--tier-gated)]/10 px-3 py-2 text-[12px] text-[var(--tier-gated)]">
+              ⚠ {result.warning}
+            </div>
+          )}
 
           <IsolationDisclosure mode={result.isolationMode} decryptCalled={result.decryptCalled} />
         </div>

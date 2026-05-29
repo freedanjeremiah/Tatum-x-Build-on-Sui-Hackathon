@@ -6,8 +6,6 @@
 //
 // Run: pnpm real scripts/04-dispute.ts
 
-import { parseEther } from "viem";
-
 import { getClients, logTx } from "./_util";
 import { uploadPublic } from "../lib/artifacts";
 import { freshEvidenceCid, raiseReport, counterDispute } from "../lib/dispute";
@@ -29,11 +27,9 @@ async function main() {
   });
   const targetIpId = target.ipId;
 
-  // Minimum bond. VERIFY: real mode reads OptimisticOracleV3.getMinimumBond(WIP);
-  // 0.1 IP is a safe default fallback that the dispute module accepts.
-  const bond = parseEther("0.1");
-  // DisputeTargetTag.IMPROPER_REGISTRATION === the string "IMPROPER_REGISTRATION"
-  // (confirmed in core-sdk dispute.d.ts), so this literal is the enum value.
+  // Bond + liveness omitted: the SDK reads OptimisticOracleV3.getMinimumBond(WIP)
+  // and the arbitration policy's min liveness from chain, then auto-wraps the
+  // bond from native IP via WIP_OPTIONS (spread in raiseReport).
   const tag = "IMPROPER_REGISTRATION";
 
   const evidenceCID = freshEvidenceCid("Evidence");
@@ -41,8 +37,6 @@ async function main() {
     targetIpId,
     cid: evidenceCID,
     tag,
-    bond,
-    liveness: 2592000, // 30 days
   });
   logTx("raise dispute", raised.txHash);
 
@@ -57,7 +51,7 @@ async function main() {
   console.log("=== 04-dispute (SPEC §8.6) ===");
   console.log("targetIpId:", targetIpId);
   console.log("disputeId:", raised.disputeId);
-  console.log("bond (wei):", bond.toString());
+  console.log("bond: (on-chain minimum from arbitration policy)");
   console.log("evidenceCID:", evidenceCID);
   console.log("assertionId:", counter.assertionId);
   console.log("counterEvidenceCID:", counterCID);

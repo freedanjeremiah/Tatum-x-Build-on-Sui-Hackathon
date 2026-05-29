@@ -8,7 +8,7 @@
 //
 // Run: pnpm real scripts/06-public-private.ts
 
-import { getClients, logTx } from "./_util";
+import { getClients, logTx, selfIndex } from "./_util";
 import { uploadPublic, uploadPrivate } from "../lib/artifacts";
 
 async function main() {
@@ -33,6 +33,7 @@ async function main() {
   // "Pin the file in clear" — the bytes are addressable by anyone (cid set, no vault).
   const publicReadOk = !pub.vaultUuid && !!pub.cid;
   logTx("register public IP", pub.createdTx);
+  await selfIndex(pub as unknown as Record<string, unknown>);
   console.log(publicReadOk ? "✓ public-read-ok (no token required)" : "✗ public read failed");
 
   // ---------------- PRIVATE (§8.3) ----------------
@@ -48,6 +49,7 @@ async function main() {
     },
   });
   logTx("register private IP", prv.createdTx);
+  await selfIndex(prv as unknown as Record<string, unknown>);
 
   // Owner read: owner satisfies the EOA read condition.
   const ownerAux = (await import("viem")).encodeAbiParameters([{ type: "address" }], [owner]);

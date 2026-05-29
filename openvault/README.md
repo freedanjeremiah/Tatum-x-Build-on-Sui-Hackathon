@@ -22,38 +22,47 @@ for gated decryption; the compute-privacy guarantee comes from the worker's isol
 allowlist, **not** CDR. The demo worker runs on a plain server (operator-trusted) — a production
 deployment would run in an attested SGX/TDX enclave. The UI discloses this everywhere it matters.
 
-## Run it
+## Run it (Story Aeneid testnet — real only)
 
-### Mock mode (no credentials — for demo/verification)
 ```bash
 cd openvault
 pnpm install
-NEXT_PUBLIC_MOCK=1 pnpm dev        # http://localhost:3000
-```
-Deterministic data, fake tx hashes, in-memory vault. Every flow works end-to-end.
-
-### Real mode (Story Aeneid testnet)
-```bash
 cp .env.local.example .env.local   # fill NEXT_PUBLIC_PRIVY_APP_ID, PINATA_JWT, WALLET_PRIVATE_KEY
-pnpm dev
+pnpm dev                           # http://localhost:3000
 ```
-Real mode is wired against the installed SDKs; the few call sites that still need live testnet
-confirmation are marked `// VERIFY:` (see `../docs/RUN-LOG.md` and the open items below). Real-mode
-IPFS storage is **Pinata** (set `PINATA_JWT`) — chosen over an in-process Helia node so uploads
-survive across processes (worker/consumer can retrieve them). **Node 22+** required.
 
-## Headless flow proofs (run before trusting the UI)
+Required env (these are the **only three** the code reads — RPC and contract addresses
+are hardcoded in `lib/constants.ts`):
+
+| Var | Scope | Missing → |
+|-----|-------|-----------|
+| `NEXT_PUBLIC_PRIVY_APP_ID` | public | wallet auth unavailable |
+| `WALLET_PRIVATE_KEY` | server secret | scripts/worker throw |
+| `PINATA_JWT` | server secret | node-side pinning throws |
+
+**Node 22+** required. Real-mode IPFS storage is **Pinata** (set `PINATA_JWT`) — chosen
+over an in-process Helia node so uploads survive across processes (worker/consumer can
+retrieve them).
+
+## Scripts, worker, indexer
+
 ```bash
-NEXT_PUBLIC_MOCK=1 pnpm tsx scripts/01-upload-gated.ts     # … 02..08
-NEXT_PUBLIC_MOCK=1 pnpm worker                             # compute worker demo
-pnpm test                                                  # 47 unit tests
+pnpm probe:real                                    # connectivity check (no gas)
+pnpm real scripts/01-upload-gated.ts               # … 02..08
+pnpm worker:real                                   # confidential-compute worker
+pnpm indexer:real                                  # SQLite read-model indexer
+pnpm test                                          # unit tests (no creds/gas)
+RUN_INTEGRATION=1 pnpm test                        # also runs live integration tests
 ```
+
+The `real` family preloads `.env.local` via `node --env-file` so `tsx`-hoisted
+modules see env at module-init time.
 
 ## Architecture
-- `lib/clients.ts` — mock or real Story + CDR clients (same interface).
+- `lib/clients.ts` — Story + CDR clients backed by a wallet or EIP-1193 provider.
 - `lib/artifacts.ts` — high-level upload*/download/derivative API; enforces register → ipId → upload.
 - `lib/{licensing,royalty,dispute,group,compute,storage,metadata}.ts` — focused helpers.
-- `indexer/` — **index-only** SQLite mirror; `app/api/index` (read-only) + `app/api/pin` (public JSON).
+- `indexer/` — **index-only** SQLite mirror; `app/api/index` (GET + POST self-index) + `app/api/pin` (public JSON).
 - `worker/` — confidential-compute worker: allowlist gate → decrypt-in-worker → run algo → derivative
   → wipe plaintext → metrics only.
 - `app/` + `components/` — Next.js App Router UI (browse, upload wizard, artifact, compute, group,
@@ -62,12 +71,8 @@ pnpm test                                                  # 47 unit tests
 ## Invariants enforced
 Backend never holds keys/plaintext/gating · CDR crypto client-side · register before upload ·
 `licenseTermsId` always threaded (never hardcoded) · fresh dispute CID each report · every tx/ipId
-surfaced via `TxLink` · no localStorage · compute-only has no download path.
-
-## Open items (verify against live SDKs)
-1. `registerIpAsset` license-terms-id return field · 2. `mintLicenseTokens` response shape ·
-3. group-license → member-vault read condition (currently per-IP gating fallback) · 4. min dispute
-bond · 5. CDR delegated decryption vs worker-holds-token · 6. compute vs download license encoding.
+surfaced via `TxLink` · no localStorage · compute-only has no download path · `/api/index` POST
+accepts only public Artifact descriptors (never keys/plaintext).
 
 ## Out of scope (testnet prototype)
 Mainnet/production confidentiality · hiding metadata (CIDs/vault ids public by design) · decryption

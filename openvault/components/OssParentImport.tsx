@@ -44,6 +44,29 @@ export default function OssParentImport({ onParent }: OssParentImportProps) {
           .filter(Boolean),
         title,
       });
+      // Self-index the provenance parent so a future search/browse + the
+      // derivative wizard can resolve it without round-tripping the chain.
+      try {
+        await fetch("/api/index", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            ipId: reg.ipId,
+            tier: "public",
+            modality: "model",
+            title,
+            description: `Provenance parent — ${url.trim()} (${upstreamLicense.trim()})`,
+            tags: ["oss", "provenance"],
+            ipMetadataURI: reg.ipMetadataURI,
+            licenseTermsId: reg.licenseTermsId,
+            externalSource: url.trim(),
+            createdTx: reg.createdTx,
+          }),
+        });
+      } catch (idxErr) {
+        // eslint-disable-next-line no-console
+        console.warn("[oss-parent] self-index failed:", idxErr);
+      }
       setResult({ ipId: reg.ipId, createdTx: reg.createdTx });
       onParent(reg.ipId, reg.licenseTermsId);
     } catch (e) {

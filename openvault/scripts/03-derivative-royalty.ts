@@ -6,7 +6,7 @@
 //
 // Run: pnpm real scripts/03-derivative-royalty.ts
 
-import { getClients, logTx } from "./_util";
+import { getClients, logTx, selfIndex } from "./_util";
 import { uploadGated, registerDerivative } from "../lib/artifacts";
 import { payRoyalty, claimRevenue, getClaimable } from "../lib/royalty";
 
@@ -28,6 +28,7 @@ async function main() {
   const PARENT = parent.ipId;
   const PARENT_TERMS = parent.licenseTermsId!;
   logTx("register parent", parent.createdTx);
+  await selfIndex(parent as unknown as Record<string, unknown>);
 
   // --- Derivative IP of the parent ---
   const child = await registerDerivative(clients as any, {
@@ -44,6 +45,7 @@ async function main() {
   });
   const CHILD = child.ipId;
   logTx("register derivative", child.createdTx);
+  await selfIndex(child as unknown as Record<string, unknown>);
 
   // --- Pay royalties on behalf of the derivative ---
   const pay = await payRoyalty(clients.story as any, { childIpId: CHILD, amount: 2n });

@@ -7,7 +7,7 @@
 //
 // Run: pnpm real scripts/01-upload-gated.ts
 
-import { getClients, logTx, saveLast } from "./_util";
+import { getClients, logTx, saveLast, selfIndex } from "./_util";
 import { uploadGated } from "../lib/artifacts";
 
 async function main() {
@@ -36,6 +36,8 @@ async function main() {
     licenseTermsId: art.licenseTermsId,
     tier: "gated",
   });
+
+  await selfIndex(art as unknown as Record<string, unknown>);
 
   console.log("=== 01-upload-gated (SPEC §8.1) ===");
   console.log("ipId:", art.ipId);

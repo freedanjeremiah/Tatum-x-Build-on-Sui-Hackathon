@@ -13,9 +13,6 @@ interface ReportDialogProps {
   onDisputed: (disputeId: string) => void;
 }
 
-const REPORT_BOND = 100000000000000000n; // 0.1 WIP
-const REPORT_LIVENESS = 2592000; // 30 days, seconds
-
 export default function ReportDialog({
   artifact,
   open,
@@ -48,12 +45,12 @@ export default function ReportDialog({
     try {
       const clients = await getClients();
       const { raiseReport } = await import("@/lib/dispute");
+      // Bond + liveness are omitted — the SDK reads them from the on-chain
+      // arbitration policy (OptimisticOracleV3.getMinimumBond + min liveness).
       const { disputeId, txHash } = await raiseReport(clients.story, {
         targetIpId: artifact.ipId,
         cid,
         tag: "IMPROPER_REGISTRATION",
-        bond: REPORT_BOND,
-        liveness: REPORT_LIVENESS,
       });
       const id = String(disputeId);
       setResult({ disputeId: id, txHash });
@@ -154,10 +151,10 @@ export default function ReportDialog({
             </div>
 
             <p className="rounded-lg border border-[var(--ov-line-soft)] bg-[var(--ov-bg-elev)]/40 px-3 py-2 text-[11.5px] leading-relaxed text-[var(--ov-text-dim)]">
-              A bond of{" "}
-              <span className="font-medium text-[var(--ov-text)]">0.1 WIP</span>{" "}
-              is required to raise a dispute. It is returned if your report is
-              upheld and forfeited if it is rejected.
+              A bond in <span className="font-medium text-[var(--ov-text)]">WIP</span>{" "}
+              is required to raise a dispute (read on-chain from the arbitration
+              policy at submit time, auto-wrapped from native IP). It is returned
+              if your report is upheld and forfeited if it is rejected.
             </p>
 
             {error && (

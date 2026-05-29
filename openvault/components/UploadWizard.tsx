@@ -164,6 +164,18 @@ export default function UploadWizard() {
         throw new Error("Select a tier before submitting.");
       }
 
+      // Self-index: POST the public Artifact descriptor so the read model has
+      // the full record immediately (vaultUuid/licenseTermsId/etc that the
+      // on-chain event log doesn't carry). Non-blocking — UI proceeds either
+      // way; the event indexer also writes a baseline.
+      setProgress("Indexing artifact…");
+      try {
+        await postArtifactToIndex(artifact);
+      } catch (idxErr) {
+        // eslint-disable-next-line no-console
+        console.warn("[upload] self-index failed:", idxErr);
+      }
+
       setResult(artifact);
     } catch (e) {
       setError(
@@ -1054,4 +1066,20 @@ function friendlyError(e: unknown): string {
   if (/user rejected|denied/i.test(msg))
     return "Transaction was rejected in your wallet.";
   return msg || "Something went wrong while publishing.";
+}
+
+async function postArtifactToIndex(a: Artifact): Promise<void> {
+  // bigint ownerNftTokenId → decimal string for JSON.
+  const payload = JSON.parse(
+    JSON.stringify(a, (_k, v) => (typeof v === "bigint" ? v.toString() : v))
+  );
+  const res = await fetch("/api/index", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`/api/index POST ${res.status}: ${text}`);
+  }
 }

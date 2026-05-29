@@ -9,6 +9,7 @@ import { TierBadge } from "./ModelCard";
 import DownloadButton from "./DownloadButton";
 import LineageGraph from "./LineageGraph";
 import ReportDialog from "./ReportDialog";
+import RoyaltyPanel from "./RoyaltyPanel";
 
 export default function ArtifactDetail({ artifact }: { artifact: Artifact }) {
   const [reportOpen, setReportOpen] = useState(false);
@@ -104,6 +105,12 @@ export default function ArtifactDetail({ artifact }: { artifact: Artifact }) {
             </h2>
             <LineageGraph artifact={artifact} />
           </section>
+
+          {/* royalties — for tiers where revenue can accrue. */}
+          {(artifact.tier === "gated" ||
+            artifact.tier === "compute" ||
+            artifact.tier === "group" ||
+            artifact.licenseTermsId) && <RoyaltyPanel artifact={artifact} />}
         </div>
 
         {/* sidebar: provenance */}

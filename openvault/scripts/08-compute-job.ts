@@ -15,7 +15,7 @@
 //
 // Run: pnpm tsx scripts/08-compute-job.ts  (requires WALLET_PRIVATE_KEY in .env.local)
 
-import { getClients, logTx } from "./_util";
+import { getClients, logTx, selfIndex } from "./_util";
 import { uploadCompute } from "../lib/artifacts";
 import { runComputeJob } from "../worker/compute-worker";
 import type { Clients } from "../lib/artifacts";
@@ -42,6 +42,7 @@ async function main() {
   });
   const datasetIpId = dataset.ipId;
   logTx("register + vault dataset", dataset.createdTx);
+  await selfIndex(dataset as unknown as Record<string, unknown>);
 
   console.log("=== 08-compute-job (Addendum §C6, real worker) ===");
   console.log("datasetIpId:", datasetIpId);
