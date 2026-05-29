@@ -14,7 +14,8 @@ async function main() {
   const clients = await getClients();
   const owner = (clients.account as any).address as `0x${string}`;
 
-  const content = new TextEncoder().encode("fake weights for SentimentLLM-7B");
+  // Sample demo payload — really encrypted + pinned to the vault by uploadGated.
+  const content = new TextEncoder().encode("sample weights for SentimentLLM-7B");
   const art = await uploadGated(clients as any, {
     bytes: content,
     meta: {
