@@ -9,8 +9,8 @@ import WalletBridge from "./WalletBridge";
  * can transact (mint license tokens, etc.) without a browser extension.
  *
  * This file statically imports Privy and is itself loaded lazily by
- * Providers.tsx only when a Privy app id is configured, so mock builds never
- * mount it.
+ * Providers.tsx only when a Privy app id is configured, so the provider is
+ * absent when no Privy app id is configured.
  */
 export default function PrivyAuthProvider({
   children,

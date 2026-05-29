@@ -31,7 +31,7 @@ export interface WorkerInput {
   allowedAlgoHashes?: string[];
   /** The dataset artifact (so the worker can find vaultUuid/licenseTermsId). */
   dataset?: Artifact;
-  /** {cdr, story, account} bundle. Defaults to a mock/real bundle if omitted. */
+  /** {cdr, story, account} bundle. Resolved from WALLET_PRIVATE_KEY if omitted. */
   clients?: Clients;
 }
 

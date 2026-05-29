@@ -7,7 +7,7 @@
 // commercial). The proven logic now lives in
 // lib/artifacts.{registerProvenanceParent,registerDerivative}.
 //
-// Run: NEXT_PUBLIC_MOCK=1 pnpm tsx scripts/07-oss-lineage.ts
+// Run: pnpm real scripts/07-oss-lineage.ts
 
 import { getClients, logTx } from "./_util";
 import { registerProvenanceParent, registerDerivative } from "../lib/artifacts";

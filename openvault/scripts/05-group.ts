@@ -4,7 +4,7 @@
 // add one more, then collect + distribute group royalties to the members. The
 // group steps now use lib/group.
 //
-// Run: NEXT_PUBLIC_MOCK=1 pnpm tsx scripts/05-group.ts
+// Run: pnpm real scripts/05-group.ts
 
 import { getClients, logTx } from "./_util";
 import { uploadPublic } from "../lib/artifacts";
@@ -33,7 +33,7 @@ async function main() {
   const B = await registerMember(clients, "Member B");
   const C = await registerMember(clients, "Member C");
 
-  // A group license terms id (in mock just a placeholder string).
+  // A group license terms id.
   const GROUP_TERMS = "1500";
 
   const grp = await createGroup(clients.story as any, { ipIds: [A, B], termsId: GROUP_TERMS });

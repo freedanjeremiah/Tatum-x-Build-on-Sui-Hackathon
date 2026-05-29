@@ -2,9 +2,8 @@
 // this worker's isolation + the per-dataset algorithm allowlist.
 //
 // This route ENQUEUES/RUNS a compute job. It loads the dataset's PUBLIC index
-// record to read its allowedAlgoHashes, then delegates to the worker contract
-// runComputeJob (lib/compute). Today that is an inline mock; Phase 5 replaces it
-// with worker/compute-worker.ts implementing the SAME RunComputeJob signature.
+// record to read its allowedAlgoHashes, then delegates to the real
+// confidential-compute worker (worker/compute-worker.ts).
 //
 // INVARIANTS enforced here:
 //   - off-allowlist algoHash → rejected, decryptCalled:false, NO decryption.
@@ -63,10 +62,11 @@ export async function POST(req: Request): Promise<Response> {
 
   const allowed = dataset.allowedAlgoHashes ?? [];
 
-  // STEP 2: delegate to the REAL confidential-compute worker (Phase 5). The
-  // worker re-checks the allowlist BEFORE any decryption, decrypts the dataset
-  // INSIDE the worker, runs the allowlisted algo, registers the result as a
-  // derivative, wipes the plaintext, and returns metrics only (never raw rows).
+  // STEP 2: delegate to the real confidential-compute worker
+  // (worker/compute-worker.ts). The worker re-checks the allowlist BEFORE any
+  // decryption, decrypts the dataset INSIDE the worker, runs the allowlisted
+  // algo, registers the result as a derivative, wipes the plaintext, and
+  // returns metrics only (never raw rows).
   // (worker/compute-worker is server/node-only; imported here on the server.)
   const result = await runComputeJob({
     datasetIpId: datasetIpId as `0x${string}`,

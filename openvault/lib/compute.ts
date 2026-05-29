@@ -63,9 +63,8 @@ export interface RunComputeJobInput {
 }
 
 /**
- * The worker contract. Phase 5 swaps the inline mock impl below for
- * `worker/compute-worker.ts` implementing this exact signature. The /api/compute
- * route calls it; nothing about its contract changes when the worker lands.
+ * The worker contract implemented by worker/compute-worker.ts. The /api/compute
+ * route calls it.
  *
  * Worker runs OUTSIDE CDR. CDR is gated key-delivery only. Compute privacy =
  * this worker's isolation + the per-dataset algorithm allowlist.

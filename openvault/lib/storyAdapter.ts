@@ -9,7 +9,7 @@
 // The real SDK's unified entry points return slightly different shapes (e.g.
 // `licenseTermsIds: bigint[]` with no scalar `licenseTermsId`), and the project
 // standardized on the `mintAndRegister*` workflows. This adapter maps onto those
-// and normalizes the results so callers are agnostic to mock vs real.
+// and normalizes the results so callers get normalized results.
 //
 // Typed `any` where the SDK generics are awkward — the mapping is exact and the
 // real shapes are confirmed in node_modules .d.ts (ipAsset.d.ts).

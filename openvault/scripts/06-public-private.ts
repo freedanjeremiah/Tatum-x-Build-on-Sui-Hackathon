@@ -6,7 +6,7 @@
 //   owner decrypts; any other wallet is reverted.
 // The proven logic now lives in lib/artifacts.{uploadPublic,uploadPrivate}.
 //
-// Run: NEXT_PUBLIC_MOCK=1 pnpm tsx scripts/06-public-private.ts
+// Run: pnpm real scripts/06-public-private.ts
 
 import { getClients, logTx } from "./_util";
 import { uploadPublic, uploadPrivate } from "../lib/artifacts";

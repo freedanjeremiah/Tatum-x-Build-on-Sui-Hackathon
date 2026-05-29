@@ -5,7 +5,7 @@
 // LICENSE_READ_CONDITION keyed to that ipId. The proven logic now lives in
 // lib/artifacts.uploadGated; this script just exercises it.
 //
-// Run: NEXT_PUBLIC_MOCK=1 pnpm tsx scripts/01-upload-gated.ts
+// Run: pnpm real scripts/01-upload-gated.ts
 
 import { getClients, logTx, saveLast } from "./_util";
 import { uploadGated } from "../lib/artifacts";

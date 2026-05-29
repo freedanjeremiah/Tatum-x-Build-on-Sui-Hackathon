@@ -4,7 +4,7 @@
 // derivative, then confirm the parent has claimable revenue and claim it. The
 // royalty steps now use lib/royalty; registration uses lib/artifacts.
 //
-// Run: NEXT_PUBLIC_MOCK=1 pnpm tsx scripts/03-derivative-royalty.ts
+// Run: pnpm real scripts/03-derivative-royalty.ts
 
 import { getClients, logTx } from "./_util";
 import { uploadGated, registerDerivative } from "../lib/artifacts";

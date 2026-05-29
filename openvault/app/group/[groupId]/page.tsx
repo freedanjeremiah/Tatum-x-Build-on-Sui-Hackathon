@@ -10,7 +10,7 @@ import { getClients, WalletNotConnectedError } from "@/lib/useClients";
 
 /**
  * Group bundle page. Shows the group artifact + member artifacts, a group license
- * summary with a (mock) subscribe CTA, and a Distribute-royalties action.
+ * summary with a subscribe CTA, and a Distribute-royalties action.
  *
  * SPEC §8.7 OPEN ITEM is surfaced prominently: one group license unlocking every
  * member's vault is NOT yet confirmed in CDR — this demo falls back to per-IP

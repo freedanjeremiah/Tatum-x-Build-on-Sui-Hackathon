@@ -4,7 +4,7 @@
 // reader with no token is reverted by the on-chain read condition. The proven
 // logic now lives in lib/artifacts.download.
 //
-// Run (after 01): NEXT_PUBLIC_MOCK=1 pnpm tsx scripts/02-download-gated.ts
+// Run (after 01): pnpm real scripts/02-download-gated.ts
 
 import { getClients, readLast } from "./_util";
 import { download } from "../lib/artifacts";

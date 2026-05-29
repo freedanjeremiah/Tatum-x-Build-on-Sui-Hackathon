@@ -42,7 +42,7 @@ export async function makeClientsFromProvider(provider: any, address: `0x${strin
   const cdr = new CDRClient({ network: "testnet", publicClient, walletClient, apiUrl: CDR_API_URL } as any);
   const realStory = StoryClient.newClient({ transport: custom(provider), account: address, chainId: "aeneid" } as any);
   const story = wrapStory(realStory);
-  // Expose `account.address` to match makeClientsFromKey + the mock; consumers
+  // Expose `account.address` to match makeClientsFromKey; consumers
   // (artifacts.ownerOf, UploadWizard, worker) all read clients.account.address.
   return { cdr, story, account: { address }, address, publicClient, walletClient };
 }

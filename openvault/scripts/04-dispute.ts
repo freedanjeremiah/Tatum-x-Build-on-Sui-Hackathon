@@ -4,7 +4,7 @@
 // owner counter the assertion with fresh counter-evidence. The dispute steps now
 // use lib/dispute (fresh evidence CID per call).
 //
-// Run: NEXT_PUBLIC_MOCK=1 pnpm tsx scripts/04-dispute.ts
+// Run: pnpm real scripts/04-dispute.ts
 
 import { parseEther } from "viem";
 

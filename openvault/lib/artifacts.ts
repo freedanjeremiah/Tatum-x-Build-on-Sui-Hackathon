@@ -22,7 +22,7 @@ import type { Artifact } from "../types/artifact";
 
 // --- Types --------------------------------------------------------------
 
-/** A {cdr, story, account} bundle (mock or real). */
+/** A {cdr, story, account} bundle. */
 export interface Clients {
   cdr: any;
   story: any;
@@ -90,8 +90,8 @@ export async function uploadGated(clients: Clients, input: UploadInput): Promise
 
   const storageProvider = await heliaProvider();
   const writeConditionData = encodeAbiParameters([{ type: "address" }], [owner]);
-  // Real read condition = LicenseReadCondition(LICENSE_TOKEN, ipId); the mock
-  // vault keys its gate purely on the ipId.
+  // LicenseReadCondition encodes (LICENSE_TOKEN, ipId): the CDR vault grants
+  // access only to callers who hold a valid license token for this IP.
   const readConditionDataReal = encodeAbiParameters(
     [{ type: "address" }, { type: "address" }],
     [LICENSE_TOKEN, ipId]
