@@ -9,7 +9,6 @@ import { makeClientsFromKey } from "../lib/clients";
 import { RPC_URL, CDR_API_URL } from "../lib/constants";
 
 async function main() {
-  console.log("IS_MOCK env NEXT_PUBLIC_MOCK =", process.env.NEXT_PUBLIC_MOCK);
   console.log("PINATA_JWT present:", !!process.env.PINATA_JWT, "PK present:", !!process.env.WALLET_PRIVATE_KEY);
 
   // 1) Pinata pin (real, JWT only)
