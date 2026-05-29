@@ -9,7 +9,6 @@
 // Run: NEXT_PUBLIC_MOCK=1 pnpm tsx scripts/06-public-private.ts
 
 import { getClients, logTx } from "./_util";
-import { IS_MOCK } from "../lib/env";
 import { uploadPublic, uploadPrivate } from "../lib/artifacts";
 
 async function main() {
@@ -50,10 +49,8 @@ async function main() {
   });
   logTx("register private IP", prv.createdTx);
 
-  // Owner read: owner satisfies the EOA read condition (mock: __mintFor(owner)).
-  const ownerAux = IS_MOCK
-    ? await cdr.__mintFor(owner)
-    : (await import("viem")).encodeAbiParameters([{ type: "address" }], [owner]);
+  // Owner read: owner satisfies the EOA read condition.
+  const ownerAux = (await import("viem")).encodeAbiParameters([{ type: "address" }], [owner]);
   const ownerOut = await cdr.consumer.downloadFile({ uuid: prv.vaultUuid, accessAuxData: ownerAux });
   const ownerText = new TextDecoder().decode(ownerOut.content);
   console.log(
@@ -63,12 +60,10 @@ async function main() {
   );
 
   // Second wallet read: a different address presents a non-matching token → revert.
-  const otherAux = IS_MOCK
-    ? "mocktoken-not-the-owner"
-    : (await import("viem")).encodeAbiParameters(
-        [{ type: "address" }],
-        ["0x000000000000000000000000000000000000bEEF"]
-      );
+  const otherAux = (await import("viem")).encodeAbiParameters(
+    [{ type: "address" }],
+    ["0x000000000000000000000000000000000000bEEF"]
+  );
   let reverted = false;
   try {
     await cdr.consumer.downloadFile({ uuid: prv.vaultUuid, accessAuxData: otherAux });

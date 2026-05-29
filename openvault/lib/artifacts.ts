@@ -4,7 +4,6 @@
 // accessAuxData, and decrypts via the CDR consumer.
 
 import { encodeAbiParameters } from "viem";
-import { IS_MOCK } from "./env";
 import {
   PUBLIC_SPG_COLLECTION,
   OWNER_WRITE_CONDITION,
@@ -105,7 +104,7 @@ export async function uploadGated(clients: Clients, input: UploadInput): Promise
     writeConditionAddr: OWNER_WRITE_CONDITION,
     readConditionAddr: LICENSE_READ_CONDITION,
     writeConditionData,
-    readConditionData: IS_MOCK ? ipId : readConditionDataReal,
+    readConditionData: readConditionDataReal,
     accessAuxData: "0x",
   });
 
@@ -183,39 +182,21 @@ export async function uploadPrivate(clients: Clients, input: UploadInput): Promi
   const storageProvider = await heliaProvider();
   const ownerCondData = encodeAbiParameters([{ type: "address" }], [owner]);
 
-  let uuid: number;
-  let cid: string;
-  if (IS_MOCK) {
-    // MOCK: allocate-then-write (the mock vault stores plaintext + gate ipId).
-    const alloc = await cdr.uploader.allocate({
-      updatable: false,
-      writeConditionAddr: OWNER_WRITE_CONDITION,
-      readConditionAddr: OWNER_WRITE_CONDITION, // owner-gated read
-      writeConditionData: ownerCondData,
-      readConditionData: owner,
-      skipConditionValidation: true,
-    });
-    uuid = alloc.uuid;
-    const wr = await cdr.uploader.write({ uuid, content: input.bytes, storageProvider });
-    cid = wr.cid;
-  } else {
-    // REAL: the real write() takes encryptedData hex, not a file+provider — so
-    // use uploadFile (encrypt → store via provider → write CID ref) with
-    // OWNER-gated read+write conditions (only the owner can read).
-    const up = await cdr.uploader.uploadFile({
-      content: input.bytes,
-      storageProvider,
-      globalPubKey: await cdr.observer.getGlobalPubKey(),
-      updatable: false,
-      writeConditionAddr: OWNER_WRITE_CONDITION,
-      readConditionAddr: OWNER_WRITE_CONDITION, // owner-gated read
-      writeConditionData: ownerCondData,
-      readConditionData: ownerCondData,
-      accessAuxData: "0x",
-    });
-    uuid = up.uuid;
-    cid = up.cid;
-  }
+  // uploadFile (encrypt → store via provider → write CID ref) with
+  // OWNER-gated read+write conditions (only the owner can read).
+  const up = await cdr.uploader.uploadFile({
+    content: input.bytes,
+    storageProvider,
+    globalPubKey: await cdr.observer.getGlobalPubKey(),
+    updatable: false,
+    writeConditionAddr: OWNER_WRITE_CONDITION,
+    readConditionAddr: OWNER_WRITE_CONDITION, // owner-gated read
+    writeConditionData: ownerCondData,
+    readConditionData: ownerCondData,
+    accessAuxData: "0x",
+  });
+  const uuid = up.uuid;
+  const cid = up.cid;
 
   return {
     ipId,
@@ -271,7 +252,7 @@ export async function uploadCompute(clients: Clients, input: ComputeInput): Prom
     writeConditionAddr: OWNER_WRITE_CONDITION,
     readConditionAddr: LICENSE_READ_CONDITION,
     writeConditionData,
-    readConditionData: IS_MOCK ? ipId : readConditionDataReal,
+    readConditionData: readConditionDataReal,
     accessAuxData: "0x",
   });
 
@@ -410,16 +391,11 @@ export async function download(clients: Clients, input: DownloadInput): Promise<
   const shouldMint = input.mint !== false && !!input.licenseTermsId;
 
   let accessAuxData: string;
-  if (IS_MOCK) {
-    // The mock vault keys its gate on a token minted via __mintFor(ipId).
-    accessAuxData = shouldMint ? await cdr.__mintFor(input.ipId) : "0x";
+  if (shouldMint) {
+    const tokenId = await mintLicense(story, input.ipId, input.licenseTermsId);
+    accessAuxData = encodeAccessAuxData([tokenId]);
   } else {
-    if (shouldMint) {
-      const tokenId = await mintLicense(story, input.ipId, input.licenseTermsId);
-      accessAuxData = encodeAccessAuxData([tokenId]);
-    } else {
-      accessAuxData = "0x";
-    }
+    accessAuxData = "0x";
   }
 
   const storageProvider = await heliaProvider();

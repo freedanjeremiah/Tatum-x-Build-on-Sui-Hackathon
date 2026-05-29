@@ -14,7 +14,6 @@
 // Run: NEXT_PUBLIC_MOCK=1 pnpm tsx scripts/08-compute-job.ts
 
 import { getClients, logTx } from "./_util";
-import { IS_MOCK } from "../lib/env";
 import { PUBLIC_SPG_COLLECTION } from "../lib/constants";
 import { uploadCompute } from "../lib/artifacts";
 import { allowlistCheck, submitJob, type ComputeResult } from "../lib/compute";
@@ -57,10 +56,8 @@ async function main() {
   const computeLicenseTokenId = mint.licenseTokenIds[0] as bigint;
   logTx("mint compute license", mint.txHash);
 
-  // The access token the (mock) vault will accept for this dataset.
-  const accessAux = IS_MOCK
-    ? await cdr.__mintFor(datasetIpId)
-    : encodeAccessAuxData([computeLicenseTokenId]);
+  // The access token the vault will accept for this dataset.
+  const accessAux = encodeAccessAuxData([computeLicenseTokenId]);
 
   // ---- Worker simulation (real worker = Phase 5) ----
   async function worker(job: ComputeJob): Promise<ComputeResult> {
