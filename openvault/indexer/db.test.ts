@@ -1,7 +1,106 @@
 import { test, expect } from "vitest";
 import { openDb, upsertArtifact, getArtifact, listArtifacts } from "./db";
-import { SEED_ARTIFACTS } from "../lib/mock/seed";
 import type { Artifact } from "../types/artifact";
+
+// Inline fixtures: 6 minimal valid Artifacts spanning tiers. The list tests
+// expect exactly 2 "gated" rows (one mentioning "sentiment"), at least one
+// "dataset" modality, and a "genomics" tag — kept in sync with those asserts.
+const FIXTURE: Artifact[] = [
+  {
+    ipId: "0xpub0000000000000000000000000000000000001",
+    tier: "public",
+    modality: "dataset",
+    title: "OpenWeather Hourly 2015-2024",
+    description: "Decade of hourly weather observations.",
+    tags: ["weather", "timeseries", "public"],
+    ipMetadataURI: "ipfs://bafyMeta1",
+    cid: "bafy1",
+    licenseTermsId: "1001",
+    ownerNftTokenId: BigInt(1),
+    createdTx: "0xtx1",
+    score: 1480,
+  },
+  {
+    ipId: "0xprv0000000000000000000000000000000000002",
+    tier: "private",
+    modality: "model",
+    title: "FraudNet-v3 (Private)",
+    description: "Proprietary transaction-fraud classifier.",
+    tags: ["fraud", "classifier", "private"],
+    ipMetadataURI: "ipfs://bafyMeta2",
+    vaultUuid: 2,
+    cid: "bafy2",
+    licenseTermsId: "1002",
+    ownerNftTokenId: BigInt(2),
+    createdTx: "0xtx2",
+    score: 210,
+  },
+  {
+    ipId: "0xgat0000000000000000000000000000000000003",
+    tier: "gated",
+    modality: "model",
+    title: "SentimentLLM-7B",
+    description: "7B-parameter sentiment model, license-gated weights.",
+    tags: ["llm", "sentiment", "gated"],
+    ipMetadataURI: "ipfs://bafyMeta3",
+    vaultUuid: 3,
+    cid: "bafy3",
+    licenseTermsId: "1003",
+    ownerNftTokenId: BigInt(3),
+    createdTx: "0xtx3",
+    score: 3120,
+  },
+  {
+    ipId: "0xgrp0000000000000000000000000000000000004",
+    tier: "group",
+    modality: "model",
+    title: "VisionEnsemble (Group)",
+    description: "Community ensemble of vision models.",
+    tags: ["vision", "ensemble", "group"],
+    ipMetadataURI: "ipfs://bafyMeta4",
+    vaultUuid: 4,
+    cid: "bafy4",
+    licenseTermsId: "1004",
+    groupId: "0xgroup0000000000000000000000000000000004",
+    ownerNftTokenId: BigInt(4),
+    createdTx: "0xtx4",
+    score: 870,
+  },
+  {
+    ipId: "0xcmp0000000000000000000000000000000000005",
+    tier: "compute",
+    modality: "dataset",
+    title: "GenomeBank Confidential Cohort",
+    description: "Sensitive genomic cohort; compute-only access.",
+    tags: ["genomics", "healthcare", "compute"],
+    ipMetadataURI: "ipfs://bafyMeta5",
+    vaultUuid: 5,
+    cid: "bafy5",
+    licenseTermsId: "1005",
+    computeLicenseTermsId: "2005",
+    ownerNftTokenId: BigInt(5),
+    createdTx: "0xtx5",
+    computeEnabled: true,
+    allowedAlgoHashes: ["sha256:mean-aggregate", "sha256:logistic-regression"],
+    score: 2050,
+  },
+  {
+    ipId: "0xder0000000000000000000000000000000000006",
+    tier: "gated",
+    modality: "model",
+    title: "SentimentLLM-7B-Finetuned-Reviews",
+    description: "Derivative of SentimentLLM-7B fine-tuned on reviews.",
+    tags: ["llm", "sentiment", "derivative"],
+    ipMetadataURI: "ipfs://bafyMeta6",
+    vaultUuid: 6,
+    cid: "bafy6",
+    licenseTermsId: "1006",
+    parentIpId: "0xgat0000000000000000000000000000000000003",
+    ownerNftTokenId: BigInt(6),
+    createdTx: "0xtx6",
+    score: 640,
+  },
+];
 
 function sample(): Artifact {
   return {
@@ -57,7 +156,7 @@ test("upsert is idempotent: twice yields one row with updated values", () => {
 
 test("listArtifacts filters by tier", () => {
   const db = openDb(":memory:");
-  for (const a of SEED_ARTIFACTS) upsertArtifact(db, a);
+  for (const a of FIXTURE) upsertArtifact(db, a);
   const gated = listArtifacts(db, { tier: "gated" });
   expect(gated.length).toBe(2); // SentimentLLM-7B + derivative
   expect(gated.every((a) => a.tier === "gated")).toBe(true);
@@ -65,7 +164,7 @@ test("listArtifacts filters by tier", () => {
 
 test("listArtifacts filters by modality", () => {
   const db = openDb(":memory:");
-  for (const a of SEED_ARTIFACTS) upsertArtifact(db, a);
+  for (const a of FIXTURE) upsertArtifact(db, a);
   const datasets = listArtifacts(db, { modality: "dataset" });
   expect(datasets.length).toBeGreaterThan(0);
   expect(datasets.every((a) => a.modality === "dataset")).toBe(true);
@@ -73,7 +172,7 @@ test("listArtifacts filters by modality", () => {
 
 test("listArtifacts filters by q substring (case-insensitive on title/desc/tags)", () => {
   const db = openDb(":memory:");
-  for (const a of SEED_ARTIFACTS) upsertArtifact(db, a);
+  for (const a of FIXTURE) upsertArtifact(db, a);
   const byTitle = listArtifacts(db, { q: "sentiment" });
   expect(byTitle.length).toBeGreaterThan(0);
   expect(byTitle.every((a) => /sentiment/i.test(a.title + a.description + a.tags.join(" ")))).toBe(true);
@@ -82,8 +181,8 @@ test("listArtifacts filters by q substring (case-insensitive on title/desc/tags)
   expect(byTag.some((a) => a.tags.includes("genomics"))).toBe(true);
 });
 
-test("seeding SEED_ARTIFACTS yields 6 rows", () => {
+test("seeding FIXTURE yields 6 rows", () => {
   const db = openDb(":memory:");
-  for (const a of SEED_ARTIFACTS) upsertArtifact(db, a);
+  for (const a of FIXTURE) upsertArtifact(db, a);
   expect(listArtifacts(db, {})).toHaveLength(6);
 });

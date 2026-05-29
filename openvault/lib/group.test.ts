@@ -1,11 +1,12 @@
 import { test, expect } from "vitest";
-import { makeMockClients } from "./mock/story";
+import { RUN_INTEGRATION, realClients } from "./itest";
 import { createGroup, addToGroup, distribute } from "./group";
 
+const itInt = test.skipIf(!RUN_INTEGRATION);
 const ip = (s: string) => s as `0x${string}`;
 
-test("createGroup returns a groupIpId in mock", async () => {
-  const { story } = makeMockClients("0xowner");
+itInt("createGroup returns a groupIpId", async () => {
+  const { story } = await realClients();
   const { groupIpId } = await createGroup(story as any, {
     ipIds: [ip("0xa"), ip("0xb")],
     termsId: "1500",
@@ -13,8 +14,8 @@ test("createGroup returns a groupIpId in mock", async () => {
   expect(groupIpId).toBeTruthy();
 });
 
-test("addToGroup and distribute return tx hashes in mock", async () => {
-  const { story } = makeMockClients("0xowner");
+itInt("addToGroup and distribute return tx hashes", async () => {
+  const { story } = await realClients();
   const { groupIpId } = await createGroup(story as any, {
     ipIds: [ip("0xa")],
     termsId: "1500",

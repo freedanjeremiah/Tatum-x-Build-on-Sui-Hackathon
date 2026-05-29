@@ -1,6 +1,8 @@
 import { test, expect } from "vitest";
-import { makeMockClients } from "./mock/story";
+import { RUN_INTEGRATION, realClients } from "./itest";
 import { freshEvidenceCid, raiseReport, counterDispute } from "./dispute";
+
+const itInt = test.skipIf(!RUN_INTEGRATION);
 
 test("freshEvidenceCid() returns a different value on two calls", () => {
   const a = freshEvidenceCid();
@@ -9,8 +11,8 @@ test("freshEvidenceCid() returns a different value on two calls", () => {
   expect(a.startsWith("bafy")).toBe(true);
 });
 
-test("raiseReport returns a disputeId and counterDispute returns a tx in mock", async () => {
-  const { story } = makeMockClients("0xowner");
+itInt("raiseReport returns a disputeId and counterDispute returns a tx", async () => {
+  const { story } = await realClients();
   const r = await raiseReport(story as any, {
     targetIpId: "0xtarget" as `0x${string}`,
     cid: freshEvidenceCid(),

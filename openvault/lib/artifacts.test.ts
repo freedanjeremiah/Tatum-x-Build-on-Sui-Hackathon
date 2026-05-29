@@ -1,5 +1,5 @@
 import { test, expect } from "vitest";
-import { makeMockClients } from "./mock/story";
+import { RUN_INTEGRATION, realClients } from "./itest";
 import {
   uploadGated,
   uploadPublic,
@@ -10,6 +10,8 @@ import {
   download,
   DownloadGateError,
 } from "./artifacts";
+
+const itInt = test.skipIf(!RUN_INTEGRATION);
 
 const owner = "0x000000000000000000000000000000000000dEaD" as const;
 
@@ -23,8 +25,8 @@ function meta(title: string) {
   };
 }
 
-test("uploadGated then download returns the same bytes", async () => {
-  const clients = makeMockClients("0xowner");
+itInt("uploadGated then download returns the same bytes", async () => {
+  const clients = await realClients();
   const bytes = new TextEncoder().encode("secret gated weights");
   const art = await uploadGated(clients as any, { bytes, meta: meta("Gated") });
   expect(art.tier).toBe("gated");
@@ -40,8 +42,8 @@ test("uploadGated then download returns the same bytes", async () => {
   expect(new TextDecoder().decode(out)).toBe("secret gated weights");
 });
 
-test("download without minting/token throws a labeled gate error", async () => {
-  const clients = makeMockClients("0xowner");
+itInt("download without minting/token throws a labeled gate error", async () => {
+  const clients = await realClients();
   const bytes = new TextEncoder().encode("x");
   const art = await uploadGated(clients as any, { bytes, meta: meta("Gated2") });
   // Force the no-token path: licenseTermsId empty so no mint occurs and aux is empty.
@@ -50,8 +52,8 @@ test("download without minting/token throws a labeled gate error", async () => {
   ).rejects.toThrow();
 });
 
-test("uploadPublic returns tier public with no vault", async () => {
-  const clients = makeMockClients("0xowner");
+itInt("uploadPublic returns tier public with no vault", async () => {
+  const clients = await realClients();
   const art = await uploadPublic(clients as any, {
     bytes: new TextEncoder().encode("free rows"),
     meta: { ...meta("Public"), modality: "dataset" },
@@ -61,8 +63,8 @@ test("uploadPublic returns tier public with no vault", async () => {
   expect(art.cid).toBeTruthy();
 });
 
-test("uploadPrivate returns tier private", async () => {
-  const clients = makeMockClients("0xowner");
+itInt("uploadPrivate returns tier private", async () => {
+  const clients = await realClients();
   const art = await uploadPrivate(clients as any, {
     bytes: new TextEncoder().encode("private weights"),
     meta: meta("Private"),
@@ -71,8 +73,8 @@ test("uploadPrivate returns tier private", async () => {
   expect(typeof art.vaultUuid).toBe("number");
 });
 
-test("uploadCompute returns tier compute with allowedAlgoHashes and no plaintext download exposed", async () => {
-  const clients = makeMockClients("0xowner");
+itInt("uploadCompute returns tier compute with allowedAlgoHashes and no plaintext download exposed", async () => {
+  const clients = await realClients();
   const allowed = ["sha256:mean-aggregate"];
   const art = await uploadCompute(clients as any, {
     bytes: new TextEncoder().encode("rows"),
@@ -86,8 +88,8 @@ test("uploadCompute returns tier compute with allowedAlgoHashes and no plaintext
   // No download path implied — the artifacts module exposes no compute-download.
 });
 
-test("registerProvenanceParent metadata is attribution-only", async () => {
-  const clients = makeMockClients("0xowner");
+itInt("registerProvenanceParent metadata is attribution-only", async () => {
+  const clients = await realClients();
   const { ipId, ipMetadataURI } = await registerProvenanceParent(clients as any, {
     externalSource: "https://huggingface.co/meta-llama/Llama-3-8B",
     upstreamLicense: "llama-3-community",
@@ -98,8 +100,8 @@ test("registerProvenanceParent metadata is attribution-only", async () => {
   expect(ipMetadataURI).toBeTruthy();
 });
 
-test("registerDerivative carries parentIpId", async () => {
-  const clients = makeMockClients("0xowner");
+itInt("registerDerivative carries parentIpId", async () => {
+  const clients = await realClients();
   const parent = await uploadPublic(clients as any, {
     bytes: new TextEncoder().encode("p"),
     meta: meta("Parent"),

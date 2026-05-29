@@ -5,9 +5,7 @@ import {
   attributionTerms,
   computeTerms,
   encodeAccessAuxData,
-  mintLicense,
 } from "./licensing";
-import { makeMockClients } from "./mock/story";
 
 test("encodeAccessAuxData([1n]) equals the direct viem encodeAbiParameters call", () => {
   const got = encodeAccessAuxData([1n]);
@@ -31,10 +29,4 @@ test("computeTerms exposes commercial fields", () => {
   expect(t.commercialRevShare).toBe(3);
   expect(t.defaultMintingFee).toBe(2n);
   expect(t.commercialUse).toBe(true);
-});
-
-test("mintLicense returns the first licenseTokenId (bigint) in mock", async () => {
-  const { story } = makeMockClients("0xowner");
-  const id = await mintLicense(story as any, "0xabc" as `0x${string}`, "1001");
-  expect(typeof id).toBe("bigint");
 });

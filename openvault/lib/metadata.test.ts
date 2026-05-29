@@ -1,10 +1,15 @@
 import { test, expect } from "vitest";
 import { createHash } from "node:crypto";
+import { RUN_INTEGRATION } from "./itest";
 import { buildIpaMetadata } from "./metadata";
+
+// buildIpaMetadata pins to real Pinata (needs PINATA_JWT + network), so these
+// hit live storage and are gated. They skip by default.
+const itInt = test.skipIf(!RUN_INTEGRATION);
 
 const owner = "0x000000000000000000000000000000000000dEaD" as const;
 
-test("buildIpaMetadata returns 4 non-empty fields", async () => {
+itInt("buildIpaMetadata returns 4 non-empty fields", async () => {
   const m = await buildIpaMetadata({
     title: "SentimentLLM-7B",
     description: "gated model",
@@ -19,7 +24,7 @@ test("buildIpaMetadata returns 4 non-empty fields", async () => {
   expect(m.nftMetadataHash).toBeTruthy();
 });
 
-test("ipMetadataHash recomputes from the pinned content (mock deterministic hash)", async () => {
+itInt("ipMetadataHash recomputes from the pinned content (deterministic hash)", async () => {
   const args = {
     title: "Dataset X",
     description: "rows",
@@ -28,16 +33,14 @@ test("ipMetadataHash recomputes from the pinned content (mock deterministic hash
     modality: "dataset" as const,
   };
   const m = await buildIpaMetadata(args);
-  // The mock uri carries the full hash after "ipfs://mock".
-  const hashFromUri = "0x" + m.ipMetadataURI.replace("ipfs://mock", "");
-  expect(hashFromUri).toBe(m.ipMetadataHash);
-  // And re-hashing the (deterministic) ipMetadata object yields the same hash.
+  expect(m.ipMetadataURI.startsWith("ipfs://")).toBe(true);
+  // Re-hashing the (deterministic) ipMetadata object yields the same hash.
   const recomputed =
     "0x" + createHash("sha256").update(m.__ipMetadataJSON!).digest("hex");
   expect(recomputed).toBe(m.ipMetadataHash);
 });
 
-test("OSS-parent metadata carries external_source and no commercial flag", async () => {
+itInt("OSS-parent metadata carries external_source and no commercial flag", async () => {
   const m = await buildIpaMetadata({
     title: "Llama-3-8B (OSS provenance)",
     description: "external model",
