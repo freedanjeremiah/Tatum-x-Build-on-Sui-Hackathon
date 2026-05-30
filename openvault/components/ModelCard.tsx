@@ -1,220 +1,288 @@
 "use client";
 
 import Link from "next/link";
-import type { Artifact, Tier } from "@/types/artifact";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import type { Artifact } from "@/types/artifact";
 import { tierMeta } from "@/lib/tiers";
 import TxLink from "./TxLink";
+import Icon from "./ui/Icon";
+import { ModalityChip, TierBadge, TierGlyph } from "./ui/TierBadge";
 
-/** CTA copy + intent per tier. */
-function cta(a: Artifact): { label: string; emphasis: boolean } {
+function ctaLabel(a: Artifact): string {
   switch (a.tier) {
     case "gated":
-      return { label: "Mint to unlock", emphasis: true };
+      return "Mint to unlock";
     case "compute":
-      return { label: "Run a job", emphasis: true };
+      return "Run a job";
     case "public":
-      return { label: "Download", emphasis: true };
+      return "Download";
     case "group":
-      return { label: "View group", emphasis: false };
+      return "View group";
     case "private":
     default:
-      return { label: "Owner only", emphasis: false };
+      return "Owner only";
   }
 }
 
-function licenseSummary(a: Artifact): string | null {
+function licenseSummary(a: Artifact): string {
   if (a.computeEnabled) return "Compute license · pay per job";
   if (a.tier === "gated") return "Commercial · mint to unlock";
+  if (a.tier === "group") return "Group license · subscribe";
+  if (a.tier === "private") return "Owner only";
   if (a.licenseTermsId) return "Commercial · license attached";
-  return null;
+  return "Provenance on-chain";
+}
+
+function ctaHref(a: Artifact): string {
+  if (a.tier === "compute") return `/compute/${a.ipId}`;
+  if (a.tier === "group" && a.groupId) return `/group/${a.groupId}`;
+  return `/artifact/${a.ipId}`;
 }
 
 export default function ModelCard({ artifact: a }: { artifact: Artifact }) {
-  const meta = tierMeta(a.tier);
-  const action = cta(a);
-  const license = licenseSummary(a);
-  const isCompute = a.tier === "compute";
+  const router = useRouter();
+  const t = tierMeta(a.tier);
+  const [hover, setHover] = useState(false);
+  const isPrivate = a.tier === "private";
+  const detailHref = `/artifact/${a.ipId}`;
+
+  function openDetail() {
+    router.push(detailHref);
+  }
 
   return (
-    <Link
-      href={`/artifact/${a.ipId}`}
-      className="group relative flex flex-col overflow-hidden rounded-xl border border-[var(--ov-line)] bg-[var(--ov-panel)]/70 p-px transition-all duration-200 hover:-translate-y-0.5 hover:border-[color-mix(in_oklab,var(--tier-color)_55%,var(--ov-line))] hover:shadow-[0_8px_40px_-12px_var(--tier-glow)]"
-      style={
-        {
-          "--tier-color": meta.color,
-          "--tier-glow": `color-mix(in oklab, ${meta.color} 30%, transparent)`,
-        } as React.CSSProperties
-      }
+    <div
+      role="link"
+      tabIndex={0}
+      aria-label={a.title}
+      onClick={openDetail}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          openDetail();
+        }
+      }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      className="anim-up"
+      style={{
+        position: "relative",
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+        textAlign: "left",
+        cursor: "pointer",
+        background: "var(--ov-panel)",
+        border: "1.5px solid var(--ov-line-ink)",
+        borderRadius: "var(--radius-xl)",
+        transition: "transform .16s ease, box-shadow .16s ease",
+        transform: hover ? "translate(-2px,-3px)" : "none",
+        boxShadow: hover
+          ? `6px 8px 0 ${t.color}`
+          : "3px 4px 0 rgba(33,53,108,0.14)",
+      }}
     >
-      {/* tier accent rail */}
+      {/* tier tab — top edge */}
       <span
-        className="absolute inset-y-0 left-0 w-[3px] opacity-70 transition-opacity group-hover:opacity-100"
-        style={{ background: meta.color }}
+        style={{
+          position: "absolute",
+          left: 0,
+          top: 0,
+          right: 0,
+          height: 4,
+          background: t.color,
+        }}
       />
 
-      <div className="flex flex-1 flex-col gap-3.5 rounded-[11px] bg-[var(--ov-panel)] p-4">
-        {/* header row: tier badge + modality + report */}
-        <div className="flex items-center gap-2">
+      {/* header zone */}
+      <div
+        style={{
+          position: "relative",
+          padding: "18px 16px 0",
+          overflow: "hidden",
+        }}
+      >
+        {/* halftone print corner */}
+        <span
+          aria-hidden
+          className="halftone-dots"
+          style={{
+            position: "absolute",
+            top: -6,
+            right: -6,
+            width: 132,
+            height: 104,
+            color: t.color,
+            opacity: 0.18,
+            pointerEvents: "none",
+            WebkitMaskImage:
+              "radial-gradient(circle at 100% 0, #000, transparent 72%)",
+            maskImage:
+              "radial-gradient(circle at 100% 0, #000, transparent 72%)",
+          }}
+        />
+
+        <div
+          style={{
+            position: "relative",
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
           <TierBadge tier={a.tier} />
           <ModalityChip modality={a.modality} />
-          <button
-            type="button"
-            title="Report this artifact"
-            aria-label="Report this artifact"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
+          <span style={{ flex: 1 }} />
+          <span
+            title="Report"
+            style={{
+              color: "var(--ov-text-faint)",
+              opacity: hover ? 1 : 0,
+              transition: "opacity .15s",
+              display: "inline-flex",
             }}
-            className="ml-auto rounded-md px-1.5 py-1 text-[var(--ov-text-faint)] opacity-0 transition-all hover:text-[var(--tier-gated)] group-hover:opacity-100"
           >
-            <FlagIcon />
-          </button>
+            <Icon name="flag" size={14} />
+          </span>
         </div>
 
-        {/* title + description */}
-        <div className="space-y-1.5">
-          <h3 className="text-[15px] font-semibold leading-snug tracking-tight text-[var(--ov-text)]">
-            {a.title}
-          </h3>
-          <p className="line-clamp-2 text-[12.5px] leading-relaxed text-[var(--ov-text-dim)]">
-            {a.description}
-          </p>
-        </div>
+        <h3
+          className="font-display clamp-2"
+          style={{
+            position: "relative",
+            fontSize: 19,
+            fontWeight: 600,
+            textTransform: "uppercase",
+            letterSpacing: "0.005em",
+            margin: "14px 0 8px",
+            lineHeight: 1.04,
+            minHeight: 40,
+            color: "var(--ov-text)",
+          }}
+        >
+          {a.title}
+        </h3>
+        <p
+          className="clamp-2"
+          style={{
+            position: "relative",
+            fontSize: 12.5,
+            color: "var(--ov-text-dim)",
+            margin: 0,
+            lineHeight: 1.5,
+          }}
+        >
+          {a.description}
+        </p>
 
-        {/* tags */}
-        {a.tags?.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {a.tags.slice(0, 4).map((t) => (
-              <span
-                key={t}
-                className="rounded-md border border-[var(--ov-line-soft)] bg-[var(--ov-bg-elev)]/60 px-2 py-0.5 font-mono text-[10px] text-[var(--ov-text-faint)]"
-              >
-                {t}
+        {a.tags?.length ? (
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 5,
+              marginTop: 13,
+            }}
+          >
+            {a.tags.slice(0, 4).map((tg) => (
+              <span key={tg} className="tag-chip">
+                {tg}
               </span>
             ))}
           </div>
-        )}
+        ) : null}
+      </div>
 
-        {/* compute distinction */}
-        {isCompute && (
-          <div className="flex items-center gap-2 rounded-lg border border-[var(--tier-compute)]/30 bg-[var(--tier-compute)]/8 px-2.5 py-1.5">
-            <ComputeIcon />
-            <span className="text-[11px] font-medium text-[var(--tier-compute)]">
-              Computable · not downloadable
-            </span>
-          </div>
-        )}
+      {a.tier === "compute" ? (
+        <div
+          style={{
+            margin: "13px 16px 0",
+            padding: "7px 11px",
+            borderRadius: 8,
+            fontSize: 10.5,
+            color: t.color,
+            background: `color-mix(in srgb, ${t.color} 11%, transparent)`,
+            border: `1px solid color-mix(in srgb, ${t.color} 35%, transparent)`,
+            fontFamily: "var(--font-mono)",
+            letterSpacing: "0.06em",
+            textTransform: "uppercase",
+            display: "flex",
+            alignItems: "center",
+            gap: 7,
+          }}
+        >
+          <Icon name="compute" size={12} />
+          Computable · not downloadable
+        </div>
+      ) : null}
 
-        {/* license + provenance */}
-        <div className="mt-auto space-y-2.5 pt-1">
-          {license && (
-            <div className="flex items-center gap-1.5 text-[11px] text-[var(--ov-text-dim)]">
-              <LockGlyph tier={a.tier} />
-              <span>{license}</span>
-            </div>
-          )}
-          <div className="flex items-center justify-between gap-2">
-            <TxLink ipId={a.ipId} />
-            <span
-              className={`rounded-full px-3 py-1.5 text-[11px] font-semibold transition-colors ${
-                action.emphasis
-                  ? "text-[var(--ov-accent-ink)]"
-                  : "border border-[var(--ov-line)] text-[var(--ov-text-dim)]"
-              }`}
-              style={
-                action.emphasis
-                  ? { background: meta.color }
-                  : undefined
-              }
-            >
-              {action.label}
-            </span>
-          </div>
+      <div style={{ flex: 1, minHeight: 16 }} />
+
+      {/* footer / action stub */}
+      <div
+        style={{
+          padding: "13px 16px",
+          marginTop: 14,
+          borderTop: "1.5px solid var(--ov-line)",
+          background: "var(--ov-panel-2)",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 7,
+            fontSize: 11,
+            color: "var(--ov-text-dim)",
+            marginBottom: 12,
+          }}
+        >
+          <TierGlyph tier={a.tier} size={13} />
+          <span
+            style={{
+              fontFamily: "var(--font-mono)",
+              letterSpacing: "0.02em",
+              textTransform: "uppercase",
+              fontSize: 10,
+            }}
+          >
+            {licenseSummary(a)}
+          </span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <TxLink ipId={a.ipId} />
+          <span style={{ flex: 1 }} />
+          <Link
+            href={ctaHref(a)}
+            onClick={(e) => {
+              e.stopPropagation();
+            }}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              fontSize: 12,
+              fontWeight: 600,
+              padding: "7px 13px",
+              borderRadius: 8,
+              whiteSpace: "nowrap",
+              flexShrink: 0,
+              background: isPrivate ? "transparent" : t.color,
+              color: isPrivate ? "var(--ov-text-faint)" : "#fff",
+              border: isPrivate
+                ? "1.5px solid var(--ov-line)"
+                : `1.5px solid ${t.color}`,
+              boxShadow: isPrivate ? "none" : "2px 2px 0 var(--ov-navy)",
+              transform: hover && !isPrivate ? "translate(-1px,-1px)" : "none",
+              transition: "transform .14s",
+            }}
+          >
+            {ctaLabel(a)}
+            {!isPrivate ? <Icon name="arrow" size={13} /> : null}
+          </Link>
         </div>
       </div>
-    </Link>
-  );
-}
-
-export function TierBadge({ tier }: { tier: Tier }) {
-  const meta = tierMeta(tier);
-  return (
-    <span
-      className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider"
-      style={{
-        color: meta.color,
-        background: `color-mix(in oklab, ${meta.color} 14%, transparent)`,
-        border: `1px solid color-mix(in oklab, ${meta.color} 35%, transparent)`,
-      }}
-    >
-      <span
-        className="h-1.5 w-1.5 rounded-full"
-        style={{ background: meta.color }}
-      />
-      {meta.label}
-    </span>
-  );
-}
-
-function ModalityChip({ modality }: { modality: "dataset" | "model" }) {
-  return (
-    <span className="inline-flex items-center gap-1 rounded-full border border-[var(--ov-line-soft)] px-2 py-0.5 text-[10px] text-[var(--ov-text-faint)]">
-      {modality === "dataset" ? <DatasetIcon /> : <ModelIcon />}
-      {modality}
-    </span>
-  );
-}
-
-function LockGlyph({ tier }: { tier: Tier }) {
-  if (tier === "compute") return <ComputeIcon small />;
-  if (tier === "public")
-    return (
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-[var(--tier-public)]" aria-hidden>
-        <path d="M5 12h14M13 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    );
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-[var(--ov-text-faint)]" aria-hidden>
-      <rect x="5" y="11" width="14" height="9" rx="2" />
-      <path d="M8 11V8a4 4 0 0 1 8 0v3" />
-    </svg>
-  );
-}
-
-function ComputeIcon({ small }: { small?: boolean }) {
-  const s = small ? 12 : 14;
-  return (
-    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-[var(--tier-compute)]" aria-hidden>
-      <rect x="7" y="7" width="10" height="10" rx="1.5" />
-      <path d="M9 1.5v3M15 1.5v3M9 19.5v3M15 19.5v3M1.5 9h3M1.5 15h3M19.5 9h3M19.5 15h3" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function DatasetIcon() {
-  return (
-    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-      <ellipse cx="12" cy="5" rx="8" ry="3" />
-      <path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6" />
-    </svg>
-  );
-}
-
-function ModelIcon() {
-  return (
-    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-      <circle cx="12" cy="5" r="2.2" />
-      <circle cx="5" cy="18" r="2.2" />
-      <circle cx="19" cy="18" r="2.2" />
-      <path d="M10.5 6.8 6.5 16M13.5 6.8 17.5 16M7 18h10" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function FlagIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M4 21V4M4 4h12l-2 4 2 4H4" />
-    </svg>
+    </div>
   );
 }

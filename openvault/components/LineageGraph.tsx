@@ -2,26 +2,29 @@
 
 import { useEffect, useState } from "react";
 import type { Artifact } from "@/types/artifact";
-import { tierMeta } from "@/lib/tiers";
 import TxLink from "./TxLink";
+import { TierBadge } from "./ui/TierBadge";
+import Icon from "./ui/Icon";
 
 interface LineageGraphProps {
   artifact: Artifact;
 }
 
 /**
- * Parent → child lineage chain. Walks up via /api/index?ipId=parent (one or two
- * levels) and renders each node as a small on-theme card with an edge label for
- * the license terms / "derivative" relationship. Royalties route upstream per
- * those terms.
+ * Parent ↔ this ↔ children chain. Walks up via /api/index?ipId=parent and
+ * down by scanning siblings whose `parentIpId` matches `this`. Each node is a
+ * panel-soft box; edges are labelled DERIVATIVE arrows in the MECHATONE
+ * language.
  */
 export default function LineageGraph({ artifact }: LineageGraphProps) {
-  const [chain, setChain] = useState<Artifact[]>([artifact]);
+  const [parents, setParents] = useState<Artifact[]>([]);
+  const [children, setChildren] = useState<Artifact[]>([]);
 
   useEffect(() => {
     let cancelled = false;
     async function walk() {
-      const nodes: Artifact[] = [artifact];
+      // Up — at most two levels.
+      const upChain: Artifact[] = [];
       let parentId = artifact.parentIpId;
       let depth = 0;
       while (parentId && depth < 2) {
@@ -29,150 +32,191 @@ export default function LineageGraph({ artifact }: LineageGraphProps) {
           const r = await fetch(`/api/index?ipId=${parentId}`);
           const data = (await r.json()) as Artifact | { error: string };
           if (!data || "error" in data) break;
-          nodes.unshift(data);
+          upChain.unshift(data);
           parentId = data.parentIpId;
         } catch {
           break;
         }
         depth++;
       }
-      if (!cancelled) setChain(nodes);
+
+      // Down — siblings whose parent === this (cap at 3 for layout).
+      let downKids: Artifact[] = [];
+      try {
+        const r = await fetch(`/api/index`);
+        const all = (await r.json()) as Artifact[];
+        if (Array.isArray(all)) {
+          downKids = all.filter((a) => a.parentIpId === artifact.ipId).slice(0, 3);
+        }
+      } catch {
+        /* best-effort */
+      }
+
+      if (!cancelled) {
+        setParents(upChain);
+        setChildren(downKids);
+      }
     }
     walk();
     return () => {
       cancelled = true;
     };
-  }, [artifact]);
+  }, [artifact.ipId, artifact.parentIpId]);
 
-  if (chain.length === 1 && !artifact.parentIpId && !artifact.externalSource) {
+  const hasAnything =
+    parents.length > 0 || children.length > 0 || !!artifact.externalSource;
+
+  if (!hasAnything) {
     return (
-      <p className="text-[12.5px] text-[var(--ov-text-dim)]">
-        Original work — no upstream lineage recorded.
+      <p style={{ fontSize: 12.5, color: "var(--ov-text-dim)" }}>
+        Original work — no upstream or downstream lineage recorded.
       </p>
     );
   }
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-stretch">
-        {artifact.externalSource && chain.length === 1 && (
+    <div>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 4,
+          flexWrap: "wrap",
+        }}
+      >
+        {artifact.externalSource && parents.length === 0 ? (
           <>
             <OssNode source={artifact.externalSource} />
-            <Edge label="provenance" />
+            <Arrow />
           </>
-        )}
-        {chain.map((node, i) => {
-          const isCurrent = node.ipId === artifact.ipId;
-          return (
-            <div key={node.ipId} className="flex items-center gap-2">
-              <LineageNode node={node} current={isCurrent} />
-              {i < chain.length - 1 && (
-                <Edge
-                  label={
-                    chain[i + 1].licenseTermsId
-                      ? `terms ${chain[i + 1].licenseTermsId}`
-                      : "derivative"
-                  }
-                />
-              )}
-            </div>
-          );
-        })}
+        ) : null}
+        {parents.map((p) => (
+          <span
+            key={p.ipId}
+            style={{ display: "flex", alignItems: "center", gap: 4 }}
+          >
+            <LineageBox a={p} />
+            <Arrow />
+          </span>
+        ))}
+        <LineageBox a={artifact} isThis />
+        {children.length > 0 ? <Arrow /> : null}
+        {children.length > 0 ? (
+          <div style={{ display: "grid", gap: 8 }}>
+            {children.map((c) => (
+              <LineageBox key={c.ipId} a={c} />
+            ))}
+          </div>
+        ) : null}
       </div>
-
-      <p className="flex items-center gap-1.5 text-[11.5px] text-[var(--ov-text-faint)]">
-        <FlowIcon />
+      <p
+        style={{
+          margin: "12px 0 0",
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          fontSize: 11.5,
+          color: "var(--ov-text-faint)",
+        }}
+      >
+        <span style={{ color: "var(--ov-accent)", display: "inline-flex" }}>
+          <Icon name="arrow" size={13} />
+        </span>
         Royalties route upstream per each link&apos;s license terms.
       </p>
     </div>
   );
 }
 
-function LineageNode({
-  node,
-  current,
-}: {
-  node: Artifact;
-  current: boolean;
-}) {
-  const meta = tierMeta(node.tier);
+function LineageBox({ a, isThis = false }: { a: Artifact; isThis?: boolean }) {
   return (
     <div
-      className="min-w-[180px] rounded-xl border p-3"
+      className="panel-soft"
       style={{
-        borderColor: current
-          ? `color-mix(in oklab, ${meta.color} 55%, var(--ov-line))`
-          : "var(--ov-line)",
-        background: current
-          ? `color-mix(in oklab, ${meta.color} 10%, var(--ov-panel))`
-          : "color-mix(in oklab, var(--ov-panel) 70%, transparent)",
+        padding: "12px 14px",
+        minWidth: 190,
+        position: "relative",
+        borderColor: isThis ? "var(--ov-accent)" : "var(--ov-line)",
+        borderWidth: isThis ? 2 : 1.5,
       }}
     >
-      <div className="flex items-center gap-2">
+      {isThis ? (
         <span
-          className="h-1.5 w-1.5 rounded-full"
-          style={{ background: meta.color }}
-        />
-        <span
-          className="text-[10px] font-semibold uppercase tracking-wider"
-          style={{ color: meta.color }}
+          className="meta"
+          style={{
+            color: "var(--ov-accent)",
+            position: "absolute",
+            top: 8,
+            right: 10,
+          }}
         >
-          {meta.label}
+          THIS
         </span>
-        {current && (
-          <span className="ml-auto rounded-full bg-[var(--ov-line)] px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-[var(--ov-text-faint)]">
-            this
-          </span>
-        )}
+      ) : null}
+      <TierBadge tier={a.tier} />
+      <div
+        style={{
+          fontWeight: 700,
+          fontSize: 13,
+          margin: "8px 0",
+          color: "var(--ov-text)",
+        }}
+      >
+        {a.title}
       </div>
-      <p className="mt-1.5 line-clamp-1 text-[12.5px] font-medium text-[var(--ov-text)]">
-        {node.title}
-      </p>
-      <div className="mt-2">
-        <TxLink ipId={node.ipId} />
-      </div>
+      <TxLink ipId={a.ipId} />
     </div>
   );
 }
 
 function OssNode({ source }: { source: string }) {
   return (
-    <div className="min-w-[180px] rounded-xl border border-dashed border-[var(--ov-line)] bg-[var(--ov-bg-elev)]/50 p-3">
-      <div className="flex items-center gap-2">
-        <span className="h-1.5 w-1.5 rounded-full bg-[var(--ov-text-faint)]" />
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--ov-text-faint)]">
-          OSS source
-        </span>
-      </div>
+    <div
+      className="panel-soft"
+      style={{
+        padding: "12px 14px",
+        minWidth: 190,
+        borderStyle: "dashed",
+      }}
+    >
+      <span className="meta" style={{ color: "var(--ov-text-faint)" }}>
+        OSS source
+      </span>
       <a
         href={source}
         target="_blank"
-        rel="noopener noreferrer"
-        className="mt-1.5 line-clamp-1 block text-[12px] text-[var(--ov-accent)] underline-offset-2 hover:underline"
+        rel="noreferrer"
+        className="font-mono"
+        style={{
+          display: "block",
+          marginTop: 6,
+          fontSize: 11.5,
+          color: "var(--ov-accent)",
+          wordBreak: "break-all",
+        }}
       >
-        {source}
+        {source.replace("https://", "").slice(0, 42)}
+        {source.length > 42 ? "…" : ""}
       </a>
     </div>
   );
 }
 
-function Edge({ label }: { label: string }) {
+function Arrow() {
   return (
-    <div className="flex items-center gap-1 px-1 text-[var(--ov-text-faint)]">
-      <span className="hidden text-[10px] uppercase tracking-wider sm:inline">
-        {label}
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        color: "var(--ov-text-faint)",
+        padding: "0 4px",
+      }}
+    >
+      <span className="meta" style={{ color: "var(--ov-text-faint)" }}>
+        DERIVATIVE
       </span>
-      <svg width="20" height="14" viewBox="0 0 24 14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden className="rotate-90 sm:rotate-0">
-        <path d="M2 7h18M15 2l5 5-5 5" />
-      </svg>
+      <Icon name="arrow" size={16} />
     </div>
-  );
-}
-
-function FlowIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--ov-accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M12 19V5M5 12l7-7 7 7" />
-    </svg>
   );
 }

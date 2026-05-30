@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import VaultMark from "./ui/VaultMark";
+import Spinner from "./ui/Spinner";
+import DisclosureStrip from "./ui/DisclosureStrip";
 
 /**
  * Nothing that uses CDR may render before initWasm() resolves. WasmGate blocks
@@ -32,33 +35,70 @@ export default function WasmGate({ children }: { children: React.ReactNode }) {
 
   if (error) {
     return (
-      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3 px-6 text-center">
-        <div className="font-mono text-xs uppercase tracking-widest text-[var(--tier-gated)]">
+      <div
+        className="container maxw-artifact"
+        style={{
+          minHeight: "55vh",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 16,
+          textAlign: "center",
+        }}
+      >
+        <span className="eyebrow" style={{ color: "var(--tier-gated)" }}>
           Runtime error
+        </span>
+        <h1
+          className="h1"
+          style={{
+            fontSize: "clamp(24px,3vw,32px)",
+            color: "var(--ov-text)",
+          }}
+        >
+          Secure runtime failed to start
+        </h1>
+        <div style={{ maxWidth: 480, width: "100%" }}>
+          <DisclosureStrip tone="gated" icon="flag">
+            {error}
+          </DisclosureStrip>
         </div>
-        <p className="max-w-md text-sm text-[var(--ov-text-dim)]">
-          The confidential runtime failed to start. {error}
-        </p>
       </div>
     );
   }
 
   if (!ready) {
     return (
-      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-5 px-6 text-center">
-        <div className="relative h-10 w-10">
-          <span
-            className="absolute inset-0 rounded-full border-2 border-[var(--ov-line)] border-t-[var(--ov-accent)]"
-            style={{ animation: "ov-spin 0.9s linear infinite" }}
-          />
+      <div
+        style={{
+          minHeight: "60vh",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 18,
+          textAlign: "center",
+          padding: "0 24px",
+        }}
+      >
+        <VaultMark size={46} />
+        <Spinner lg />
+        <div
+          className="meta"
+          style={{ color: "var(--ov-text-dim)" }}
+        >
+          Initializing secure runtime…
         </div>
-        <div className="space-y-1">
-          <div className="font-mono text-sm tracking-tight text-[var(--ov-text)]">
-            Initializing secure runtime…
-          </div>
-          <div className="text-xs text-[var(--ov-text-faint)]">
-            Loading the confidential decryption WASM
-          </div>
+        <div
+          className="font-jp"
+          style={{
+            fontSize: 12,
+            letterSpacing: "0.3em",
+            color: "var(--ov-text-faint)",
+          }}
+        >
+          セキュア ランタイム
         </div>
       </div>
     );

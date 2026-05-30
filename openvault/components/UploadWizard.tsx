@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type { Artifact, Modality, Tier } from "@/types/artifact";
 import type { Clients, UploadMeta } from "@/lib/artifacts";
@@ -9,11 +9,22 @@ import { tierMeta } from "@/lib/tiers";
 import TierPicker from "./TierPicker";
 import OssParentImport from "./OssParentImport";
 import TxLink from "./TxLink";
-import { TierBadge } from "./ModelCard";
+import { ModalityChip, TierBadge } from "./ui/TierBadge";
+import DisclosureStrip from "./ui/DisclosureStrip";
+import Icon from "./ui/Icon";
+import Spinner from "./ui/Spinner";
 
 const ALGO_OPTIONS = ["sha256:mean-aggregate", "sha256:logistic-regression"];
 
 type StepId = "artifact" | "details" | "tier" | "lineage" | "review";
+
+const STEP_LABEL: Record<StepId, string> = {
+  artifact: "Artifact",
+  details: "Details",
+  tier: "Tier",
+  lineage: "Lineage",
+  review: "Review",
+};
 
 interface ParentRef {
   parentIpId: `0x${string}`;
@@ -50,13 +61,10 @@ export default function UploadWizard() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<Artifact | null>(null);
 
-  const steps = useMemo<StepId[]>(() => {
-    const base: StepId[] = ["artifact", "details", "tier"];
-    base.push("lineage"); // lineage offered for both; optional for datasets
-    base.push("review");
-    return base;
-  }, []);
-
+  const steps = useMemo<StepId[]>(
+    () => ["artifact", "details", "tier", "lineage", "review"],
+    [],
+  );
   const stepIndex = steps.indexOf(step);
   const isCompute = tier === "compute";
   const isGated = tier === "gated";
@@ -72,7 +80,7 @@ export default function UploadWizard() {
         if (isCompute && allowedAlgoHashes.length === 0) return false;
         return true;
       case "lineage":
-        return true; // optional
+        return true;
       default:
         return true;
     }
@@ -119,15 +127,20 @@ export default function UploadWizard() {
       setProgress("Connecting…");
       const clients = await getClients();
       const meta = buildMeta(clients);
-      // Thread the user's fee/revshare into the published license terms.
       const { parseEther } = await import("viem");
       let feeWei = 1n;
-      try { feeWei = parseEther((fee || "1").trim()); } catch { feeWei = 1n; }
+      try {
+        feeWei = parseEther((fee || "1").trim());
+      } catch {
+        feeWei = 1n;
+      }
       const rev = Math.min(100, Math.max(0, Number(revshare) || 5));
-      const input = { bytes: bytes ?? new Uint8Array([0]), meta, terms: { rev, fee: feeWei } };
+      const input = {
+        bytes: bytes ?? new Uint8Array([0]),
+        meta,
+        terms: { rev, fee: feeWei },
+      };
 
-      // Dynamic import keeps the node-touching artifacts lib out of the static
-      // client bundle (it reaches node:fs/node:crypto at module scope).
       const {
         uploadPublic,
         uploadPrivate,
@@ -164,10 +177,6 @@ export default function UploadWizard() {
         throw new Error("Select a tier before submitting.");
       }
 
-      // Self-index: POST the public Artifact descriptor so the read model has
-      // the full record immediately (vaultUuid/licenseTermsId/etc that the
-      // on-chain event log doesn't carry). Non-blocking — UI proceeds either
-      // way; the event indexer also writes a baseline.
       setProgress("Indexing artifact…");
       try {
         await postArtifactToIndex(artifact);
@@ -179,9 +188,7 @@ export default function UploadWizard() {
       setResult(artifact);
     } catch (e) {
       setError(
-        e instanceof WalletNotConnectedError
-          ? e.message
-          : friendlyError(e)
+        e instanceof WalletNotConnectedError ? e.message : friendlyError(e),
       );
     } finally {
       setSubmitting(false);
@@ -194,25 +201,63 @@ export default function UploadWizard() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-5 pb-24">
-      <header className="ov-anim-up py-8">
-        <span className="inline-flex items-center gap-2 rounded-full border border-[var(--ov-line)] bg-[var(--ov-panel)]/60 px-3 py-1 font-mono text-[10px] uppercase tracking-widest text-[var(--ov-accent)]">
-          <span className="h-1.5 w-1.5 rounded-full bg-[var(--ov-accent)]" />
-          Publish
-        </span>
-        <h1 className="mt-4 text-3xl font-semibold tracking-tight text-[var(--ov-text)]">
+    <div
+      className="container maxw-upload"
+      style={{ paddingTop: 30, paddingBottom: 60 }}
+    >
+      <div className="anim-up" style={{ marginBottom: 22 }}>
+        <span className="eyebrow">PUBLISH</span>
+        <h1
+          className="h1"
+          style={{
+            fontSize: "clamp(28px,4vw,40px)",
+            margin: "10px 0 10px",
+            color: "var(--ov-text)",
+          }}
+        >
           Register an artifact
         </h1>
-        <p className="mt-2 max-w-xl text-[14px] leading-relaxed text-[var(--ov-text-dim)]">
-          Register the IP first, then encrypt the bytes into a vault gated by
-          your chosen tier. The order is enforced — your ipId exists before any
-          byte is uploaded.
+        <p
+          style={{
+            color: "var(--ov-text-dim)",
+            maxWidth: 540,
+            fontSize: 14,
+            margin: 0,
+          }}
+        >
+          We register the IP first, then encrypt. Your{" "}
+          <span className="font-mono" style={{ fontSize: 12.5 }}>
+            ipId
+          </span>{" "}
+          exists before any byte is uploaded.
         </p>
-      </header>
+      </div>
 
-      <Stepper steps={steps} current={stepIndex} />
+      <div className="panel" style={{ padding: 24 }}>
+        <Stepper steps={steps} current={stepIndex} />
 
-      <div className="ov-anim-up mt-6 rounded-2xl border border-[var(--ov-line)] bg-[var(--ov-panel)]/50 p-5 sm:p-6">
+        <div
+          style={{
+            display: "flex",
+            alignItems: "baseline",
+            gap: 10,
+            marginBottom: 16,
+          }}
+        >
+          <span
+            className="font-mono"
+            style={{ color: "var(--ov-accent)", fontSize: 13 }}
+          >
+            {String(stepIndex + 1).padStart(2, "0")}
+          </span>
+          <span
+            className="h2"
+            style={{ fontSize: 16, color: "var(--ov-text)" }}
+          >
+            {STEP_LABEL[step]}
+          </span>
+        </div>
+
         {step === "artifact" && (
           <StepArtifact
             fileName={fileName}
@@ -221,7 +266,6 @@ export default function UploadWizard() {
             setModality={setModality}
           />
         )}
-
         {step === "details" && (
           <StepDetails
             title={title}
@@ -234,87 +278,18 @@ export default function UploadWizard() {
             setCreators={setCreators}
           />
         )}
-
         {step === "tier" && (
-          <div className="space-y-5">
-            <StepHeading
-              n={3}
-              title="Access tier"
-              sub="How is this artifact accessed and monetized?"
-            />
-            <TierPicker value={tier} onChange={setTier} />
-
-            {(isGated || isCompute) && (
-              <div className="grid grid-cols-1 gap-3 rounded-xl border border-[var(--ov-line)] bg-[var(--ov-bg-elev)]/50 p-4 sm:grid-cols-2">
-                <Field label="Minting fee (WIP)">
-                  <input
-                    type="number"
-                    min="0"
-                    value={fee}
-                    onChange={(e) => setFee(e.target.value)}
-                    className={inputCls}
-                  />
-                </Field>
-                <Field label="Revenue share (%)">
-                  <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    value={revshare}
-                    onChange={(e) => setRevshare(e.target.value)}
-                    className={inputCls}
-                  />
-                </Field>
-              </div>
-            )}
-
-            {isCompute && (
-              <div className="space-y-2">
-                <span className="text-[11px] font-medium uppercase tracking-wider text-[var(--ov-text-faint)]">
-                  Allowed algorithms
-                </span>
-                <div className="flex flex-col gap-2">
-                  {ALGO_OPTIONS.map((algo) => {
-                    const on = allowedAlgoHashes.includes(algo);
-                    return (
-                      <button
-                        key={algo}
-                        type="button"
-                        onClick={() =>
-                          setAllowedAlgoHashes((cur) =>
-                            on
-                              ? cur.filter((a) => a !== algo)
-                              : [...cur, algo]
-                          )
-                        }
-                        className="flex items-center gap-2.5 rounded-lg border px-3 py-2 text-left transition-colors"
-                        style={{
-                          borderColor: on
-                            ? "color-mix(in oklab, var(--tier-compute) 55%, var(--ov-line))"
-                            : "var(--ov-line)",
-                          background: on
-                            ? "color-mix(in oklab, var(--tier-compute) 10%, transparent)"
-                            : "transparent",
-                        }}
-                      >
-                        <Checkbox on={on} color="var(--tier-compute)" />
-                        <span className="font-mono text-[12px] text-[var(--ov-text)]">
-                          {algo}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-                <p className="text-[11px] text-[var(--ov-text-faint)]">
-                  Compute-tier data is never downloadable — consumers run only
-                  these allowlisted algorithms inside the compute worker (a plain
-                  server in this demo; an attested enclave in production).
-                </p>
-              </div>
-            )}
-          </div>
+          <StepTier
+            tier={tier}
+            setTier={setTier}
+            fee={fee}
+            setFee={setFee}
+            revshare={revshare}
+            setRevshare={setRevshare}
+            allowedAlgoHashes={allowedAlgoHashes}
+            setAllowedAlgoHashes={setAllowedAlgoHashes}
+          />
         )}
-
         {step === "lineage" && (
           <StepLineage
             modality={modality}
@@ -322,7 +297,6 @@ export default function UploadWizard() {
             setParent={setParent}
           />
         )}
-
         {step === "review" && (
           <StepReview
             fileName={fileName}
@@ -336,44 +310,61 @@ export default function UploadWizard() {
             revshare={revshare}
             allowedAlgoHashes={allowedAlgoHashes}
             parent={parent}
-            submitting={submitting}
-            progress={progress}
-            error={error}
           />
         )}
-      </div>
 
-      {/* nav */}
-      <div className="mt-5 flex items-center justify-between">
-        <button
-          type="button"
-          onClick={() => go(-1)}
-          disabled={stepIndex === 0 || submitting}
-          className="rounded-lg border border-[var(--ov-line)] px-4 py-2 text-[13px] text-[var(--ov-text-dim)] transition-colors hover:text-[var(--ov-text)] disabled:cursor-not-allowed disabled:opacity-30"
+        {submitting && progress ? (
+          <div className="anim-up" style={{ marginTop: 18 }}>
+            <DisclosureStrip tone="compute" icon="bolt">
+              {progress}
+            </DisclosureStrip>
+          </div>
+        ) : null}
+        {error ? (
+          <div style={{ marginTop: 16 }}>
+            <DisclosureStrip tone="gated" icon="flag">
+              {error}
+            </DisclosureStrip>
+          </div>
+        ) : null}
+
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            marginTop: 26,
+          }}
         >
-          Back
-        </button>
-
-        {step === "review" ? (
           <button
             type="button"
-            onClick={handleSubmit}
-            disabled={submitting || !tier}
-            className="inline-flex items-center gap-2 rounded-lg bg-[var(--ov-accent)] px-5 py-2 text-[13px] font-semibold text-[var(--ov-accent-ink)] transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
+            className="btn btn-ghost"
+            disabled={stepIndex === 0 || submitting}
+            onClick={() => go(-1)}
           >
-            {submitting ? <Spinner ink /> : null}
-            {submitting ? "Publishing…" : "Register & upload"}
+            Back
           </button>
-        ) : (
-          <button
-            type="button"
-            onClick={() => go(1)}
-            disabled={!canNext}
-            className="rounded-lg bg-[var(--ov-accent)] px-5 py-2 text-[13px] font-semibold text-[var(--ov-accent-ink)] transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            Continue
-          </button>
-        )}
+          {step !== "review" ? (
+            <button
+              type="button"
+              className="btn btn-accent"
+              disabled={!canNext}
+              onClick={() => go(1)}
+            >
+              Continue
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="btn btn-accent"
+              disabled={submitting || !tier}
+              style={{ minWidth: 200 }}
+              onClick={handleSubmit}
+            >
+              {submitting ? <Spinner /> : null}
+              {submitting ? "Publishing…" : "Register & upload"}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -392,59 +383,95 @@ function StepArtifact({
   modality: Modality;
   setModality: (m: Modality) => void;
 }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [over, setOver] = useState(false);
+
   return (
-    <div className="space-y-5">
-      <StepHeading
-        n={1}
-        title="The artifact"
-        sub="Pick the file to register and whether it is a dataset or a model."
-      />
-      <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-[var(--ov-line)] bg-[var(--ov-bg-elev)]/40 px-6 py-10 text-center transition-colors hover:border-[var(--ov-accent)]/50">
-        <UploadIcon />
-        <span className="text-[13px] font-medium text-[var(--ov-text)]">
-          {fileName ? fileName : "Choose a file"}
-        </span>
-        <span className="text-[11.5px] text-[var(--ov-text-faint)]">
-          {fileName
-            ? "Click to replace"
-            : "Any file — it will be read into bytes and encrypted to your vault"}
-        </span>
+    <div style={{ display: "grid", gap: 18 }}>
+      <div
+        onClick={() => inputRef.current?.click()}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setOver(true);
+        }}
+        onDragLeave={() => setOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setOver(false);
+          const f = e.dataTransfer.files?.[0];
+          if (f) onFile(f);
+        }}
+        style={{
+          border: `2px dashed ${over ? "var(--ov-accent)" : "var(--ov-line-ink)"}`,
+          borderRadius: 16,
+          padding: "34px 20px",
+          textAlign: "center",
+          cursor: "pointer",
+          background: over
+            ? "color-mix(in srgb, var(--ov-accent) 7%, var(--ov-panel))"
+            : "var(--ov-panel)",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: 10,
+          transition: "all .14s",
+        }}
+      >
         <input
+          ref={inputRef}
           type="file"
-          className="hidden"
+          style={{ display: "none" }}
           onChange={(e) => {
             const f = e.target.files?.[0];
             if (f) onFile(f);
           }}
         />
-      </label>
+        <span
+          style={{
+            color: fileName ? "var(--tier-public)" : "var(--ov-text-faint)",
+          }}
+        >
+          <Icon name={fileName ? "check" : "upload"} size={28} />
+        </span>
+        {fileName ? (
+          <div className="font-mono" style={{ fontSize: 13, color: "var(--ov-text)" }}>
+            {fileName}
+          </div>
+        ) : (
+          <div style={{ alignSelf: "stretch", textAlign: "center" }}>
+            <div style={{ fontWeight: 600, fontSize: 14, color: "var(--ov-text)" }}>
+              Choose a file
+            </div>
+            <div
+              style={{ fontSize: 12, color: "var(--ov-text-faint)", marginTop: 4 }}
+            >
+              or drag it here — bytes are encrypted client-side after the IP is registered
+            </div>
+          </div>
+        )}
+      </div>
 
       <Field label="Modality">
-        <div className="flex gap-2">
-          {(["dataset", "model"] as Modality[]).map((m) => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => setModality(m)}
-              className="flex-1 rounded-lg border px-4 py-2.5 text-[13px] font-medium capitalize transition-colors"
-              style={{
-                borderColor:
-                  modality === m
-                    ? "color-mix(in oklab, var(--ov-accent) 55%, var(--ov-line))"
-                    : "var(--ov-line)",
-                background:
-                  modality === m
-                    ? "color-mix(in oklab, var(--ov-accent) 10%, transparent)"
-                    : "transparent",
-                color:
-                  modality === m
-                    ? "var(--ov-text)"
-                    : "var(--ov-text-dim)",
-              }}
-            >
-              {m}
-            </button>
-          ))}
+        <div style={{ display: "flex", gap: 8 }}>
+          {(["dataset", "model"] as Modality[]).map((m) => {
+            const on = modality === m;
+            return (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setModality(m)}
+                className="btn"
+                style={{
+                  flex: 1,
+                  background: on ? "var(--ov-navy)" : "var(--ov-panel)",
+                  color: on ? "var(--ov-accent-ink)" : "var(--ov-text-dim)",
+                  border: `1.5px solid ${on ? "var(--ov-navy)" : "var(--ov-line)"}`,
+                }}
+              >
+                {m === "dataset" ? "Dataset" : "Model"}
+              </button>
+            );
+          })}
         </div>
       </Field>
     </div>
@@ -471,47 +498,150 @@ function StepDetails({
   setCreators: (v: string) => void;
 }) {
   return (
-    <div className="space-y-4">
-      <StepHeading
-        n={2}
-        title="Details"
-        sub="This metadata is pinned and attached to your IP record."
-      />
+    <div style={{ display: "grid", gap: 14 }}>
       <Field label="Title">
         <input
+          className="input"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="SentimentLLM-7B"
-          className={inputCls}
         />
       </Field>
       <Field label="Description">
         <textarea
+          className="textarea"
+          rows={3}
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          rows={3}
-          placeholder="What it is, how it was trained, and what it is good for."
-          className={`${inputCls} resize-none`}
+          placeholder="What it is, how it was built, intended use…"
         />
       </Field>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Field label="Tags (comma-separated)">
-          <input
-            value={tags}
-            onChange={(e) => setTags(e.target.value)}
-            placeholder="llm, sentiment, nlp"
-            className={inputCls}
-          />
-        </Field>
-        <Field label="Creators (comma-separated)">
-          <input
-            value={creators}
-            onChange={(e) => setCreators(e.target.value)}
-            placeholder="Jane Doe, Acme Lab"
-            className={inputCls}
-          />
-        </Field>
-      </div>
+      <Field label="Tags (comma-separated)">
+        <input
+          className="input"
+          value={tags}
+          onChange={(e) => setTags(e.target.value)}
+          placeholder="llm, sentiment, nlp"
+        />
+      </Field>
+      <Field label="Creators (comma-separated)">
+        <input
+          className="input"
+          value={creators}
+          onChange={(e) => setCreators(e.target.value)}
+          placeholder="Jane Doe, Acme Lab"
+        />
+      </Field>
+    </div>
+  );
+}
+
+function StepTier({
+  tier,
+  setTier,
+  fee,
+  setFee,
+  revshare,
+  setRevshare,
+  allowedAlgoHashes,
+  setAllowedAlgoHashes,
+}: {
+  tier: Tier | null;
+  setTier: (t: Tier) => void;
+  fee: string;
+  setFee: (v: string) => void;
+  revshare: string;
+  setRevshare: (v: string) => void;
+  allowedAlgoHashes: string[];
+  setAllowedAlgoHashes: (
+    update: string[] | ((prev: string[]) => string[]),
+  ) => void;
+}) {
+  const isCompute = tier === "compute";
+  const isGated = tier === "gated";
+  return (
+    <div style={{ display: "grid", gap: 16 }}>
+      <TierPicker value={tier} onChange={setTier} />
+
+      {(isCompute || isGated) && (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: 12,
+          }}
+        >
+          <Field label="Minting fee (WIP)">
+            <input
+              className="input mono"
+              inputMode="decimal"
+              value={fee}
+              onChange={(e) => setFee(e.target.value)}
+              placeholder="5.0"
+            />
+          </Field>
+          <Field label="Revenue share (%)">
+            <input
+              className="input mono"
+              inputMode="numeric"
+              value={revshare}
+              onChange={(e) => setRevshare(e.target.value)}
+              placeholder="8"
+            />
+          </Field>
+        </div>
+      )}
+
+      {isCompute && (
+        <div>
+          <div className="meta" style={{ marginBottom: 8 }}>
+            Algorithm allowlist
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {ALGO_OPTIONS.map((al) => {
+              const on = allowedAlgoHashes.includes(al);
+              return (
+                <button
+                  key={al}
+                  type="button"
+                  className="chip"
+                  onClick={() =>
+                    setAllowedAlgoHashes((cur) =>
+                      on ? cur.filter((h) => h !== al) : [...cur, al],
+                    )
+                  }
+                  style={{
+                    cursor: "pointer",
+                    padding: "8px 12px",
+                    textTransform: "none",
+                    letterSpacing: 0,
+                    fontFamily: "var(--font-mono)",
+                    fontSize: 11.5,
+                    borderColor: on ? "var(--tier-compute)" : "var(--ov-line)",
+                    color: on ? "var(--tier-compute)" : "var(--ov-text-dim)",
+                    background: on
+                      ? "color-mix(in srgb, var(--tier-compute) 12%, transparent)"
+                      : "var(--ov-panel)",
+                  }}
+                >
+                  <Icon name={on ? "check" : "plus"} size={12} />
+                  {al}
+                </button>
+              );
+            })}
+          </div>
+          <p
+            style={{
+              fontSize: 12,
+              color: "var(--ov-text-faint)",
+              marginTop: 10,
+            }}
+          >
+            Compute data is never downloadable — only allowlisted aggregates
+            ever leave the worker.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
@@ -528,57 +658,67 @@ function StepLineage({
   const [mode, setMode] = useState<"none" | "onchain" | "oss">("none");
 
   return (
-    <div className="space-y-5">
-      <StepHeading
-        n={4}
-        title="Lineage"
-        sub={
-          modality === "model"
-            ? "Is this derived from an existing artifact? Royalties route upstream per the parent's license terms."
-            : "Optional — link an upstream source if this dataset is derived from one."
-        }
-      />
-
+    <div style={{ display: "grid", gap: 16 }}>
       {parent ? (
-        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[var(--ov-accent)]/30 bg-[var(--ov-accent)]/8 px-4 py-3">
-          <span className="text-[12px] font-medium text-[var(--ov-accent)]">
-            Derived from
-          </span>
-          <span className="text-[12px] text-[var(--ov-text-dim)]">
-            {parent.label}
-          </span>
+        <DisclosureStrip tone="public" icon="check">
+          Derived from <strong>{parent.label}</strong>{" "}
           <TxLink ipId={parent.parentIpId} />
-          <button
-            type="button"
-            onClick={() => {
-              setParent(null);
-              setMode("none");
-            }}
-            className="ml-auto text-[12px] text-[var(--ov-text-faint)] underline-offset-2 hover:text-[var(--ov-text)] hover:underline"
-          >
-            Clear
-          </button>
-        </div>
+          <div style={{ marginTop: 8 }}>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => {
+                setParent(null);
+                setMode("none");
+              }}
+            >
+              Clear
+            </button>
+          </div>
+        </DisclosureStrip>
       ) : (
         <>
-          <div className="flex flex-wrap gap-2">
-            <ModeChip
-              active={mode === "none"}
-              label="Original work"
-              onClick={() => setMode("none")}
-            />
-            <ModeChip
-              active={mode === "onchain"}
-              label="Derived from on-platform artifact"
-              onClick={() => setMode("onchain")}
-            />
-            <ModeChip
-              active={mode === "oss"}
-              label="Derived from OSS source"
-              onClick={() => setMode("oss")}
-            />
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {[
+              { k: "none" as const, label: "Original work" },
+              { k: "onchain" as const, label: "Derived from on-platform artifact" },
+              { k: "oss" as const, label: "Derived from OSS source" },
+            ].map((m) => {
+              const on = mode === m.k;
+              return (
+                <button
+                  key={m.k}
+                  type="button"
+                  className="chip"
+                  onClick={() => setMode(m.k)}
+                  style={{
+                    cursor: "pointer",
+                    padding: "8px 13px",
+                    textTransform: "none",
+                    letterSpacing: 0,
+                    fontFamily: "var(--font-sans)",
+                    fontSize: 12.5,
+                    fontWeight: 600,
+                    borderColor: on ? "var(--ov-accent)" : "var(--ov-line)",
+                    color: on ? "var(--ov-accent)" : "var(--ov-text-dim)",
+                    background: on
+                      ? "color-mix(in srgb, var(--ov-accent) 10%, transparent)"
+                      : "var(--ov-panel)",
+                  }}
+                >
+                  {m.label}
+                </button>
+              );
+            })}
           </div>
 
+          {mode === "none" && (
+            <p style={{ fontSize: 13, color: "var(--ov-text-dim)" }}>
+              This artifact is registered as an original work — no parent IP
+              will be linked. {modality === "model" ? "Models" : "Datasets"} can
+              still be cited later as parents of downstream derivatives.
+            </p>
+          )}
           {mode === "onchain" && <ParentSearch onPick={setParent} />}
           {mode === "oss" && (
             <OssParentImport
@@ -610,7 +750,7 @@ function ParentSearch({ onPick }: { onPick: (p: ParentRef) => void }) {
       const r = await fetch(`/api/index?${params.toString()}`);
       const data = (await r.json()) as Artifact[];
       setResults(
-        Array.isArray(data) ? data.filter((a) => a.licenseTermsId) : []
+        Array.isArray(data) ? data.filter((a) => a.licenseTermsId) : [],
       );
     } catch {
       setResults([]);
@@ -620,50 +760,77 @@ function ParentSearch({ onPick }: { onPick: (p: ParentRef) => void }) {
   }
 
   return (
-    <div className="space-y-3 rounded-xl border border-[var(--ov-line)] bg-[var(--ov-panel)]/60 p-4">
-      <div className="flex gap-2">
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && search()}
-          placeholder="Search a parent by title or tag…"
-          className={inputCls}
-        />
-        <button
-          type="button"
-          onClick={search}
-          className="shrink-0 rounded-lg border border-[var(--ov-line)] px-4 text-[13px] text-[var(--ov-text)] transition-colors hover:border-[var(--ov-accent)]"
-        >
-          {loading ? "…" : "Search"}
-        </button>
-      </div>
-      {results.length > 0 && (
-        <ul className="divide-y divide-[var(--ov-line-soft)] overflow-hidden rounded-lg border border-[var(--ov-line-soft)]">
+    <div style={{ display: "grid", gap: 12 }}>
+      <Field label="Search on-platform artifacts">
+        <div style={{ display: "flex", gap: 8 }}>
+          <input
+            className="input"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && search()}
+            placeholder="Search by title…"
+          />
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={search}
+            style={{ flex: "none" }}
+          >
+            {loading ? <Spinner /> : <Icon name="search" size={14} />}
+            Search
+          </button>
+        </div>
+      </Field>
+      {results.length > 0 ? (
+        <div style={{ display: "grid", gap: 8 }}>
           {results.slice(0, 6).map((a) => (
-            <li key={a.ipId}>
-              <button
-                type="button"
-                onClick={() =>
-                  onPick({
-                    parentIpId: a.ipId,
-                    parentTermsId: a.licenseTermsId ?? "",
-                    label: a.title,
-                  })
-                }
-                className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-white/5"
+            <button
+              key={a.ipId}
+              type="button"
+              className="panel-soft"
+              onClick={() =>
+                onPick({
+                  parentIpId: a.ipId,
+                  parentTermsId: a.licenseTermsId ?? "",
+                  label: a.title,
+                })
+              }
+              style={{
+                padding: 12,
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                cursor: "pointer",
+                textAlign: "left",
+              }}
+            >
+              <TierBadge tier={a.tier} />
+              <span
+                style={{
+                  fontWeight: 600,
+                  fontSize: 13,
+                  color: "var(--ov-text)",
+                  flex: 1,
+                  minWidth: 0,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
               >
-                <TierBadge tier={a.tier} />
-                <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--ov-text)]">
-                  {a.title}
+                {a.title}
+              </span>
+              {a.licenseTermsId ? (
+                <span
+                  className="font-mono"
+                  style={{ fontSize: 11, color: "var(--ov-text-faint)" }}
+                >
+                  #{a.licenseTermsId}
                 </span>
-                <span className="font-mono text-[10px] text-[var(--ov-text-faint)]">
-                  terms {a.licenseTermsId}
-                </span>
-              </button>
-            </li>
+              ) : null}
+            </button>
           ))}
-        </ul>
-      )}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -680,9 +847,6 @@ function StepReview({
   revshare,
   allowedAlgoHashes,
   parent,
-  submitting,
-  progress,
-  error,
 }: {
   fileName: string;
   modality: Modality;
@@ -695,161 +859,153 @@ function StepReview({
   revshare: string;
   allowedAlgoHashes: string[];
   parent: ParentRef | null;
-  submitting: boolean;
-  progress: string;
-  error: string | null;
 }) {
+  const showFee = tier === "gated" || tier === "compute";
   return (
-    <div className="space-y-4">
-      <StepHeading
-        n={5}
-        title="Review & submit"
-        sub="Confirm the details. We register the IP, then encrypt and upload."
-      />
-      <dl className="grid grid-cols-1 gap-x-6 gap-y-3 rounded-xl border border-[var(--ov-line)] bg-[var(--ov-bg-elev)]/40 p-4 sm:grid-cols-2">
-        <Row label="File" value={fileName || "—"} />
-        <Row label="Modality" value={modality} />
-        <Row label="Title" value={title || "—"} />
-        <Row
-          label="Tier"
-          value={
-            tier ? (
-              <TierBadge tier={tier} />
-            ) : (
-              <span className="text-[var(--tier-gated)]">Not selected</span>
-            )
-          }
-        />
-        <Row label="Tags" value={tags || "—"} />
-        <Row label="Creators" value={creators || "Anonymous"} />
-        {(tier === "gated" || tier === "compute") && (
-          <Row label="Fee / Rev-share" value={`${fee} WIP · ${revshare}%`} />
-        )}
-        {tier === "compute" && (
-          <Row
-            label="Algorithms"
-            value={
-              allowedAlgoHashes.length
+    <div>
+      <dl style={{ margin: 0 }}>
+        <ReviewRow label="File">
+          <span className="font-mono">{fileName || "—"}</span>
+        </ReviewRow>
+        <ReviewRow label="Modality">
+          {modality === "model" ? "Model" : "Dataset"}
+        </ReviewRow>
+        <ReviewRow label="Title">{title || "—"}</ReviewRow>
+        <ReviewRow label="Tier">
+          {tier ? (
+            <TierBadge tier={tier} />
+          ) : (
+            <span style={{ color: "var(--tier-gated)" }}>Not selected</span>
+          )}
+        </ReviewRow>
+        <ReviewRow label="Tags">{tags || "—"}</ReviewRow>
+        <ReviewRow label="Creators">{creators || "Anonymous"}</ReviewRow>
+        {showFee ? (
+          <ReviewRow label="Fee · Rev-share">
+            <span className="font-mono">
+              {fee || "0"} WIP · {revshare || "0"}%
+            </span>
+          </ReviewRow>
+        ) : null}
+        {tier === "compute" ? (
+          <ReviewRow label="Algorithms">
+            <span className="font-mono" style={{ fontSize: 11.5 }}>
+              {allowedAlgoHashes.length
                 ? allowedAlgoHashes.join(", ")
-                : "none"
-            }
-          />
-        )}
-        {parent && (
-          <Row
-            label="Derived from"
-            value={
-              <span className="inline-flex items-center gap-2">
-                {parent.label}
-                <TxLink ipId={parent.parentIpId} />
-              </span>
-            }
-          />
-        )}
+                : "—"}
+            </span>
+          </ReviewRow>
+        ) : null}
+        {parent ? (
+          <ReviewRow label="Derived from">
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+              {parent.label}
+              <TxLink ipId={parent.parentIpId} />
+            </span>
+          </ReviewRow>
+        ) : null}
       </dl>
-
-      <p className="text-[12px] leading-relaxed text-[var(--ov-text-dim)] line-clamp-3">
-        {description}
+      <p
+        className="clamp-3"
+        style={{
+          fontSize: 13,
+          color: "var(--ov-text-dim)",
+          marginTop: 14,
+          lineHeight: 1.6,
+        }}
+      >
+        {description || "No description provided."}
       </p>
-
-      {submitting && progress && (
-        <div className="flex items-center gap-2.5 rounded-lg border border-[var(--ov-accent)]/30 bg-[var(--ov-accent)]/8 px-3 py-2.5">
-          <Spinner />
-          <span className="text-[12.5px] text-[var(--ov-text)]">
-            {progress}
-          </span>
-        </div>
-      )}
-
-      {error && (
-        <div className="rounded-lg border border-[var(--tier-gated)]/40 bg-[var(--tier-gated)]/10 px-3 py-2.5 text-[12.5px] text-[var(--tier-gated)]">
-          {error}
-        </div>
-      )}
     </div>
   );
 }
 
 function SuccessScreen({ artifact }: { artifact: Artifact }) {
-  const meta = tierMeta(artifact.tier);
+  const t = tierMeta(artifact.tier);
+  const sealed = artifact.tier !== "public";
   return (
-    <div className="mx-auto max-w-2xl px-5 py-16">
-      <div className="ov-anim-up flex flex-col items-center gap-4 text-center">
+    <div
+      className="container maxw-upload"
+      style={{ paddingTop: 30, paddingBottom: 60 }}
+    >
+      <div className="panel anim-up" style={{ padding: 34, textAlign: "center" }}>
         <span
-          className="grid h-14 w-14 place-items-center rounded-2xl"
           style={{
-            background: `color-mix(in oklab, ${meta.color} 16%, transparent)`,
-            border: `1px solid color-mix(in oklab, ${meta.color} 40%, transparent)`,
+            width: 56,
+            height: 56,
+            borderRadius: 16,
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: `color-mix(in srgb, ${t.color} 16%, transparent)`,
+            color: t.color,
+            border: `1.5px solid ${t.color}`,
+            marginBottom: 16,
           }}
         >
-          <svg
-            width="26"
-            height="26"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke={meta.color}
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden
-          >
-            <path d="M20 6 9 17l-5-5" />
-          </svg>
+          <Icon name="check" size={28} />
         </span>
-        <h1 className="text-2xl font-semibold tracking-tight text-[var(--ov-text)]">
+        <h1 className="h1" style={{ fontSize: 30, color: "var(--ov-text)" }}>
           Artifact registered
         </h1>
-        <p className="max-w-md text-[13.5px] text-[var(--ov-text-dim)]">
-          {artifact.title} is now on-chain and {artifact.tier === "public"
-            ? "pinned in the clear"
-            : "sealed in its vault"}
-          .
+        <p style={{ color: "var(--ov-text-dim)", marginTop: 10 }}>
+          <strong>{artifact.title}</strong> is now on-chain and{" "}
+          {sealed ? "sealed in its vault" : "pinned in the clear"}.
         </p>
-      </div>
-
-      <div className="ov-anim-up mt-8 space-y-3 rounded-2xl border border-[var(--ov-line)] bg-[var(--ov-panel)]/60 p-5">
-        <div className="flex items-center gap-2">
-          <TierBadge tier={artifact.tier} />
-          <span className="text-[12px] capitalize text-[var(--ov-text-faint)]">
-            {artifact.modality}
-          </span>
-        </div>
-        <Row label="Title" value={artifact.title} />
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="w-24 text-[11px] uppercase tracking-wider text-[var(--ov-text-faint)]">
-            IP asset
-          </span>
-          <TxLink ipId={artifact.ipId} />
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="w-24 text-[11px] uppercase tracking-wider text-[var(--ov-text-faint)]">
-            Register tx
-          </span>
-          <TxLink hash={artifact.createdTx} />
-        </div>
-        {artifact.parentIpId && (
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="w-24 text-[11px] uppercase tracking-wider text-[var(--ov-text-faint)]">
-              Parent
-            </span>
-            <TxLink ipId={artifact.parentIpId} />
+        <div
+          className="panel-soft"
+          style={{
+            padding: 16,
+            marginTop: 22,
+            textAlign: "left",
+            maxWidth: 460,
+            marginLeft: "auto",
+            marginRight: "auto",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              marginBottom: 4,
+            }}
+          >
+            <TierBadge tier={artifact.tier} />
+            <ModalityChip modality={artifact.modality} />
           </div>
-        )}
-      </div>
-
-      <div className="ov-anim-up mt-6 flex flex-wrap justify-center gap-3">
-        <Link
-          href={`/artifact/${artifact.ipId}`}
-          className="rounded-lg bg-[var(--ov-accent)] px-5 py-2.5 text-[13px] font-semibold text-[var(--ov-accent-ink)]"
+          <ReviewRow label="Title">{artifact.title}</ReviewRow>
+          <ReviewRow label="IP asset">
+            <TxLink ipId={artifact.ipId} />
+          </ReviewRow>
+          <ReviewRow label="Register tx">
+            <TxLink hash={artifact.createdTx} />
+          </ReviewRow>
+          {artifact.parentIpId ? (
+            <ReviewRow label="Parent IP">
+              <TxLink ipId={artifact.parentIpId} />
+            </ReviewRow>
+          ) : null}
+        </div>
+        <div
+          style={{
+            display: "flex",
+            gap: 10,
+            justifyContent: "center",
+            marginTop: 24,
+            flexWrap: "wrap",
+          }}
         >
-          View artifact
-        </Link>
-        <Link
-          href="/"
-          className="rounded-lg border border-[var(--ov-line)] px-5 py-2.5 text-[13px] text-[var(--ov-text-dim)] transition-colors hover:text-[var(--ov-text)]"
-        >
-          Back to browse
-        </Link>
+          <Link
+            href={`/artifact/${artifact.ipId}`}
+            className="btn btn-accent"
+          >
+            View artifact
+          </Link>
+          <Link href="/" className="btn btn-ghost">
+            Back to browse
+          </Link>
+        </div>
       </div>
     </div>
   );
@@ -857,79 +1013,77 @@ function SuccessScreen({ artifact }: { artifact: Artifact }) {
 
 /* --------------------------- Primitives --------------------------- */
 
-const inputCls =
-  "w-full rounded-lg border border-[var(--ov-line)] bg-[var(--ov-bg-elev)] px-3 py-2 text-[13px] text-[var(--ov-text)] outline-none placeholder:text-[var(--ov-text-faint)] focus:border-[var(--ov-accent)]";
-
 function Stepper({ steps, current }: { steps: StepId[]; current: number }) {
-  const labels: Record<StepId, string> = {
-    artifact: "Artifact",
-    details: "Details",
-    tier: "Tier",
-    lineage: "Lineage",
-    review: "Review",
-  };
   return (
-    <ol className="flex flex-wrap items-center gap-x-2 gap-y-2">
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        marginBottom: 24,
+        flexWrap: "wrap",
+        gap: "8px 0",
+      }}
+    >
       {steps.map((s, i) => {
         const done = i < current;
         const active = i === current;
         return (
-          <li key={s} className="flex items-center gap-2">
-            <span
-              className="grid h-6 w-6 place-items-center rounded-full border text-[11px] font-semibold transition-colors"
-              style={{
-                borderColor: active || done ? "var(--ov-accent)" : "var(--ov-line)",
-                background: done
-                  ? "var(--ov-accent)"
-                  : active
-                    ? "color-mix(in oklab, var(--ov-accent) 14%, transparent)"
-                    : "transparent",
-                color: done
-                  ? "var(--ov-accent-ink)"
-                  : active
+          <span
+            key={s}
+            style={{ display: "flex", alignItems: "center", flex: "0 1 auto" }}
+          >
+            <span style={{ display: "flex", alignItems: "center", gap: 9 }}>
+              <span
+                style={{
+                  width: 26,
+                  height: 26,
+                  borderRadius: 999,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontFamily: "var(--font-mono)",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  flex: "none",
+                  border: `1.5px solid ${done || active ? "var(--ov-accent)" : "var(--ov-line)"}`,
+                  background: done
                     ? "var(--ov-accent)"
-                    : "var(--ov-text-faint)",
-              }}
-            >
-              {done ? "✓" : i + 1}
+                    : active
+                      ? "color-mix(in srgb, var(--ov-accent) 14%, transparent)"
+                      : "transparent",
+                  color: done
+                    ? "var(--ov-accent-ink)"
+                    : active
+                      ? "var(--ov-accent)"
+                      : "var(--ov-text-faint)",
+                }}
+              >
+                {done ? <Icon name="check" size={14} /> : i + 1}
+              </span>
+              <span
+                style={{
+                  fontSize: 12.5,
+                  fontWeight: 600,
+                  color: active ? "var(--ov-text)" : "var(--ov-text-faint)",
+                }}
+              >
+                {STEP_LABEL[s]}
+              </span>
             </span>
-            <span
-              className={`text-[12px] ${active ? "text-[var(--ov-text)]" : "text-[var(--ov-text-faint)]"}`}
-            >
-              {labels[s]}
-            </span>
-            {i < steps.length - 1 && (
-              <span className="mx-1 h-px w-5 bg-[var(--ov-line)]" />
-            )}
-          </li>
+            {i < steps.length - 1 ? (
+              <span
+                style={{
+                  flex: 1,
+                  minWidth: 24,
+                  height: 1.5,
+                  background: "var(--ov-line)",
+                  margin: "0 12px",
+                }}
+              />
+            ) : null}
+          </span>
         );
       })}
-    </ol>
-  );
-}
-
-function StepHeading({
-  n,
-  title,
-  sub,
-}: {
-  n: number;
-  title: string;
-  sub: string;
-}) {
-  return (
-    <div className="space-y-1">
-      <div className="flex items-center gap-2">
-        <span className="font-mono text-[11px] text-[var(--ov-accent)]">
-          {String(n).padStart(2, "0")}
-        </span>
-        <h2 className="text-[16px] font-semibold tracking-tight text-[var(--ov-text)]">
-          {title}
-        </h2>
-      </div>
-      <p className="text-[12.5px] leading-relaxed text-[var(--ov-text-dim)]">
-        {sub}
-      </p>
     </div>
   );
 }
@@ -942,136 +1096,56 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <label className="block space-y-1.5">
-      <span className="text-[11px] font-medium uppercase tracking-wider text-[var(--ov-text-faint)]">
-        {label}
-      </span>
+    <label style={{ display: "block" }}>
+      <span className="field-label">{label}</span>
       {children}
     </label>
   );
 }
 
-function Row({
+function ReviewRow({
   label,
-  value,
+  children,
 }: {
   label: string;
-  value: React.ReactNode;
+  children: React.ReactNode;
 }) {
   return (
-    <div className="flex items-baseline gap-3">
-      <dt className="w-24 shrink-0 text-[11px] uppercase tracking-wider text-[var(--ov-text-faint)]">
+    <div
+      style={{
+        display: "flex",
+        gap: 14,
+        padding: "9px 0",
+        borderBottom: "1px solid var(--ov-line-soft)",
+      }}
+    >
+      <span
+        className="meta"
+        style={{
+          color: "var(--ov-text-faint)",
+          width: 110,
+          flex: "none",
+        }}
+      >
         {label}
-      </dt>
-      <dd className="min-w-0 flex-1 text-[13px] capitalize-none text-[var(--ov-text)]">
-        {value}
-      </dd>
+      </span>
+      <span style={{ fontSize: 13, color: "var(--ov-text)" }}>{children}</span>
     </div>
-  );
-}
-
-function ModeChip({
-  active,
-  label,
-  onClick,
-}: {
-  active: boolean;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="rounded-full border px-3 py-1.5 text-[12px] font-medium transition-colors"
-      style={{
-        borderColor: active
-          ? "color-mix(in oklab, var(--ov-accent) 45%, transparent)"
-          : "var(--ov-line)",
-        background: active
-          ? "color-mix(in oklab, var(--ov-accent) 14%, transparent)"
-          : "transparent",
-        color: active ? "var(--ov-accent)" : "var(--ov-text-dim)",
-      }}
-    >
-      {label}
-    </button>
-  );
-}
-
-function Checkbox({ on, color }: { on: boolean; color: string }) {
-  return (
-    <span
-      className="grid h-4 w-4 shrink-0 place-items-center rounded border transition-colors"
-      style={{
-        borderColor: on ? color : "var(--ov-line)",
-        background: on ? color : "transparent",
-      }}
-    >
-      {on && (
-        <svg
-          width="9"
-          height="9"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="var(--ov-accent-ink)"
-          strokeWidth="3.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden
-        >
-          <path d="M20 6 9 17l-5-5" />
-        </svg>
-      )}
-    </span>
-  );
-}
-
-function Spinner({ ink }: { ink?: boolean }) {
-  return (
-    <span
-      className={`h-3.5 w-3.5 rounded-full border-2 ${
-        ink
-          ? "border-[var(--ov-accent-ink)]/40 border-t-[var(--ov-accent-ink)]"
-          : "border-[var(--ov-accent)]/30 border-t-[var(--ov-accent)]"
-      }`}
-      style={{ animation: "ov-spin 0.7s linear infinite" }}
-    />
-  );
-}
-
-function UploadIcon() {
-  return (
-    <svg
-      width="26"
-      height="26"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="var(--ov-accent)"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-      <path d="M12 3v13M7 8l5-5 5 5" />
-    </svg>
   );
 }
 
 function friendlyError(e: unknown): string {
   const msg = e instanceof Error ? e.message : String(e);
   if (/insufficient funds/i.test(msg))
-    return "Insufficient funds to cover the transaction. Top up your wallet and try again.";
+    return "Top up your wallet — there isn't enough native IP to cover this transaction.";
   if (/user rejected|denied/i.test(msg))
     return "Transaction was rejected in your wallet.";
   return msg || "Something went wrong while publishing.";
 }
 
 async function postArtifactToIndex(a: Artifact): Promise<void> {
-  // bigint ownerNftTokenId → decimal string for JSON.
   const payload = JSON.parse(
-    JSON.stringify(a, (_k, v) => (typeof v === "bigint" ? v.toString() : v))
+    JSON.stringify(a, (_k, v) => (typeof v === "bigint" ? v.toString() : v)),
   );
   const res = await fetch("/api/index", {
     method: "POST",

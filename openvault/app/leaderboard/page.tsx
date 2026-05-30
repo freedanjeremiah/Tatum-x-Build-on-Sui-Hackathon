@@ -3,11 +3,11 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { Artifact } from "@/types/artifact";
-import { tierMeta } from "@/lib/tiers";
-import { TierBadge } from "@/components/ModelCard";
+import { TierBadge } from "@/components/ui/TierBadge";
 import TxLink from "@/components/TxLink";
+import Icon from "@/components/ui/Icon";
 
-/** Kaggle-style leaderboard: artifacts ranked by score (fetched + sorted here). */
+/** Kaggle-style leaderboard: artifacts ranked by score. */
 export default function LeaderboardPage() {
   const [rows, setRows] = useState<Artifact[]>([]);
   const [loading, setLoading] = useState(true);
@@ -19,7 +19,7 @@ export default function LeaderboardPage() {
       .then((data: Artifact[]) => {
         if (!Array.isArray(data)) return;
         const sorted = [...data].sort(
-          (a, b) => (b.score ?? 0) - (a.score ?? 0)
+          (a, b) => (b.score ?? 0) - (a.score ?? 0),
         );
         setRows(sorted);
       })
@@ -31,83 +31,182 @@ export default function LeaderboardPage() {
   }, []);
 
   return (
-    <div className="mx-auto max-w-5xl px-5 pb-24">
-      <header className="ov-anim-up py-10 sm:py-12">
-        <span className="inline-flex items-center gap-2 rounded-full border border-[var(--ov-line)] bg-[var(--ov-panel)]/60 px-3 py-1 font-mono text-[10px] uppercase tracking-widest text-[var(--ov-accent)]">
-          <TrophyIcon /> Leaderboard
+    <div
+      className="container maxw-leaderboard"
+      style={{ paddingTop: 36, paddingBottom: 60 }}
+    >
+      <div className="anim-up" style={{ marginBottom: 24 }}>
+        <span
+          className="eyebrow"
+          style={{ display: "inline-flex", alignItems: "center", gap: 7 }}
+        >
+          <span
+            style={{ color: "var(--ov-accent)", display: "inline-flex" }}
+          >
+            <Icon name="trophy" size={13} />
+          </span>
+          LEADERBOARD
         </span>
-        <h1 className="mt-4 text-3xl font-semibold tracking-tight text-[var(--ov-text)] sm:text-4xl">
+        <h1
+          className="h1"
+          style={{
+            fontSize: "clamp(28px,4vw,42px)",
+            margin: "10px 0 10px",
+            color: "var(--ov-text)",
+          }}
+        >
           Top artifacts by score
         </h1>
-        <p className="mt-3 max-w-xl text-[14px] leading-relaxed text-[var(--ov-text-dim)]">
+        <p
+          style={{
+            color: "var(--ov-text-dim)",
+            maxWidth: 600,
+            fontSize: 14,
+            margin: 0,
+          }}
+        >
           Datasets and models ranked by their on-chain usage score. Scores are
           public index metadata; click any IP id to verify provenance.
         </p>
-      </header>
+      </div>
 
-      <div role="table" aria-label="Artifact leaderboard" className="ov-anim-up overflow-hidden rounded-2xl border border-[var(--ov-line)] bg-[var(--ov-panel)]/50">
-        {/* head */}
-        <div role="row" className="grid grid-cols-[48px_1fr_96px_110px_88px_minmax(0,150px)] items-center gap-3 border-b border-[var(--ov-line)] px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-[var(--ov-text-faint)]">
-          <span className="text-center">#</span>
-          <span>Title</span>
-          <span>Modality</span>
-          <span>Tier</span>
-          <span className="text-right">Score</span>
-          <span className="text-right">IP asset</span>
+      <div
+        role="table"
+        aria-label="Artifact leaderboard"
+        className="panel"
+        style={{ padding: 0, overflow: "hidden" }}
+      >
+        <div
+          role="row"
+          className="ov-lb-row"
+          style={{
+            borderBottom: "1.5px solid var(--ov-line-ink)",
+            background: "var(--ov-panel-2)",
+          }}
+        >
+          <span className="meta">#</span>
+          <span className="meta">Title</span>
+          <span className="meta ov-lb-hide">Modality</span>
+          <span className="meta">Tier</span>
+          <span className="meta" style={{ textAlign: "right" }}>
+            Score
+          </span>
+          <span className="meta ov-lb-hide" style={{ textAlign: "right" }}>
+            IP asset
+          </span>
         </div>
 
         {loading ? (
           Array.from({ length: 6 }).map((_, i) => (
             <div
               key={i}
-              className="h-[58px] animate-pulse border-b border-[var(--ov-line-soft)] bg-[var(--ov-panel)]/30 last:border-0"
-            />
+              className="ov-lb-row"
+              style={{ borderBottom: "1px solid var(--ov-line-soft)" }}
+            >
+              <div className="skeleton" style={{ height: 16, width: 24 }} />
+              <div className="skeleton" style={{ height: 16, width: "60%" }} />
+              <div
+                className="skeleton ov-lb-hide"
+                style={{ height: 16, width: 50 }}
+              />
+              <div className="skeleton" style={{ height: 16, width: 60 }} />
+              <div
+                className="skeleton"
+                style={{ height: 16, width: 50, marginLeft: "auto" }}
+              />
+              <div
+                className="skeleton ov-lb-hide"
+                style={{ height: 16, width: 90, marginLeft: "auto" }}
+              />
+            </div>
           ))
         ) : rows.length === 0 ? (
-          <div className="px-4 py-16 text-center text-[13px] text-[var(--ov-text-dim)]">
+          <div
+            style={{
+              padding: 50,
+              textAlign: "center",
+              color: "var(--ov-text-faint)",
+              fontSize: 13,
+            }}
+          >
             No ranked artifacts yet.
           </div>
         ) : (
-          rows.map((a, i) => <Row key={a.ipId} artifact={a} rank={i + 1} />)
+          rows.map((a, i) => (
+            <Row
+              key={a.ipId}
+              artifact={a}
+              rank={i + 1}
+              last={i === rows.length - 1}
+            />
+          ))
         )}
       </div>
     </div>
   );
 }
 
-function Row({ artifact: a, rank }: { artifact: Artifact; rank: number }) {
-  const meta = tierMeta(a.tier);
+function Row({
+  artifact: a,
+  rank,
+  last,
+}: {
+  artifact: Artifact;
+  rank: number;
+  last: boolean;
+}) {
   return (
     <div
       role="row"
-      className="group grid grid-cols-[48px_1fr_96px_110px_88px_minmax(0,150px)] items-center gap-3 border-b border-[var(--ov-line-soft)] px-4 py-3 transition-colors last:border-0 hover:bg-[var(--ov-panel-2)]/50"
-      style={{ "--tier-color": meta.color } as React.CSSProperties}
+      className="ov-lb-row anim-up"
+      style={{
+        borderBottom: last ? "none" : "1px solid var(--ov-line-soft)",
+        animationDelay: `${Math.min(rank * 35, 280)}ms`,
+      }}
     >
-      <span className="text-center">
-        <RankBadge rank={rank} />
-      </span>
-
+      <RankBadge rank={rank} />
       <Link
         href={`/artifact/${a.ipId}`}
-        className="min-w-0 truncate text-[14px] font-medium text-[var(--ov-text)] transition-colors group-hover:text-[var(--ov-accent)]"
+        style={{
+          fontWeight: 600,
+          fontSize: 13.5,
+          color: "var(--ov-text)",
+          minWidth: 0,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+        onMouseEnter={(e) => (e.currentTarget.style.color = "var(--ov-accent)")}
+        onMouseLeave={(e) => (e.currentTarget.style.color = "var(--ov-text)")}
         title={a.title}
       >
         {a.title}
       </Link>
-
-      <span className="text-[12px] capitalize text-[var(--ov-text-dim)]">
+      <span
+        className="ov-lb-hide"
+        style={{
+          fontSize: 12.5,
+          color: "var(--ov-text-dim)",
+          textTransform: "capitalize",
+        }}
+      >
         {a.modality}
       </span>
-
       <span>
         <TierBadge tier={a.tier} />
       </span>
-
-      <span className="text-right font-mono text-[14px] tabular-nums text-[var(--ov-text)]">
+      <span
+        className="font-mono tabular"
+        style={{
+          textAlign: "right",
+          fontWeight: 600,
+          fontSize: 13.5,
+          color: "var(--ov-text)",
+        }}
+      >
         {(a.score ?? 0).toLocaleString()}
       </span>
-
-      <span className="flex justify-end">
+      <span className="ov-lb-hide" style={{ textAlign: "right" }}>
         <TxLink ipId={a.ipId} />
       </span>
     </div>
@@ -117,38 +216,56 @@ function Row({ artifact: a, rank }: { artifact: Artifact; rank: number }) {
 function RankBadge({ rank }: { rank: number }) {
   const medal =
     rank === 1
-      ? "#f5b942"
+      ? "#d9a52b"
       : rank === 2
-        ? "#c2cdd8"
+        ? "#9aa6b4"
         : rank === 3
-          ? "#cd8b5f"
+          ? "#c07d3e"
           : null;
   if (medal) {
     return (
       <span
-        className="inline-grid h-7 w-7 place-items-center rounded-full font-mono text-[12px] font-bold"
         style={{
-          color: medal,
-          background: `color-mix(in oklab, ${medal} 16%, transparent)`,
-          border: `1px solid color-mix(in oklab, ${medal} 40%, transparent)`,
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 8,
         }}
       >
-        {rank}
+        <span
+          style={{
+            width: 22,
+            height: 22,
+            borderRadius: 999,
+            background: medal,
+            color: "#fff",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flex: "none",
+            boxShadow: "1.5px 1.5px 0 var(--ov-navy)",
+          }}
+        >
+          <Icon name="trophy" size={12} />
+        </span>
+        <span
+          className="font-mono tabular"
+          style={{ fontSize: 13, fontWeight: 600, color: "var(--ov-text)" }}
+        >
+          {rank}
+        </span>
       </span>
     );
   }
   return (
-    <span className="inline-block font-mono text-[13px] text-[var(--ov-text-faint)]">
+    <span
+      className="font-mono tabular"
+      style={{
+        fontSize: 13,
+        color: "var(--ov-text-dim)",
+        paddingLeft: 6,
+      }}
+    >
       {rank}
     </span>
-  );
-}
-
-function TrophyIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M6 4h12v4a6 6 0 0 1-12 0V4Z" />
-      <path d="M6 6H3v1a3 3 0 0 0 3 3M18 6h3v1a3 3 0 0 1-3 3M9 18h6M10 14v4M14 14v4M8 21h8" />
-    </svg>
   );
 }

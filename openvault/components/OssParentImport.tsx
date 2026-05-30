@@ -3,6 +3,9 @@
 import { useState } from "react";
 import { getClients, WalletNotConnectedError } from "@/lib/useClients";
 import TxLink from "./TxLink";
+import DisclosureStrip from "./ui/DisclosureStrip";
+import Icon from "./ui/Icon";
+import Spinner from "./ui/Spinner";
 
 interface OssParentImportProps {
   /** Called with the created provenance parent once registered. */
@@ -10,10 +13,9 @@ interface OssParentImportProps {
 }
 
 /**
- * Register a PUBLIC provenance record for an off-platform OSS parent
- * (HuggingFace / GitHub). Does NOT claim ownership — it states the true
- * upstream license and authors, and returns the created parent ipId + termsId
- * up to the wizard so a derivative can be linked to it.
+ * Register a PUBLIC provenance record for an off-platform OSS parent.
+ * Does NOT claim ownership — it states the upstream license + authors and
+ * returns the created parent ipId + termsId up to the wizard.
  */
 export default function OssParentImport({ onParent }: OssParentImportProps) {
   const [url, setUrl] = useState("");
@@ -44,8 +46,6 @@ export default function OssParentImport({ onParent }: OssParentImportProps) {
           .filter(Boolean),
         title,
       });
-      // Self-index the provenance parent so a future search/browse + the
-      // derivative wizard can resolve it without round-tripping the chain.
       try {
         await fetch("/api/index", {
           method: "POST",
@@ -75,7 +75,7 @@ export default function OssParentImport({ onParent }: OssParentImportProps) {
           ? e.message
           : e instanceof Error
             ? e.message
-            : "Failed to import parent."
+            : "Failed to import parent.",
       );
     } finally {
       setBusy(false);
@@ -83,63 +83,64 @@ export default function OssParentImport({ onParent }: OssParentImportProps) {
   }
 
   return (
-    <div className="space-y-3 rounded-xl border border-[var(--ov-line)] bg-[var(--ov-panel)]/60 p-4">
-      <div className="flex items-start gap-2 rounded-lg border border-[var(--tier-gated)]/30 bg-[var(--tier-gated)]/8 px-3 py-2">
-        <InfoIcon />
-        <p className="text-[11.5px] leading-relaxed text-[var(--ov-text-dim)]">
-          Registers a{" "}
-          <span className="font-medium text-[var(--ov-text)]">PUBLIC</span>{" "}
-          provenance record of the upstream source. Does NOT claim ownership;
-          must state the true upstream license.
-        </p>
-      </div>
+    <div style={{ display: "grid", gap: 12 }}>
+      <DisclosureStrip tone="gated" icon="external">
+        Registers a <strong>PUBLIC</strong> provenance record of the upstream
+        source. Does NOT claim ownership — must state the true upstream license.
+      </DisclosureStrip>
 
-      <Field label="Upstream source URL (HuggingFace / GitHub)">
+      <label style={{ display: "block" }}>
+        <span className="field-label">Source URL</span>
         <input
+          className="input mono"
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           placeholder="https://huggingface.co/org/model"
-          className={inputCls}
         />
-      </Field>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Field label="Upstream license">
+      </label>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <label style={{ display: "block" }}>
+          <span className="field-label">Upstream license</span>
           <input
+            className="input"
             value={upstreamLicense}
             onChange={(e) => setUpstreamLicense(e.target.value)}
             placeholder="apache-2.0"
-            className={inputCls}
           />
-        </Field>
-        <Field label="Authors (comma-separated)">
+        </label>
+        <label style={{ display: "block" }}>
+          <span className="field-label">Authors (comma-separated)</span>
           <input
+            className="input"
             value={authors}
             onChange={(e) => setAuthors(e.target.value)}
             placeholder="Jane Doe, Acme Lab"
-            className={inputCls}
           />
-        </Field>
+        </label>
       </div>
 
-      {error && <ErrorNote message={error} />}
+      {error ? (
+        <DisclosureStrip tone="gated" icon="flag">
+          {error}
+        </DisclosureStrip>
+      ) : null}
 
       {result ? (
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--ov-accent)]/30 bg-[var(--ov-accent)]/8 px-3 py-2.5">
-          <span className="text-[12px] font-medium text-[var(--ov-accent)]">
-            Provenance parent registered
-          </span>
-          <TxLink ipId={result.ipId} />
+        <DisclosureStrip tone="public" icon="check">
+          Provenance parent registered <TxLink ipId={result.ipId} />{" "}
           <TxLink hash={result.createdTx} />
-        </div>
+        </DisclosureStrip>
       ) : (
         <button
           type="button"
-          onClick={handleImport}
+          className="btn btn-ghost"
+          style={{ justifySelf: "start" }}
           disabled={!canImport || busy}
-          className="inline-flex items-center gap-2 rounded-lg bg-[var(--ov-accent)] px-3.5 py-2 text-[13px] font-semibold text-[var(--ov-accent-ink)] transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
+          onClick={handleImport}
         >
-          {busy ? <Spinner /> : null}
-          {busy ? "Registering…" : "Import parent"}
+          {busy ? <Spinner /> : <Icon name="plus" size={14} />}
+          {busy ? "Registering…" : "Register provenance parent"}
         </button>
       )}
     </div>
@@ -155,59 +156,4 @@ function deriveTitle(url: string): string {
   } catch {
     return "Provenance: upstream source";
   }
-}
-
-const inputCls =
-  "w-full rounded-lg border border-[var(--ov-line)] bg-[var(--ov-bg-elev)] px-3 py-2 text-[13px] text-[var(--ov-text)] outline-none placeholder:text-[var(--ov-text-faint)] focus:border-[var(--ov-accent)]";
-
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="block space-y-1.5">
-      <span className="text-[11px] font-medium uppercase tracking-wider text-[var(--ov-text-faint)]">
-        {label}
-      </span>
-      {children}
-    </label>
-  );
-}
-
-function ErrorNote({ message }: { message: string }) {
-  return (
-    <p className="rounded-lg border border-[var(--tier-gated)]/40 bg-[var(--tier-gated)]/10 px-3 py-2 text-[12px] text-[var(--tier-gated)]">
-      {message}
-    </p>
-  );
-}
-
-function Spinner() {
-  return (
-    <span
-      className="h-3.5 w-3.5 rounded-full border-2 border-[var(--ov-accent-ink)]/40 border-t-[var(--ov-accent-ink)]"
-      style={{ animation: "ov-spin 0.7s linear infinite" }}
-    />
-  );
-}
-
-function InfoIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      className="mt-0.5 shrink-0 text-[var(--tier-gated)]"
-      aria-hidden
-    >
-      <circle cx="12" cy="12" r="9" />
-      <path d="M12 16v-4M12 8h.01" strokeLinecap="round" />
-    </svg>
-  );
 }

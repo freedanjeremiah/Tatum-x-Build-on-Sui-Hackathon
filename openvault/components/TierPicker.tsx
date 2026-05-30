@@ -11,83 +11,72 @@ interface TierPickerProps {
 }
 
 /**
- * Five selectable tier cards. Selected card adopts the tier's accent color via
- * the same color-mix treatment used across the app (ModelCard / TierBadge).
- * Controlled component.
+ * Five selectable tier mini-cards in the MECHATONE language: square dot in the
+ * tier's color, navy/orange offset shadow when selected.
  */
 export default function TierPicker({ value, onChange, tiers }: TierPickerProps) {
   const list = tiers ?? TIER_ORDER;
   return (
-    <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit,minmax(132px,1fr))",
+        gap: 10,
+      }}
+    >
       {list.map((tier) => {
         const meta = tierMeta(tier);
-        const selected = value === tier;
+        const active = value === tier;
         return (
           <button
             key={tier}
             type="button"
             onClick={() => onChange(tier)}
-            aria-pressed={selected}
-            className="group relative flex flex-col gap-1.5 rounded-xl border p-3.5 text-left transition-all duration-200 hover:-translate-y-0.5"
+            aria-pressed={active}
             style={{
-              borderColor: selected
-                ? `color-mix(in oklab, ${meta.color} 55%, var(--ov-line))`
-                : "var(--ov-line)",
-              background: selected
-                ? `color-mix(in oklab, ${meta.color} 12%, var(--ov-panel))`
-                : "color-mix(in oklab, var(--ov-panel) 70%, transparent)",
-              boxShadow: selected
-                ? `0 8px 36px -14px color-mix(in oklab, ${meta.color} 60%, transparent)`
-                : undefined,
+              textAlign: "left",
+              padding: 14,
+              borderRadius: 14,
+              cursor: "pointer",
+              border: `1.5px solid ${active ? meta.color : "var(--ov-line)"}`,
+              background: active
+                ? `color-mix(in srgb, ${meta.color} 12%, var(--ov-panel))`
+                : "var(--ov-panel)",
+              boxShadow: active ? `3px 3px 0 ${meta.color}` : "none",
+              transition: "all .14s",
             }}
           >
             <span
-              className="absolute inset-y-0 left-0 w-[3px] rounded-l-xl transition-opacity"
               style={{
-                background: meta.color,
-                opacity: selected ? 1 : 0.35,
+                display: "flex",
+                alignItems: "center",
+                gap: 7,
+                marginBottom: 8,
               }}
-            />
-            <div className="flex items-center justify-between gap-2">
+            >
               <span
-                className="inline-flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wider"
-                style={{ color: meta.color }}
-              >
-                <span
-                  className="h-1.5 w-1.5 rounded-full"
-                  style={{ background: meta.color }}
-                />
-                {meta.label}
-              </span>
-              <span
-                className="grid h-4 w-4 place-items-center rounded-full border transition-colors"
                 style={{
-                  borderColor: selected
-                    ? meta.color
-                    : "var(--ov-line)",
-                  background: selected ? meta.color : "transparent",
+                  width: 11,
+                  height: 11,
+                  borderRadius: 3,
+                  background: meta.color,
+                }}
+              />
+              <span
+                style={{
+                  fontWeight: 700,
+                  fontSize: 13.5,
+                  color: "var(--ov-text)",
                 }}
               >
-                {selected && (
-                  <svg
-                    width="9"
-                    height="9"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="var(--ov-accent-ink)"
-                    strokeWidth="3.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden
-                  >
-                    <path d="M20 6 9 17l-5-5" />
-                  </svg>
-                )}
+                {meta.label}
               </span>
-            </div>
-            <p className="text-[11.5px] leading-relaxed text-[var(--ov-text-dim)]">
+            </span>
+            <span
+              style={{ fontSize: 11.5, color: "var(--ov-text-dim)" }}
+            >
               {meta.blurb}
-            </p>
+            </span>
           </button>
         );
       })}

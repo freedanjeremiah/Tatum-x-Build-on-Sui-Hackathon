@@ -1,4 +1,10 @@
-# OpenVault — Frontend PRD (for Claude Design)
+# OpenVault — Frontend PRD
+
+> **Note (2026-06-03):** §3 (Design system) was rewritten for the **MECHATONE
+> reskin** — warm cream paper, navy + orange-red 2-ink palette, Oswald display
+> + DM Sans + JetBrains Mono + Noto Sans JP, halftone-dot background, offset
+> screenprint shadows. The previous dark "deep ink + emerald" aesthetic is
+> retired. §1, §2 (intent/voice) and §4+ (behaviour) are unchanged.
 
 A self-contained design brief for OpenVault's web frontend. Hand this document
 to Claude (or any designer) as the source of truth for what to build, how it
@@ -31,13 +37,16 @@ have used Hugging Face / Kaggle and want strong on-chain provenance + license
 control without giving up the "browse, read a model card, take action" flow
 they already know.
 
-**Feel.** A cryptographic vault meets a model hub.
+**Feel — MECHATONE.** A cryptographic vault meets a model hub, rendered as a
+screenprinted poster.
 
 - Calm, technical, confident. Not hype.
 - Dense data is fine, but always organised — monospace for hashes/IDs,
-  proportional sans for prose.
-- A faint engineering grid behind the page, deep ink background, a single
-  green/cyan accent. Color is information, not decoration.
+  condensed display type for headings, proportional sans for prose.
+- A faint navy halftone-dot field behind the page, warm cream background, a
+  single orange-red accent. Color is information, not decoration — tiers are
+  distinguished by **glyph + label** first, not by competing hues.
+- Every panel and CTA gets a 3px navy offset shadow — the print-press feel.
 - Every transaction surfaces *both* the IP id and the tx hash. Never hide what
   the chain saw.
 
@@ -55,46 +64,56 @@ they already know.
 
 | Token | Value | Used for |
 |---|---|---|
-| `--ov-bg` | `#07090c` | App background |
-| `--ov-bg-elev` | `#0c1015` | Elevated input/field backgrounds |
-| `--ov-panel` | `#0f141b` | Cards, surfaces |
-| `--ov-panel-2` | `#131a23` | Hover/secondary surfaces |
-| `--ov-line` | `#1e2630` | Borders |
-| `--ov-line-soft` | `#161d26` | Subtle dividers |
-| `--ov-text` | `#e7edf3` | Primary text |
-| `--ov-text-dim` | `#93a1b0` | Secondary text |
-| `--ov-text-faint` | `#5c6b7a` | Tertiary / metadata |
-| `--ov-accent` | `#2ee6a6` | Primary CTA / brand emerald |
-| `--ov-accent-2` | `#38e3ff` | Background glow accent |
-| `--ov-accent-ink` | `#04130d` | Ink-on-accent text |
+| `--ov-bg` | `#f4ead0` | Warm cream paper — app background |
+| `--ov-bg-2` | `#efe2c1` | Deeper paper band (footer, scrollbar track) |
+| `--ov-bg-elev` | `#ece0bd` | Inset input / field background |
+| `--ov-panel` | `#f8f0d9` | Cards, surfaces |
+| `--ov-panel-2` | `#f1e6c8` | Hover / secondary surface |
+| `--ov-line` | `rgba(33,53,108,0.22)` | Soft border |
+| `--ov-line-soft` | `rgba(33,53,108,0.12)` | Subtle dividers |
+| `--ov-line-ink` | `#21356c` | Bold structural outline |
+| `--ov-text` | `#21356c` | Primary text (deep navy) |
+| `--ov-text-dim` | `#4f5f88` | Secondary text |
+| `--ov-text-faint` | `#8b93a9` | Tertiary / metadata |
+| `--ov-navy` | `#21356c` | Brand ink — panel borders, dark CTAs |
+| `--ov-navy-deep` | `#182a57` | Hover state for navy |
+| `--ov-accent` | `#e8472b` | Orange-red — primary CTA / brand |
+| `--ov-accent-deep` | `#cf3a20` | Hover state for accent |
+| `--ov-accent-ink` | `#faf3df` | Cream-on-accent text |
 
-**Tier colors (semantic — used wherever a tier appears):**
+**Tier colors (restrained 2-ink + slate — tiers told apart by glyph + label first):**
 
-| Tier | Token | Hex | Mood |
-|---|---|---|---|
-| Public | `--tier-public` | `#34d399` | Open / safe |
-| Private | `--tier-private` | `#8da2b5` | Locked / personal |
-| Gated | `--tier-gated` | `#f5b942` | Licensed / paid |
-| Group | `--tier-group` | `#a78bfa` | Shared / pool |
-| Compute | `--tier-compute` | `#22d3ee` | Computable, not downloadable |
+| Tier | Token | Hex | Glyph | Mood |
+|---|---|---|---|---|
+| Public  | `--tier-public`  | `#e8472b` | arrow   | Open / take it |
+| Private | `--tier-private` | `#7d8aa0` | lock    | Locked / personal |
+| Gated   | `--tier-gated`   | `#21356c` | lock    | Licensed / paid |
+| Group   | `--tier-group`   | `#21356c` | layers  | Shared / pool |
+| Compute | `--tier-compute` | `#21356c` | compute | Computable, not downloadable |
 
-Background body uses two soft radial gradients (`--ov-accent` at 9% top-right,
-`--ov-accent-2` at 7% top-left) over `--ov-bg`. A 56px engineering grid sits
-behind everything at 50% opacity, masked to fade out below the hero.
+The background uses two soft radial blooms (`--ov-accent` at 10% top-right,
+`--ov-navy` at 10% top-left) over `--ov-bg`. A 9px halftone-dot field
+(`radial-gradient` in `--ov-navy` @ 16%) sits behind everything, masked to fade
+out 720px down from the top (replaces the original engineering grid).
 
 ### 3.2 Typography
 
-- Sans: Geist Sans (default).
-- Mono: Geist Mono — **mandatory** for: ipIds, tx hashes, CIDs, license terms
-  ids, vault uuids, algorithm hashes, evidence CIDs.
+- **Display** (`--font-display`): `Oswald` — uppercase, tight tracking. Used
+  for `.h1`, `.h2`, card titles, brand wordmark.
+- **Sans** (`--font-sans`): `DM Sans` — default body text, buttons, labels.
+- **Mono** (`--font-mono`): `JetBrains Mono` — **mandatory** for ipIds, tx
+  hashes, CIDs, license terms ids, vault uuids, algorithm hashes, evidence
+  CIDs, all `.eyebrow` / `.meta` chips, file names.
+- **JP** (`--font-jp`): `Noto Sans JP` — used sparingly for the katakana
+  kickers under the hero eyebrow.
 - Hierarchy:
-  - H1 page title: 30px (3xl) — 36px (sm:4xl), `font-semibold`, tight tracking.
-  - H2 section heading: 16px, `font-semibold`, with an `01` / `02` / `03`
-    monospace counter in accent color above it (see Upload wizard).
-  - Eyebrow / chip: 10–11px uppercase, mono, wide tracking (`tracking-widest`),
-    `--ov-text-faint`.
-  - Body: 13–14px, line-height generous (`leading-relaxed`).
-  - Meta / label: 10–11px uppercase, mono, tracking-wider.
+  - `.h1` page title: `clamp(34px, 5vw, 52px)`, Oswald 600, line-height 0.98,
+    uppercase, slight negative tracking.
+  - `.h2` section heading: 22px, Oswald 600, uppercase. Step counters in
+    upload wizard use a `01` / `02` mono prefix in accent color.
+  - `.eyebrow`: 10.5px mono uppercase, tracking 0.22em, `--ov-text-faint`.
+  - `.meta`: 10.5px mono uppercase, tracking 0.12em, `--ov-text-faint`.
+  - Body: 13–14px DM Sans, line-height 1.55.
 
 ### 3.3 Spacing & radius
 
@@ -108,25 +127,40 @@ behind everything at 50% opacity, masked to fade out below the hero.
 
 ### 3.4 Motion (defined in `app/globals.css`)
 
-- `ov-anim-up` — fade + 6px up, 320ms. Applied to most page sections, often
-  staggered (`animationDelay: i * 45ms`, capped at 300ms).
-- `ov-spin` — 0.7s linear, used inside Spinner.
-- `ov-pulse-ring` — 1.4s, used inside in-progress step dots.
-- Hover on cards: `-translate-y-0.5` + tier-tinted glow shadow.
-- Never animate the engineering grid. Never bounce. No parallax.
+- `ov-anim-up` — 7px translate up, 340ms cubic. Applied via `.anim-up` to most
+  page sections, often staggered (`animationDelay: i * 45ms`, capped 300ms).
+- `ov-spin` — 0.7s linear, used inside `.spinner`.
+- `ov-pulse-ring` — 1.4s, used inside in-progress step dots + the dispute
+  badge dot.
+- `ov-shimmer` — 1.4s linear, used inside `.skeleton`.
+- Hover on cards: 2-3px translate up + a tier-coloured offset shadow
+  (`6px 8px 0 <tier>`). The print-press shadow grows on hover.
+- Never animate the halftone field. Never bounce. No parallax.
 
 ### 3.5 Iconography
 
-- Inline SVG only — no icon font. Stroke-only, `strokeWidth="2"`, line caps
-  rounded.
-- Per-tier glyphs in card lock area: arrow-right for public, padlock for
-  gated/private/group, compute (square-with-pin grid) for compute.
-- A single vault padlock with a keyhole is the brand mark in the header.
+- Inline SVG only — see `components/ui/Icon.tsx`. Stroke-only,
+  `strokeWidth="2"`, rounded caps and joins, 24×24 viewBox.
+- Per-tier glyphs in card lock area: `arrow` for public, `lock` for
+  gated/private, `compute` (grid-with-pins) for compute, `layers` for group.
+- Brand mark: navy padlock-vault tile with 2px orange offset shadow
+  (`components/ui/VaultMark.tsx`). Appears in the header and the WasmGate boot
+  splash.
 
 ### 3.6 Component primitives reused across screens
 
-- **TierBadge** (`components/ModelCard.tsx`): pill with colored dot + uppercase
-  tier label, semi-transparent fill in the tier color.
+- **TierBadge** / **TierGlyph** / **ModalityChip**
+  (`components/ui/TierBadge.tsx`): pill with colored dot + uppercase tier
+  label, semi-transparent fill in the tier color.
+- **Icon** (`components/ui/Icon.tsx`): named-set wrapper around the inline SVG
+  paths.
+- **Dropdown** (`components/ui/Dropdown.tsx`): custom select with offset
+  shadow popover (native `<select>` cannot be styled to match).
+- **DisclosureStrip** (`components/ui/DisclosureStrip.tsx`): the reusable §8
+  callout — navy tint for informational, accent tint for warnings/gated.
+- **Spinner** (`components/ui/Spinner.tsx`): 14px ring border with accent on
+  top, `ov-spin`.
+- **VaultMark** (`components/ui/VaultMark.tsx`): brand glyph.
 - **TxLink** (`components/TxLink.tsx`): mono chip linking to
   `aeneid.explorer.story.foundation/ipa/<ipId>` or
   `aeneid.storyscan.io/tx/<hash>`. Always shows the suffix tag (`IPA` or `TX`).

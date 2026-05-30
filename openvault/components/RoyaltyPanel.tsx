@@ -5,6 +5,9 @@ import { formatEther } from "viem";
 import type { Artifact } from "@/types/artifact";
 import { getClients, WalletNotConnectedError } from "@/lib/useClients";
 import TxLink from "./TxLink";
+import DisclosureStrip from "./ui/DisclosureStrip";
+import Icon from "./ui/Icon";
+import Spinner from "./ui/Spinner";
 
 interface RoyaltyPanelProps {
   artifact: Artifact;
@@ -13,12 +16,9 @@ interface RoyaltyPanelProps {
 type Phase = "idle" | "loading" | "claiming" | "paying" | "done" | "error";
 
 /**
- * Owner-facing royalty controls.
- *
- *   - Reads `claimableRevenue(ipId)` from the RoyaltyModule.
- *   - Lets the owner claim accrued revenue routed up from derivatives.
- *   - Lets anyone "tip" / pay royalties to this IP (useful for demo + manual
- *     payment flows from off-platform derivatives).
+ * Owner-facing royalty controls. Reads claimable from the RoyaltyModule; lets
+ * the owner claim accrued revenue from indexed derivatives; lets anyone
+ * "tip"/pay royalties to this IP (auto-wraps native IP → WIP).
  */
 export default function RoyaltyPanel({ artifact }: RoyaltyPanelProps) {
   const [phase, setPhase] = useState<Phase>("idle");
@@ -28,7 +28,6 @@ export default function RoyaltyPanel({ artifact }: RoyaltyPanelProps) {
   const [payAmount, setPayAmount] = useState("0.01");
   const [derivativeIds, setDerivativeIds] = useState<string[]>([]);
 
-  // Find derivatives indexed under this IP so claimRevenue can route them.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -41,7 +40,7 @@ export default function RoyaltyPanel({ artifact }: RoyaltyPanelProps) {
           .map((a) => a.ipId);
         setDerivativeIds(kids);
       } catch {
-        // best-effort — leave empty
+        /* best-effort — leave empty */
       }
     })();
     return () => {
@@ -77,7 +76,7 @@ export default function RoyaltyPanel({ artifact }: RoyaltyPanelProps) {
       const { claimRevenue } = await import("@/lib/royalty");
       if (derivativeIds.length === 0) {
         throw new Error(
-          "No indexed derivatives for this IP — nothing to claim through."
+          "No indexed derivatives for this IP — nothing to claim through.",
         );
       }
       const out = await claimRevenue(clients.story, {
@@ -86,7 +85,6 @@ export default function RoyaltyPanel({ artifact }: RoyaltyPanelProps) {
       });
       setLastTx(out.txHash);
       setPhase("done");
-      // After a successful claim, the claimable balance resets to 0.
       setClaimable(0n);
     } catch (e) {
       if (e instanceof WalletNotConnectedError) {
@@ -133,100 +131,146 @@ export default function RoyaltyPanel({ artifact }: RoyaltyPanelProps) {
     phase === "loading" || phase === "claiming" || phase === "paying";
 
   return (
-    <section className="rounded-2xl border border-[var(--ov-line)] bg-[var(--ov-panel)]/50 p-5">
-      <div className="mb-3 flex items-baseline justify-between gap-3">
-        <h2 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--ov-text-faint)]">
+    <div className="panel" style={{ padding: 20 }}>
+      <div
+        style={{ display: "flex", alignItems: "center", marginBottom: 16 }}
+      >
+        <div className="h2" style={{ fontSize: 16, color: "var(--ov-text)" }}>
           Royalties
-        </h2>
+        </div>
+        <span style={{ flex: 1 }} />
         <button
           type="button"
+          className="btn btn-ghost btn-sm"
           onClick={refresh}
           disabled={busy}
-          className="text-[11px] text-[var(--ov-accent)] underline-offset-2 hover:underline disabled:opacity-40"
         >
+          <Icon name="refresh" size={13} />
           {phase === "loading" ? "Reading…" : "Refresh"}
         </button>
       </div>
 
-      <div className="mb-4 rounded-xl border border-[var(--ov-line-soft)] bg-[var(--ov-bg-elev)]/50 px-4 py-3">
-        <div className="text-[10px] uppercase tracking-wider text-[var(--ov-text-faint)]">
-          Claimable revenue
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-end",
+          gap: 16,
+          flexWrap: "wrap",
+        }}
+      >
+        <div
+          className="panel-soft"
+          style={{ padding: 16, flex: 1, minWidth: 220 }}
+        >
+          <div className="meta" style={{ marginBottom: 8 }}>
+            Claimable revenue
+          </div>
+          <div
+            className="font-mono"
+            style={{ fontSize: 20, fontWeight: 700, color: "var(--ov-text)" }}
+          >
+            {claimable === null ? "—" : formatEther(claimable)}
+            <span
+              style={{
+                marginLeft: 6,
+                fontSize: 13,
+                color: "var(--ov-text-faint)",
+              }}
+            >
+              WIP
+            </span>
+          </div>
+          <div
+            style={{
+              fontSize: 11.5,
+              color: "var(--ov-text-faint)",
+              marginTop: 6,
+            }}
+          >
+            {derivativeIds.length} indexed derivative
+            {derivativeIds.length === 1 ? "" : "s"} route to this IP.
+          </div>
         </div>
-        <div className="mt-1 font-mono text-[18px] text-[var(--ov-text)]">
-          {claimable === null ? "—" : `${formatEther(claimable)} WIP`}
-        </div>
-        <div className="mt-0.5 text-[11px] text-[var(--ov-text-faint)]">
-          {derivativeIds.length} indexed derivative
-          {derivativeIds.length === 1 ? "" : "s"} route to this IP.
-        </div>
-      </div>
-
-      <div className="flex flex-wrap gap-2">
         <button
           type="button"
-          onClick={handleClaim}
+          className="btn btn-accent"
           disabled={busy || derivativeIds.length === 0}
-          className="inline-flex items-center gap-2 rounded-lg bg-[var(--ov-accent)] px-4 py-2 text-[13px] font-semibold text-[var(--ov-accent-ink)] transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
+          onClick={handleClaim}
         >
-          {phase === "claiming" ? <Spinner ink /> : null}
+          {phase === "claiming" ? <Spinner /> : null}
           {phase === "claiming" ? "Claiming…" : "Claim revenue (owner)"}
         </button>
       </div>
 
-      <div className="mt-5 border-t border-[var(--ov-line-soft)] pt-4">
-        <div className="mb-2 text-[10px] uppercase tracking-wider text-[var(--ov-text-faint)]">
-          Pay royalties to this IP
+      {lastTx ? (
+        <div style={{ marginTop: 12 }}>
+          <DisclosureStrip tone="public" icon="check">
+            ✓ Tx confirmed <TxLink hash={lastTx} />
+          </DisclosureStrip>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+      ) : null}
+
+      <hr className="divider" style={{ margin: "18px 0" }} />
+
+      <div className="meta" style={{ marginBottom: 10 }}>
+        Pay royalties to this IP
+      </div>
+      <div
+        style={{
+          display: "flex",
+          gap: 10,
+          alignItems: "center",
+          flexWrap: "wrap",
+        }}
+      >
+        <div style={{ position: "relative", flex: 1, minWidth: 180 }}>
           <input
-            type="number"
-            min="0"
-            step="0.01"
+            className="input mono"
+            inputMode="decimal"
+            placeholder="0.00"
             value={payAmount}
             onChange={(e) => setPayAmount(e.target.value)}
             disabled={busy}
-            className="w-32 rounded-lg border border-[var(--ov-line)] bg-[var(--ov-bg-elev)] px-3 py-2 font-mono text-[13px] text-[var(--ov-text)] outline-none focus:border-[var(--ov-accent)] disabled:opacity-60"
           />
-          <span className="text-[12px] text-[var(--ov-text-dim)]">WIP</span>
-          <button
-            type="button"
-            onClick={handlePay}
-            disabled={busy}
-            className="inline-flex items-center gap-2 rounded-lg border border-[var(--ov-line)] px-3 py-2 text-[13px] text-[var(--ov-text)] transition-colors hover:border-[var(--ov-accent)] disabled:opacity-40"
+          <span
+            className="meta"
+            style={{
+              position: "absolute",
+              right: 12,
+              top: "50%",
+              transform: "translateY(-50%)",
+            }}
           >
-            {phase === "paying" ? <Spinner /> : null}
-            {phase === "paying" ? "Sending…" : "Pay royalty"}
-          </button>
+            WIP
+          </span>
         </div>
-        <p className="mt-2 text-[11px] text-[var(--ov-text-faint)]">
-          Auto-wraps native IP → WIP if needed.
-        </p>
+        <button
+          type="button"
+          className="btn btn-ghost"
+          disabled={busy || !payAmount.trim()}
+          onClick={handlePay}
+        >
+          {phase === "paying" ? <Spinner /> : null}
+          {phase === "paying" ? "Sending…" : "Pay royalty"}
+        </button>
+      </div>
+      <div
+        style={{
+          fontSize: 11.5,
+          color: "var(--ov-text-faint)",
+          marginTop: 8,
+        }}
+      >
+        Auto-wraps native IP → WIP if needed.
       </div>
 
-      {lastTx && (
-        <div className="mt-4 flex items-center gap-2 rounded-lg border border-[var(--ov-accent)]/30 bg-[var(--ov-accent)]/8 px-3 py-2 text-[12px] text-[var(--ov-text)]">
-          <span>✓ Tx confirmed</span>
-          <TxLink hash={lastTx} />
+      {error ? (
+        <div style={{ marginTop: 16 }}>
+          <DisclosureStrip tone="gated" icon="flag">
+            {error}
+          </DisclosureStrip>
         </div>
-      )}
-      {error && (
-        <div className="mt-4 rounded-lg border border-[var(--tier-gated)]/40 bg-[var(--tier-gated)]/10 px-3 py-2 text-[12px] text-[var(--tier-gated)]">
-          {error}
-        </div>
-      )}
-    </section>
-  );
-}
-
-function Spinner({ ink }: { ink?: boolean }) {
-  return (
-    <span
-      className={`h-3.5 w-3.5 rounded-full border-2 ${
-        ink
-          ? "border-[var(--ov-accent-ink)]/40 border-t-[var(--ov-accent-ink)]"
-          : "border-[var(--ov-accent)]/30 border-t-[var(--ov-accent)]"
-      }`}
-      style={{ animation: "ov-spin 0.7s linear infinite" }}
-    />
+      ) : null}
+    </div>
   );
 }

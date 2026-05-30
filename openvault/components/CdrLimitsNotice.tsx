@@ -1,65 +1,123 @@
 "use client";
 
 import { useState } from "react";
+import Icon from "./ui/Icon";
 
-const LIMITS: { title: string; body: string }[] = [
+const LIMITS: { t: string; d: string; ref: string }[] = [
   {
-    title: "Testnet only",
-    body: "Runs on Story Aeneid. Assets, tokens, and txs are test artifacts with no monetary value.",
+    t: "No decryption revocation",
+    d: "CDR cannot revoke a decryption credential once minted. Rotate access by re-encrypting to a new vault.",
+    ref: "SPEC §4.2",
   },
   {
-    title: "Metadata is public by design",
-    body: "Titles, descriptions, tags, CIDs, and vault ids are on-chain / index data. Only the artifact bytes are encrypted — never the catalog entry.",
+    t: "Compute runs on a plain server",
+    d: "The demo worker is operator-trusted — plaintext is visible in memory. Production would attest an SGX/TDX enclave.",
+    ref: "SPEC §6.1",
   },
   {
-    title: "No decryption revocation",
-    body: "Once a license token grants decryption and a holder pulls the key material, access cannot be retroactively revoked.",
-  },
-  {
-    title: "Read latency",
-    body: "Confidential reads assemble validator key partials; this can take up to ~2 minutes before plaintext is recoverable.",
+    t: "Group → member unlock unconfirmed",
+    d: "One group license unlocking every member vault is not yet confirmed in CDR. Per-IP gating fallback applies today.",
+    ref: "SPEC §8.7",
   },
 ];
 
-/**
- * An honest, expandable disclosure of CDR's real limits. Lives in the footer.
- */
+/** Collapsible, persistent spec-disclosure footer. Lives in the layout. */
 export default function CdrLimitsNotice() {
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="rounded-lg border border-[var(--ov-line)] bg-[var(--ov-panel)]/60">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+    <div
+      style={{
+        borderTop: "1.5px solid var(--ov-line-ink)",
+        background: "var(--ov-bg-2)",
+      }}
+    >
+      <div
+        className="container maxw-browse"
+        style={{ paddingTop: 10, paddingBottom: 10 }}
       >
-        <span className="flex items-center gap-2 text-[13px] font-medium text-[var(--ov-text)]">
-          <span className="text-[var(--ov-accent)]">⚐</span>
-          Honest limits of confidential data on CDR
-        </span>
-        <span
-          className="font-mono text-xs text-[var(--ov-text-faint)] transition-transform"
-          style={{ transform: open ? "rotate(90deg)" : "none" }}
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+          style={{
+            background: "none",
+            border: 0,
+            padding: 0,
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            width: "100%",
+            color: "var(--ov-text-dim)",
+          }}
         >
-          ▸
-        </span>
-      </button>
-      {open && (
-        <dl className="grid gap-3 border-t border-[var(--ov-line-soft)] px-4 py-4 sm:grid-cols-2">
-          {LIMITS.map((l) => (
-            <div key={l.title} className="space-y-1">
-              <dt className="font-mono text-[11px] uppercase tracking-wider text-[var(--ov-accent)]">
-                {l.title}
-              </dt>
-              <dd className="text-[12px] leading-relaxed text-[var(--ov-text-dim)]">
-                {l.body}
-              </dd>
-            </div>
-          ))}
-        </dl>
-      )}
+          <span style={{ color: "var(--ov-accent)", display: "inline-flex" }}>
+            <Icon name="shield" size={15} />
+          </span>
+          <span className="meta" style={{ color: "var(--ov-text-dim)" }}>
+            Spec disclosures — honest about what the chain can &amp; can&apos;t do
+          </span>
+          <span style={{ flex: 1 }} />
+          <span
+            style={{
+              display: "inline-flex",
+              transition: "transform .2s",
+              transform: open ? "rotate(180deg)" : "none",
+            }}
+          >
+            <Icon name="chevron" size={16} />
+          </span>
+        </button>
+        {open ? (
+          <div
+            className="anim-up"
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))",
+              gap: 14,
+              marginTop: 14,
+            }}
+          >
+            {LIMITS.map((it, i) => (
+              <div
+                key={i}
+                style={{
+                  borderLeft: "3px solid var(--tier-gated)",
+                  paddingLeft: 12,
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: 8,
+                  }}
+                >
+                  <strong style={{ fontSize: 12.5, color: "var(--ov-text)" }}>
+                    {it.t}
+                  </strong>
+                  <span
+                    className="meta"
+                    style={{ color: "var(--ov-text-faint)" }}
+                  >
+                    {it.ref}
+                  </span>
+                </div>
+                <p
+                  style={{
+                    margin: "4px 0 0",
+                    fontSize: 12.5,
+                    color: "var(--ov-text-dim)",
+                    lineHeight: 1.5,
+                  }}
+                >
+                  {it.d}
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }

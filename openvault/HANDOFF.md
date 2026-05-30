@@ -1,5 +1,10 @@
 # OpenVault — Handoff: What Needs To Happen
 
+> **2026-06-03 update:** the frontend was reskinned to the **MECHATONE** look
+> (cream paper, navy + orange-red 2-ink palette, Oswald/DM Sans/JetBrains Mono).
+> See `docs/MECHATONE_HANDOFF.md` for the design-system reference + file map.
+> Backend / read-model gaps below are unchanged by the reskin.
+
 This document is a **forward-looking work plan**. The mock-removal refactor is done
 (branch merged to `main`); every code path is wired to real Story (Aeneid, chain
 1315), real CDR (`@piplabs/cdr-sdk@0.2.1`), and real Pinata/IPFS. What follows is

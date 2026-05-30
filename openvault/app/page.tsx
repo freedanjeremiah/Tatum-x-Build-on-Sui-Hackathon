@@ -1,24 +1,35 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { Artifact, Tier, Modality } from "@/types/artifact";
+import Link from "next/link";
+import type { Artifact, Modality, Tier } from "@/types/artifact";
 import { TIER_ORDER, tierMeta } from "@/lib/tiers";
 import ModelCard from "@/components/ModelCard";
+import Dropdown from "@/components/ui/Dropdown";
+import Icon from "@/components/ui/Icon";
+
+const FILTER_TIERS: Array<Tier | "all"> = [
+  "all",
+  "public",
+  "gated",
+  "compute",
+  "group",
+  "private",
+];
 
 export default function BrowsePage() {
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Filter state — React state only, never persisted.
-  const [tier, setTier] = useState<Tier | null>(null);
-  const [modality, setModality] = useState<Modality | "">("");
+  const [tier, setTier] = useState<Tier | "all">("all");
+  const [modality, setModality] = useState<Modality | "all">("all");
   const [q, setQ] = useState("");
 
   useEffect(() => {
     const controller = new AbortController();
     const params = new URLSearchParams();
-    if (tier) params.set("tier", tier);
-    if (modality) params.set("modality", modality);
+    if (tier !== "all") params.set("tier", tier);
+    if (modality !== "all") params.set("modality", modality);
     if (q.trim()) params.set("q", q.trim());
 
     setLoading(true);
@@ -35,123 +46,160 @@ export default function BrowsePage() {
     return () => controller.abort();
   }, [tier, modality, q]);
 
+  const filtered = tier !== "all" || modality !== "all" || q.trim() !== "";
+
   return (
-    <div className="mx-auto max-w-[1400px] px-5">
+    <div className="container maxw-browse">
       <Hero />
+      <FilterBar
+        tier={tier}
+        setTier={setTier}
+        modality={modality}
+        setModality={setModality}
+        q={q}
+        setQ={setQ}
+      />
 
-      {/* filter bar */}
-      <div className="ov-anim-up sticky top-14 z-20 -mx-5 mb-6 border-y border-[var(--ov-line)] bg-[var(--ov-bg)]/85 px-5 py-3 backdrop-blur-xl">
-        <div className="flex flex-wrap items-center gap-3">
-          {/* tier chips */}
-          <div className="flex flex-wrap items-center gap-1.5">
-            <TierChip
-              active={tier === null}
-              label="All"
-              onClick={() => setTier(null)}
-            />
-            {TIER_ORDER.map((t) => (
-              <TierChip
-                key={t}
-                tier={t}
-                active={tier === t}
-                label={tierMeta(t).label}
-                onClick={() => setTier(tier === t ? null : t)}
-              />
-            ))}
-          </div>
-
-          <div className="ml-auto flex flex-wrap items-center gap-2">
-            <select
-              value={modality}
-              onChange={(e) => setModality(e.target.value as Modality | "")}
-              className="rounded-lg border border-[var(--ov-line)] bg-[var(--ov-panel)] px-3 py-1.5 text-[13px] text-[var(--ov-text)] outline-none focus:border-[var(--ov-accent)]"
-            >
-              <option value="">All modalities</option>
-              <option value="dataset">Datasets</option>
-              <option value="model">Models</option>
-            </select>
-
-            <div className="relative">
-              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--ov-text-faint)]">
-                <SearchIcon />
-              </span>
-              <input
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder="Search title, tags…"
-                className="w-56 rounded-lg border border-[var(--ov-line)] bg-[var(--ov-panel)] py-1.5 pl-9 pr-3 text-[13px] text-[var(--ov-text)] outline-none placeholder:text-[var(--ov-text-faint)] focus:border-[var(--ov-accent)]"
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* results */}
-      <div className="mb-3 flex items-center justify-between">
-        <span className="font-mono text-[11px] uppercase tracking-widest text-[var(--ov-text-faint)]">
-          {loading ? "Loading…" : `${artifacts.length} artifact${artifacts.length === 1 ? "" : "s"}`}
-        </span>
+      <div
+        className="meta"
+        style={{ margin: "20px 0 14px", color: "var(--ov-text-faint)" }}
+      >
+        {loading
+          ? "LOADING…"
+          : `${artifacts.length} ARTIFACT${artifacts.length === 1 ? "" : "S"}`}
       </div>
 
       {loading ? (
-        <Grid>
+        <div className="ov-grid">
           {Array.from({ length: 6 }).map((_, i) => (
             <SkeletonCard key={i} />
           ))}
-        </Grid>
+        </div>
       ) : artifacts.length === 0 ? (
-        <EmptyState filtered={!!tier || !!modality || !!q.trim()} />
+        <EmptyState
+          filtered={filtered}
+          onClear={() => {
+            setTier("all");
+            setModality("all");
+            setQ("");
+          }}
+        />
       ) : (
-        <Grid>
-          {artifacts.map((a, i) => (
-            <div
-              key={a.ipId}
-              className="ov-anim-up"
-              style={{ animationDelay: `${Math.min(i * 45, 300)}ms` }}
-            >
-              <ModelCard artifact={a} />
-            </div>
+        <div className="ov-grid">
+          {artifacts.map((a) => (
+            <ModelCard key={a.ipId} artifact={a} />
           ))}
-        </Grid>
+        </div>
       )}
+
+      <div style={{ height: 56 }} />
     </div>
   );
 }
 
 function Hero() {
   return (
-    <section className="ov-anim-up py-12 sm:py-16">
-      <div className="max-w-3xl space-y-5">
-        <span className="inline-flex items-center gap-2 rounded-full border border-[var(--ov-line)] bg-[var(--ov-panel)]/60 px-3 py-1 font-mono text-[10px] uppercase tracking-widest text-[var(--ov-accent)]">
-          <span className="h-1.5 w-1.5 rounded-full bg-[var(--ov-accent)]" />
-          Story · Confidential Data Registry
-        </span>
-        <h1 className="text-balance text-4xl font-semibold leading-[1.05] tracking-tight text-[var(--ov-text)] sm:text-5xl">
-          Access control as a{" "}
-          <span className="text-[var(--ov-accent)]">property of the data.</span>
-        </h1>
-        <p className="max-w-xl text-[15px] leading-relaxed text-[var(--ov-text-dim)]">
-          A hub for datasets and models that are encrypted once and gated by
-          license — download, mint to unlock, or run confidential jobs without
-          ever moving the bytes.
-        </p>
+    <section style={{ position: "relative", paddingTop: 46, paddingBottom: 34 }}>
+      <div
+        className="anim-up"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 9,
+          marginBottom: 18,
+        }}
+      >
+        <span
+          className="tier-dot"
+          style={{ background: "var(--ov-accent)" }}
+        />
+        <span className="eyebrow">STORY · CONFIDENTIAL DATA REGISTRY</span>
       </div>
+      <div
+        className="anim-up font-jp"
+        style={{
+          fontSize: 14,
+          letterSpacing: "0.3em",
+          color: "var(--ov-accent)",
+          marginBottom: 12,
+          animationDelay: "40ms",
+        }}
+      >
+        コンフィデンシャル データ レジストリ
+      </div>
+      <h1
+        className="h1 anim-up"
+        style={{ maxWidth: 880, animationDelay: "80ms" }}
+      >
+        Access control as a
+        <br />
+        <span style={{ color: "var(--ov-accent)" }}>
+          property of the data.
+        </span>
+      </h1>
+      <p
+        className="anim-up"
+        style={{
+          maxWidth: 560,
+          marginTop: 16,
+          fontSize: 14.5,
+          color: "var(--ov-text-dim)",
+          lineHeight: 1.6,
+          animationDelay: "120ms",
+        }}
+      >
+        Datasets and models registered as Story IP Assets, threshold-encrypted on
+        IPFS. The license token <em>is</em> the decryption credential — there is
+        no auth server.
+      </p>
 
-      {/* tier legend */}
-      <div className="mt-8 flex flex-wrap gap-x-5 gap-y-2">
-        {TIER_ORDER.map((t) => {
-          const m = tierMeta(t);
+      <div
+        className="anim-up"
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 10,
+          marginTop: 26,
+          animationDelay: "160ms",
+        }}
+      >
+        {TIER_ORDER.map((k) => {
+          const t = tierMeta(k);
           return (
-            <div key={t} className="flex items-center gap-2">
+            <div
+              key={k}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 9,
+                padding: "8px 13px",
+                borderRadius: 999,
+                border: "1.5px solid var(--ov-line)",
+                background: "var(--ov-panel)",
+              }}
+            >
               <span
-                className="h-2.5 w-2.5 rounded-sm"
-                style={{ background: m.color }}
+                style={{
+                  width: 11,
+                  height: 11,
+                  borderRadius: 3,
+                  background: t.color,
+                  flex: "none",
+                }}
               />
-              <span className="text-[12px] font-medium text-[var(--ov-text)]">
-                {m.label}
+              <span
+                style={{
+                  fontWeight: 700,
+                  fontSize: 12.5,
+                  color: "var(--ov-text)",
+                }}
+              >
+                {t.label}
               </span>
-              <span className="text-[12px] text-[var(--ov-text-faint)]">
-                {m.blurb}
+              <span
+                style={{ fontSize: 12, color: "var(--ov-text-faint)" }}
+              >
+                {t.blurb}
               </span>
             </div>
           );
@@ -161,96 +209,212 @@ function Hero() {
   );
 }
 
-function Grid({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="grid grid-cols-1 gap-4 pb-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-      {children}
-    </div>
-  );
-}
-
-function TierChip({
+function FilterBar({
   tier,
-  active,
-  label,
-  onClick,
+  setTier,
+  modality,
+  setModality,
+  q,
+  setQ,
 }: {
-  tier?: Tier;
-  active: boolean;
-  label: string;
-  onClick: () => void;
+  tier: Tier | "all";
+  setTier: (t: Tier | "all") => void;
+  modality: Modality | "all";
+  setModality: (m: Modality | "all") => void;
+  q: string;
+  setQ: (q: string) => void;
 }) {
-  const color = tier ? tierMeta(tier).color : "var(--ov-accent)";
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="rounded-full border px-3 py-1.5 text-[12px] font-medium transition-all"
+    <div
       style={{
-        color: active ? (tier ? color : "var(--ov-accent-ink)") : "var(--ov-text-dim)",
-        background: active
-          ? tier
-            ? `color-mix(in oklab, ${color} 16%, transparent)`
-            : "var(--ov-accent)"
-          : "transparent",
-        borderColor: active
-          ? `color-mix(in oklab, ${color} 45%, transparent)`
-          : "var(--ov-line)",
+        position: "sticky",
+        top: 62,
+        zIndex: 30,
+        background: "color-mix(in srgb, var(--ov-bg) 88%, transparent)",
+        backdropFilter: "blur(8px)",
+        borderBottom: "1.5px solid var(--ov-line)",
+        margin: "0 -20px",
+        padding: "12px 20px",
       }}
     >
-      {label}
-    </button>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          flexWrap: "wrap",
+        }}
+      >
+        <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
+          {FILTER_TIERS.map((k) => {
+            const active = tier === k;
+            const t = k === "all" ? null : tierMeta(k);
+            const col = t ? t.color : "var(--ov-navy)";
+            return (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setTier(k)}
+                className="font-mono"
+                style={{
+                  textTransform: "uppercase",
+                  fontSize: 11,
+                  letterSpacing: "0.08em",
+                  padding: "6px 12px",
+                  borderRadius: 999,
+                  border: "1.5px solid",
+                  cursor: "pointer",
+                  fontWeight: 600,
+                  borderColor: active ? col : "var(--ov-line)",
+                  color: active
+                    ? k === "all"
+                      ? "var(--ov-accent-ink)"
+                      : col
+                    : "var(--ov-text-dim)",
+                  background: active
+                    ? k === "all"
+                      ? "var(--ov-navy)"
+                      : `color-mix(in srgb, ${col} 14%, transparent)`
+                    : "transparent",
+                }}
+              >
+                {k === "all" ? "All" : t!.label}
+              </button>
+            );
+          })}
+        </div>
+        <span style={{ flex: 1 }} />
+        <Dropdown<Modality | "all">
+          value={modality}
+          onChange={setModality}
+          minWidth={150}
+          align="right"
+          options={[
+            { value: "all", label: "All modalities" },
+            { value: "dataset", label: "Datasets" },
+            { value: "model", label: "Models" },
+          ]}
+        />
+        <div style={{ position: "relative" }}>
+          <span
+            style={{
+              position: "absolute",
+              left: 11,
+              top: "50%",
+              transform: "translateY(-50%)",
+              color: "var(--ov-text-faint)",
+              display: "inline-flex",
+            }}
+          >
+            <Icon name="search" size={15} />
+          </span>
+          <input
+            className="input"
+            placeholder="Search title, tags, description…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            style={{ width: 248, paddingLeft: 33, fontSize: 12.5 }}
+          />
+        </div>
+      </div>
+    </div>
   );
 }
 
 function SkeletonCard() {
   return (
-    <div className="h-64 animate-pulse rounded-xl border border-[var(--ov-line)] bg-[var(--ov-panel)]/40" />
-  );
-}
-
-function EmptyState({ filtered }: { filtered: boolean }) {
-  return (
-    <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-[var(--ov-line)] py-20 text-center">
-      <div className="text-[var(--ov-text-faint)]">
-        <SearchIcon large />
-      </div>
-      {filtered ? (
-        <>
-          <p className="text-sm font-medium text-[var(--ov-text)]">
-            No artifacts match these filters
-          </p>
-          <p className="text-[13px] text-[var(--ov-text-dim)]">
-            Try clearing the tier or modality, or searching a different term.
-          </p>
-        </>
-      ) : (
-        <>
-          <p className="text-sm font-medium text-[var(--ov-text)]">
-            No artifacts published yet
-          </p>
-          <p className="max-w-sm text-[13px] text-[var(--ov-text-dim)]">
-            Be the first to register a dataset or model as an on-chain IP Asset,
-            encrypted and gated by license.
-          </p>
-          <a
-            href="/upload"
-            className="mt-2 inline-flex items-center gap-2 rounded-lg bg-[var(--ov-accent)] px-4 py-2 text-[13px] font-semibold text-[var(--ov-accent-ink)] transition-opacity hover:opacity-90"
-          >
-            Publish an artifact
-          </a>
-        </>
-      )}
+    <div
+      className="panel-soft"
+      style={{
+        height: 256,
+        padding: 16,
+        display: "flex",
+        flexDirection: "column",
+        gap: 12,
+      }}
+    >
+      <div className="skeleton" style={{ height: 18, width: 120 }} />
+      <div
+        className="skeleton"
+        style={{ height: 22, width: "70%", marginTop: 4 }}
+      />
+      <div className="skeleton" style={{ height: 12, width: "100%" }} />
+      <div className="skeleton" style={{ height: 12, width: "85%" }} />
+      <div style={{ flex: 1 }} />
+      <div className="skeleton" style={{ height: 30, width: "100%" }} />
     </div>
   );
 }
 
-function SearchIcon({ large }: { large?: boolean }) {
-  const s = large ? 28 : 15;
+function EmptyState({
+  filtered,
+  onClear,
+}: {
+  filtered: boolean;
+  onClear: () => void;
+}) {
   return (
-    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
-      <circle cx="11" cy="11" r="7" />
-      <path d="m21 21-4.3-4.3" />
-    </svg>
+    <div
+      style={{
+        border: "2px dashed var(--ov-line-ink)",
+        borderRadius: 18,
+        padding: "52px 24px",
+        textAlign: "center",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 12,
+        background: "color-mix(in srgb, var(--ov-panel) 50%, transparent)",
+      }}
+    >
+      <span style={{ color: "var(--ov-text-faint)" }}>
+        <Icon name="search" size={30} />
+      </span>
+      <div
+        className="font-display"
+        style={{
+          alignSelf: "stretch",
+          textAlign: "center",
+          fontSize: 20,
+          textTransform: "uppercase",
+          fontWeight: 600,
+          color: "var(--ov-text)",
+        }}
+      >
+        {filtered
+          ? "No artifacts match these filters"
+          : "No artifacts published yet"}
+      </div>
+      <p
+        style={{
+          margin: 0,
+          color: "var(--ov-text-dim)",
+          fontSize: 13,
+          maxWidth: 380,
+        }}
+      >
+        {filtered
+          ? "Try a broader tier or clear your search to see everything in the vault."
+          : "This is a fresh testnet vault. Register the first dataset or model to see it appear here."}
+      </p>
+      {filtered ? (
+        <button
+          type="button"
+          className="btn btn-accent"
+          style={{ marginTop: 6 }}
+          onClick={onClear}
+        >
+          Clear filters
+        </button>
+      ) : (
+        <Link
+          href="/upload"
+          className="btn btn-accent"
+          style={{ marginTop: 6 }}
+        >
+          Register an artifact
+        </Link>
+      )}
+    </div>
   );
 }

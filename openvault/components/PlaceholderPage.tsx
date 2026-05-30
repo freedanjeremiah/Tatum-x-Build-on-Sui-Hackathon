@@ -1,4 +1,4 @@
-/** Minimal "coming soon" scaffold so nav links never 404 in Phase 4a. */
+/** Minimal "coming soon" scaffold so nav links never 404. */
 export default function PlaceholderPage({
   eyebrow,
   title,
@@ -9,15 +9,46 @@ export default function PlaceholderPage({
   description: string;
 }) {
   return (
-    <div className="mx-auto flex min-h-[55vh] max-w-[1400px] flex-col items-center justify-center px-5 text-center">
-      <div className="ov-anim-up flex flex-col items-center gap-4">
-        <span className="rounded-full border border-[var(--ov-line)] bg-[var(--ov-panel)]/60 px-3 py-1 font-mono text-[10px] uppercase tracking-widest text-[var(--ov-accent)]">
+    <div
+      className="container maxw-artifact"
+      style={{
+        minHeight: "55vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        textAlign: "center",
+      }}
+    >
+      <div
+        className="anim-up"
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: 12,
+        }}
+      >
+        <span className="eyebrow" style={{ color: "var(--ov-accent)" }}>
           {eyebrow}
         </span>
-        <h1 className="text-3xl font-semibold tracking-tight text-[var(--ov-text)]">
+        <h1
+          className="h1"
+          style={{
+            fontSize: "clamp(28px,4vw,38px)",
+            color: "var(--ov-text)",
+          }}
+        >
           {title}
         </h1>
-        <p className="max-w-md text-sm leading-relaxed text-[var(--ov-text-dim)]">
+        <p
+          style={{
+            maxWidth: 440,
+            color: "var(--ov-text-dim)",
+            fontSize: 14,
+            lineHeight: 1.6,
+            margin: 0,
+          }}
+        >
           {description}
         </p>
       </div>

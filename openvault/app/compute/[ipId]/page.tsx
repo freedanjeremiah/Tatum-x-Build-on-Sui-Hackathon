@@ -5,16 +5,15 @@
 export const runtime = "nodejs";
 
 import Link from "next/link";
-import { openDb, getArtifact } from "@/indexer/db";
+import { getArtifact, openDb } from "@/indexer/db";
 import type { DB } from "@/indexer/db";
 import type { Artifact } from "@/types/artifact";
-import { TierBadge } from "@/components/ModelCard";
+import { ModalityChip, TierBadge } from "@/components/ui/TierBadge";
 import TxLink from "@/components/TxLink";
 import AlgoAllowlist from "@/components/AlgoAllowlist";
 import ComputeJobPanel from "@/components/ComputeJobPanel";
 
 let _db: DB | null = null;
-
 function db(): DB {
   if (_db) return _db;
   _db = openDb();
@@ -30,9 +29,13 @@ export default async function ComputePage({
   const artifact = getArtifact(db(), ipId) as Artifact | undefined;
 
   if (!artifact) {
-    return <Notice title="No artifact with that ID" body={`The IP asset ${ipId} is not in the index.`} />;
+    return (
+      <Notice
+        title="No artifact with that ID"
+        body={`The IP asset ${ipId} is not in the index.`}
+      />
+    );
   }
-
   if (artifact.tier !== "compute") {
     return (
       <Notice
@@ -45,54 +48,92 @@ export default async function ComputePage({
   }
 
   return (
-    <div className="mx-auto max-w-4xl px-5 pb-24">
+    <div
+      className="container maxw-compute"
+      style={{ paddingTop: 26, paddingBottom: 60 }}
+    >
       {/* breadcrumb */}
-      <div className="ov-anim-up flex items-center gap-2 pt-6 text-[12px] text-[var(--ov-text-faint)]">
-        <Link href="/" className="transition-colors hover:text-[var(--ov-text)]">
+      <div className="meta anim-up" style={{ marginBottom: 18 }}>
+        <Link
+          href="/"
+          style={{ color: "var(--ov-text-faint)" }}
+        >
           Browse
-        </Link>
-        <span>/</span>
+        </Link>{" "}
+        /{" "}
         <Link
           href={`/artifact/${artifact.ipId}`}
-          className="transition-colors hover:text-[var(--ov-text)]"
+          style={{ color: "var(--ov-text-faint)" }}
         >
           {artifact.modality}
-        </Link>
-        <span>/</span>
-        <span className="text-[var(--ov-text-dim)]">compute</span>
+        </Link>{" "}
+        / compute
       </div>
 
       {/* header */}
-      <header className="ov-anim-up mt-4 flex flex-col gap-4 border-b border-[var(--ov-line)] pb-6">
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="anim-up" style={{ animationDelay: "40ms" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 9,
+            flexWrap: "wrap",
+          }}
+        >
           <TierBadge tier={artifact.tier} />
-          <span className="inline-flex items-center gap-1 rounded-full border border-[var(--ov-line-soft)] px-2 py-0.5 text-[10px] capitalize text-[var(--ov-text-faint)]">
-            {artifact.modality}
-          </span>
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--tier-compute)]/40 bg-[var(--tier-compute)]/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--tier-compute)]">
+          <ModalityChip modality={artifact.modality} />
+          <span
+            className="font-mono"
+            style={{
+              fontSize: 10.5,
+              letterSpacing: "0.1em",
+              textTransform: "uppercase",
+              color: "var(--tier-compute)",
+              border:
+                "1px solid color-mix(in srgb, var(--tier-compute) 35%, transparent)",
+              background:
+                "color-mix(in srgb, var(--tier-compute) 11%, transparent)",
+              padding: "4px 9px",
+              borderRadius: 999,
+            }}
+          >
             Computable · never downloadable
           </span>
         </div>
-
-        <h1 className="text-3xl font-semibold leading-tight tracking-tight text-[var(--ov-text)]">
+        <h1
+          className="h1"
+          style={{
+            fontSize: "clamp(28px,4vw,40px)",
+            margin: "16px 0 10px",
+            color: "var(--ov-text)",
+          }}
+        >
           {artifact.title}
         </h1>
-        <p className="max-w-2xl text-[14px] leading-relaxed text-[var(--ov-text-dim)]">
-          {artifact.description}
-        </p>
-
-        <div className="flex flex-wrap items-center gap-3">
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            flexWrap: "wrap",
+            alignItems: "center",
+          }}
+        >
           <TxLink ipId={artifact.ipId} />
           <TxLink hash={artifact.createdTx} />
-          {artifact.computeLicenseTermsId && (
-            <span className="font-mono text-[11px] text-[var(--ov-text-faint)]">
+          {artifact.computeLicenseTermsId ? (
+            <span
+              className="font-mono"
+              style={{ fontSize: 11.5, color: "var(--ov-text-faint)" }}
+            >
               compute terms #{artifact.computeLicenseTermsId}
             </span>
-          )}
+          ) : null}
         </div>
-      </header>
+      </div>
 
-      <div className="ov-anim-up mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[320px_1fr]">
+      <hr className="divider-ink" style={{ margin: "24px 0" }} />
+
+      <div className="ov-compute-grid">
         <AlgoAllowlist artifact={artifact} />
         <ComputeJobPanel artifact={artifact} />
       </div>
@@ -112,20 +153,51 @@ function Notice({
   backLabel?: string;
 }) {
   return (
-    <div className="mx-auto flex min-h-[55vh] max-w-[1400px] flex-col items-center justify-center gap-4 px-5 text-center">
-      <span className="rounded-full border border-[var(--ov-line)] bg-[var(--ov-panel)]/60 px-3 py-1 font-mono text-[10px] uppercase tracking-widest text-[var(--tier-compute)]">
-        Compute
-      </span>
-      <h1 className="text-2xl font-semibold tracking-tight text-[var(--ov-text)]">
-        {title}
-      </h1>
-      <p className="max-w-md text-[13px] text-[var(--ov-text-dim)]">{body}</p>
-      <Link
-        href={backHref}
-        className="rounded-lg border border-[var(--ov-line)] px-4 py-2 text-[13px] text-[var(--ov-text-dim)] transition-colors hover:text-[var(--ov-text)]"
+    <div
+      className="container maxw-artifact"
+      style={{ paddingTop: 60, paddingBottom: 60 }}
+    >
+      <div
+        style={{
+          border: "2px dashed var(--ov-line-ink)",
+          borderRadius: 18,
+          padding: "52px 24px",
+          textAlign: "center",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: 12,
+          background: "color-mix(in srgb, var(--ov-panel) 50%, transparent)",
+        }}
       >
-        {backLabel}
-      </Link>
+        <span className="eyebrow" style={{ color: "var(--tier-compute)" }}>
+          Compute
+        </span>
+        <div
+          className="font-display"
+          style={{
+            fontSize: 22,
+            textTransform: "uppercase",
+            fontWeight: 600,
+            color: "var(--ov-text)",
+          }}
+        >
+          {title}
+        </div>
+        <p
+          style={{
+            margin: 0,
+            color: "var(--ov-text-dim)",
+            fontSize: 13,
+            maxWidth: 420,
+          }}
+        >
+          {body}
+        </p>
+        <Link href={backHref} className="btn btn-accent" style={{ marginTop: 6 }}>
+          {backLabel}
+        </Link>
+      </div>
     </div>
   );
 }

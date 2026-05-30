@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { PRIVY_APP_ID } from "@/lib/env";
+import Icon from "./ui/Icon";
 
 const WalletButtonPrivy = dynamic(() => import("./WalletButtonPrivy"), {
   ssr: false,
@@ -16,9 +17,14 @@ export default function WalletButton() {
     return (
       <span
         title="Wallet requires PRIVY_APP_ID to be configured"
-        className="inline-flex cursor-not-allowed items-center gap-2 rounded-full border border-dashed border-[var(--ov-line)] px-3.5 py-1.5 text-xs text-[var(--ov-text-faint)]"
+        className="btn btn-ghost btn-sm"
+        style={{
+          cursor: "not-allowed",
+          borderStyle: "dashed",
+          color: "var(--ov-text-faint)",
+        }}
       >
-        <span className="h-1.5 w-1.5 rounded-full bg-[var(--ov-text-faint)]" />
+        <Icon name="key" size={13} />
         Connect (unavailable)
       </span>
     );

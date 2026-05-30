@@ -3,18 +3,20 @@
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import type { Artifact } from "@/types/artifact";
-import { tierMeta } from "@/lib/tiers";
-import { TierBadge } from "@/components/ModelCard";
+import ModelCard from "@/components/ModelCard";
 import TxLink from "@/components/TxLink";
+import DisclosureStrip from "@/components/ui/DisclosureStrip";
+import Icon from "@/components/ui/Icon";
+import Spinner from "@/components/ui/Spinner";
 import { getClients, WalletNotConnectedError } from "@/lib/useClients";
 
 /**
- * Group bundle page. Shows the group artifact + member artifacts, a group license
- * summary with a subscribe CTA, and a Distribute-royalties action.
+ * Group bundle page. Shows the group artifact + member artifacts, a group
+ * license summary with a subscribe CTA, and a Distribute-royalties action.
  *
- * SPEC §8.7 OPEN ITEM is surfaced prominently: one group license unlocking every
- * member's vault is NOT yet confirmed in CDR — this demo falls back to per-IP
- * gating (each member keeps its own LicenseReadCondition).
+ * SPEC §8.7 OPEN ITEM is surfaced prominently: one group license unlocking
+ * every member's vault is NOT yet confirmed in CDR — this demo falls back to
+ * per-IP gating.
  */
 export default function GroupPage({
   params,
@@ -39,46 +41,76 @@ export default function GroupPage({
     return () => controller.abort();
   }, []);
 
-  // The group artifact is identified by its groupId OR its ipId matching the route.
   const group =
     all.find((a) => a.groupId === groupId || a.ipId === groupId) ??
     all.find((a) => a.tier === "group");
 
-  // Members are the indexed artifacts whose groupId points at this group. No
-  // fabrication — if none are indexed yet, the list is honestly empty.
   const groupKey = (group?.groupId ?? group?.ipId) as `0x${string}` | undefined;
-  const members = group && groupKey
-    ? all.filter((a) => a.groupId === groupKey)
-    : [];
+  const members =
+    group && groupKey ? all.filter((a) => a.groupId === groupKey) : [];
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-4xl px-5 pt-16">
-        <div className="h-40 animate-pulse rounded-2xl border border-[var(--ov-line)] bg-[var(--ov-panel)]/40" />
+      <div
+        className="container maxw-artifact"
+        style={{ paddingTop: 60, paddingBottom: 60 }}
+      >
+        <div className="skeleton" style={{ height: 200, borderRadius: 18 }} />
       </div>
     );
   }
 
   if (!group) {
     return (
-      <div className="mx-auto flex min-h-[55vh] max-w-4xl flex-col items-center justify-center gap-4 px-5 text-center">
-        <span className="rounded-full border border-[var(--ov-line)] bg-[var(--ov-panel)]/60 px-3 py-1 font-mono text-[10px] uppercase tracking-widest text-[var(--tier-group)]">
-          Group
-        </span>
-        <h1 className="text-2xl font-semibold tracking-tight text-[var(--ov-text)]">
-          No group with that ID
-        </h1>
-        <p className="max-w-md text-[13px] text-[var(--ov-text-dim)]">
-          The group{" "}
-          <code className="font-mono text-[var(--ov-text-faint)]">{groupId}</code>{" "}
-          is not in the index.
-        </p>
-        <Link
-          href="/"
-          className="rounded-lg border border-[var(--ov-line)] px-4 py-2 text-[13px] text-[var(--ov-text-dim)] transition-colors hover:text-[var(--ov-text)]"
+      <div
+        className="container maxw-artifact"
+        style={{ paddingTop: 60, paddingBottom: 60 }}
+      >
+        <div
+          style={{
+            border: "2px dashed var(--ov-line-ink)",
+            borderRadius: 18,
+            padding: "52px 24px",
+            textAlign: "center",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: 12,
+            background: "color-mix(in srgb, var(--ov-panel) 50%, transparent)",
+          }}
         >
-          Back to browse
-        </Link>
+          <span style={{ color: "var(--ov-text-faint)" }}>
+            <Icon name="search" size={30} />
+          </span>
+          <div
+            className="font-display"
+            style={{
+              fontSize: 22,
+              textTransform: "uppercase",
+              fontWeight: 600,
+              color: "var(--ov-text)",
+            }}
+          >
+            No group with that ID
+          </div>
+          <p
+            style={{
+              margin: 0,
+              color: "var(--ov-text-dim)",
+              fontSize: 13,
+              maxWidth: 420,
+            }}
+          >
+            The id{" "}
+            <code className="font-mono" style={{ fontSize: 12 }}>
+              {groupId}
+            </code>{" "}
+            does not resolve to a group bundle in the index.
+          </p>
+          <Link href="/" className="btn btn-accent" style={{ marginTop: 6 }}>
+            Back to browse
+          </Link>
+        </div>
       </div>
     );
   }
@@ -87,123 +119,192 @@ export default function GroupPage({
   const memberIpIds = members.map((m) => m.ipId);
 
   return (
-    <div className="mx-auto max-w-4xl px-5 pb-24">
-      {/* breadcrumb */}
-      <div className="ov-anim-up flex items-center gap-2 pt-6 text-[12px] text-[var(--ov-text-faint)]">
-        <Link href="/" className="transition-colors hover:text-[var(--ov-text)]">
+    <div
+      className="container maxw-browse"
+      style={{ paddingTop: 26, paddingBottom: 60 }}
+    >
+      <div className="meta anim-up" style={{ marginBottom: 18 }}>
+        <Link href="/" style={{ color: "var(--ov-text-faint)" }}>
           Browse
-        </Link>
-        <span>/</span>
-        <span className="text-[var(--ov-text-dim)]">group</span>
+        </Link>{" "}
+        / group
       </div>
 
-      {/* header */}
-      <header className="ov-anim-up mt-4 flex flex-col gap-4 border-b border-[var(--ov-line)] pb-6">
-        <div className="flex flex-wrap items-center gap-2">
-          <TierBadge tier="group" />
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--tier-group)]/40 bg-[var(--tier-group)]/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--tier-group)]">
-            {members.length} members · even-split pool
-          </span>
-        </div>
-        <h1 className="text-3xl font-semibold leading-tight tracking-tight text-[var(--ov-text)]">
-          {group.title}
-        </h1>
-        <p className="max-w-2xl text-[14px] leading-relaxed text-[var(--ov-text-dim)]">
-          {group.description}
-        </p>
-        <div className="flex flex-wrap items-center gap-3">
-          <TxLink ipId={groupIpId} label={`group ${truncate(groupIpId)}`} />
-          <TxLink hash={group.createdTx} />
-        </div>
-      </header>
-
-      {/* OPEN ITEM notice — prominent */}
-      <OpenItemNotice />
-
-      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1fr_300px]">
-        {/* members */}
-        <section className="ov-anim-up space-y-3">
-          <h2 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--ov-text-faint)]">
-            Member artifacts
-          </h2>
-          <div className="space-y-2.5">
-            {members.map((m) => (
-              <MemberRow key={m.ipId} artifact={m} />
-            ))}
+      <div className="ov-detail-grid">
+        <div style={{ display: "grid", gap: 22, alignContent: "start" }}>
+          <div className="anim-up" style={{ animationDelay: "40ms" }}>
+            <span
+              className="chip"
+              style={{
+                color: "var(--tier-group)",
+                borderColor: "var(--tier-group)",
+              }}
+            >
+              <span
+                className="tier-dot"
+                style={{ background: "var(--tier-group)" }}
+              />
+              Group · {members.length} member{members.length === 1 ? "" : "s"}
+            </span>
+            <h1
+              className="h1"
+              style={{
+                fontSize: "clamp(28px,4vw,40px)",
+                margin: "14px 0 12px",
+                color: "var(--ov-text)",
+              }}
+            >
+              {group.title}
+            </h1>
+            <p
+              style={{
+                maxWidth: 600,
+                fontSize: 14.5,
+                color: "var(--ov-text-dim)",
+                lineHeight: 1.6,
+                margin: 0,
+              }}
+            >
+              {group.description}
+            </p>
           </div>
-        </section>
 
-        {/* sidebar: license + actions */}
-        <aside className="ov-anim-up space-y-4">
-          <LicenseSummary group={group} />
-          <DistributePanel groupIpId={groupIpId} memberIpIds={memberIpIds} />
-        </aside>
+          <AccessPanel group={group} />
+
+          <DistributePanel
+            groupIpId={groupIpId}
+            memberIpIds={memberIpIds}
+          />
+
+          <div>
+            <div
+              className="meta"
+              style={{
+                margin: "4px 0 14px",
+                color: "var(--ov-text-faint)",
+              }}
+            >
+              {members.length} MEMBER{members.length === 1 ? "" : "S"}
+            </div>
+            {members.length === 0 ? (
+              <p
+                style={{
+                  color: "var(--ov-text-dim)",
+                  fontSize: 13,
+                }}
+              >
+                No member artifacts indexed under this group yet.
+              </p>
+            ) : (
+              <div className="ov-grid">
+                {members.map((a) => (
+                  <ModelCard key={a.ipId} artifact={a} />
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* sidebar */}
+        <div style={{ display: "grid", gap: 18, alignContent: "start" }}>
+          <div className="panel" style={{ padding: 18 }}>
+            <div className="meta" style={{ marginBottom: 8 }}>
+              Provenance
+            </div>
+            <ProvRow label="Group IP">
+              <TxLink ipId={groupIpId} />
+            </ProvRow>
+            <ProvRow label="Created">
+              <TxLink hash={group.createdTx} />
+            </ProvRow>
+            {group.licenseTermsId ? (
+              <ProvRow label="License terms">
+                <span
+                  className="font-mono"
+                  style={{ fontSize: 12, color: "var(--ov-text)" }}
+                >
+                  #{group.licenseTermsId}
+                </span>
+              </ProvRow>
+            ) : null}
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-function MemberRow({ artifact: a }: { artifact: Artifact }) {
-  const meta = tierMeta(a.tier);
+function AccessPanel({ group }: { group: Artifact }) {
+  const [subbed, setSubbed] = useState(false);
   return (
-    <Link
-      href={`/artifact/${a.ipId}`}
-      className="group flex items-center gap-3 rounded-xl border border-[var(--ov-line)] bg-[var(--ov-panel)]/60 p-3.5 transition-colors hover:border-[color-mix(in_oklab,var(--tier-group)_45%,var(--ov-line))]"
+    <div
+      className="panel"
+      style={{
+        padding: 20,
+        borderColor:
+          "color-mix(in srgb, var(--tier-group) 45%, var(--ov-line-ink))",
+        background: "color-mix(in srgb, var(--tier-group) 6%, var(--ov-panel))",
+      }}
     >
-      <span
-        className="h-9 w-1 shrink-0 rounded-full"
-        style={{ background: meta.color }}
-      />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="truncate text-[14px] font-medium text-[var(--ov-text)] group-hover:text-[var(--tier-group)]">
-            {a.title}
-          </span>
-          <TierBadge tier={a.tier} />
-        </div>
-        <p className="truncate text-[12px] text-[var(--ov-text-dim)]">
-          {a.description}
-        </p>
+      <div
+        className="h2"
+        style={{
+          fontSize: 16,
+          marginBottom: 6,
+          color: "var(--ov-text)",
+        }}
+      >
+        Access
       </div>
-      <TxLink ipId={a.ipId} />
-    </Link>
-  );
-}
-
-function LicenseSummary({ group }: { group: Artifact }) {
-  return (
-    <div className="rounded-2xl border border-[var(--tier-group)]/30 bg-[color-mix(in_oklab,var(--tier-group)_6%,var(--ov-panel))] p-4">
-      <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-[var(--ov-text-faint)]">
-        Group license
-      </h2>
-      <dl className="space-y-2.5 text-[12.5px]">
-        <div className="flex items-center justify-between gap-2">
-          <dt className="text-[var(--ov-text-faint)]">Reward split</dt>
-          <dd className="text-[var(--ov-text)]">Even-split pool</dd>
-        </div>
-        <div className="flex items-center justify-between gap-2">
-          <dt className="text-[var(--ov-text-faint)]">License terms</dt>
-          <dd className="font-mono text-[var(--ov-text-dim)]">
-            #{group.licenseTermsId ?? "—"}
-          </dd>
-        </div>
-      </dl>
+      <p
+        style={{
+          fontSize: 13,
+          color: "var(--ov-text-dim)",
+          marginTop: 0,
+        }}
+      >
+        One subscription is intended to unlock every member vault in the family.
+      </p>
       <button
         type="button"
-        onClick={() =>
-          alert(
-            "Subscribe mints a group-pool license. Per SPEC §8.7 open item, unlocking member vaults still falls back to per-IP gating."
-          )
-        }
-        className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-semibold transition-all"
-        style={{ background: "var(--tier-group)", color: "var(--ov-accent-ink)" }}
+        className="btn"
+        style={{
+          width: "100%",
+          background: "var(--tier-group)",
+          color: "#fff",
+          boxShadow: "3px 3px 0 var(--ov-navy)",
+        }}
+        onClick={() => setSubbed(true)}
       >
+        <Icon name="key" size={15} />
         Subscribe to unlock family
       </button>
-      <p className="mt-2 text-[11px] leading-relaxed text-[var(--ov-text-faint)]">
-        Subscription governs the reward split today. Per the open item below,
-        each member vault is still unlocked by its own per-IP license.
-      </p>
+      {subbed ? (
+        <div style={{ marginTop: 12 }}>
+          <DisclosureStrip tone="gated" icon="shield">
+            Group-license subscribe is a stub — the CDR contract path is not
+            wired. Members remain gated per-IP below.
+          </DisclosureStrip>
+        </div>
+      ) : null}
+      <div style={{ marginTop: 14 }}>
+        <DisclosureStrip tone="gated" icon="flag">
+          <strong>SPEC §8.7</strong> — group license → member-vault unlock is
+          unconfirmed in CDR; per-IP gating fallback applied.
+        </DisclosureStrip>
+      </div>
+      {group.licenseTermsId ? (
+        <div
+          className="meta"
+          style={{
+            marginTop: 12,
+            color: "var(--ov-text-faint)",
+            textAlign: "right",
+          }}
+        >
+          terms #{group.licenseTermsId}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -215,7 +316,9 @@ function DistributePanel({
   groupIpId: `0x${string}`;
   memberIpIds: `0x${string}`[];
 }) {
-  const [phase, setPhase] = useState<"idle" | "running" | "done" | "error">("idle");
+  const [phase, setPhase] = useState<"idle" | "running" | "done" | "error">(
+    "idle",
+  );
   const [txHash, setTxHash] = useState<`0x${string}` | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -236,72 +339,82 @@ function DistributePanel({
   }
 
   return (
-    <div className="rounded-2xl border border-[var(--ov-line)] bg-[var(--ov-panel)]/50 p-4">
-      <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-[var(--ov-text-faint)]">
+    <div className="panel" style={{ padding: 20 }}>
+      <div
+        className="h2"
+        style={{
+          fontSize: 16,
+          marginBottom: 8,
+          color: "var(--ov-text)",
+        }}
+      >
         Royalties
-      </h2>
-      <p className="mb-3 text-[12px] leading-relaxed text-[var(--ov-text-dim)]">
-        Collect the group pool and distribute it evenly to all {memberIpIds.length}{" "}
-        member IPs.
+      </div>
+      <p
+        style={{
+          fontSize: 12.5,
+          color: "var(--ov-text-dim)",
+          marginTop: 0,
+        }}
+      >
+        Collect the group pool and distribute it evenly to all{" "}
+        {memberIpIds.length} member IPs.
       </p>
       <button
         type="button"
+        className="btn btn-ghost"
+        style={{
+          width: "100%",
+          color: "var(--tier-group)",
+          borderColor: "var(--tier-group)",
+        }}
+        disabled={phase === "running" || memberIpIds.length === 0}
         onClick={handleDistribute}
-        disabled={phase === "running"}
-        className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--tier-group)]/40 px-4 py-2.5 text-[13px] font-semibold text-[var(--tier-group)] transition-all hover:bg-[var(--tier-group)]/10 disabled:cursor-not-allowed disabled:opacity-60"
       >
-        {phase === "running" ? (
-          <span
-            className="h-3.5 w-3.5 rounded-full border-2 border-[var(--tier-group)]/40 border-t-[var(--tier-group)]"
-            style={{ animation: "ov-spin 0.7s linear infinite" }}
-          />
-        ) : null}
+        {phase === "running" ? <Spinner /> : null}
         {phase === "done" ? "Distributed" : "Distribute royalties"}
       </button>
 
-      {phase === "done" && txHash && (
-        <div className="mt-3 flex items-center gap-2 text-[12px] text-[var(--ov-text-dim)]">
-          <span>Distributed</span>
-          <TxLink hash={txHash} />
+      {phase === "done" && txHash ? (
+        <div style={{ marginTop: 12 }}>
+          <DisclosureStrip tone="public" icon="check">
+            Distributed <TxLink hash={txHash} />
+          </DisclosureStrip>
         </div>
-      )}
-      {phase === "error" && error && (
-        <div className="mt-3 rounded-lg border border-[var(--tier-gated)]/40 bg-[var(--tier-gated)]/10 px-3 py-2 text-[12px] text-[var(--tier-gated)]">
-          {error}
+      ) : null}
+      {phase === "error" && error ? (
+        <div style={{ marginTop: 12 }}>
+          <DisclosureStrip tone="gated" icon="flag">
+            {error}
+          </DisclosureStrip>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
 
-function OpenItemNotice() {
+function ProvRow({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="ov-anim-up mt-6 rounded-2xl border border-[var(--tier-gated)]/35 bg-[var(--tier-gated)]/[0.07] p-4">
-      <div className="mb-1.5 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--tier-gated)]">
-        <WarnIcon /> Open item · SPEC §8.7
-      </div>
-      <p className="text-[12.5px] leading-relaxed text-[var(--ov-text-dim)]">
-        One group license unlocking every member&apos;s vault is{" "}
-        <span className="font-medium text-[var(--ov-text)]">
-          not yet confirmed in CDR
-        </span>
-        . This demo falls back to per-IP gating: the group governs the reward
-        split, but each member vault is still unlocked by its own
-        LicenseReadCondition. The subscribe CTA below reflects that fallback.
-      </p>
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        gap: 10,
+        padding: "9px 0",
+        borderBottom: "1px solid var(--ov-line-soft)",
+      }}
+    >
+      <span className="meta" style={{ color: "var(--ov-text-faint)" }}>
+        {label}
+      </span>
+      <span style={{ textAlign: "right" }}>{children}</span>
     </div>
-  );
-}
-
-function truncate(v: string): string {
-  return v.length <= 13 ? v : `${v.slice(0, 6)}…${v.slice(-4)}`;
-}
-
-function WarnIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M10.3 3.2 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.2a2 2 0 0 0-3.4 0Z" />
-      <path d="M12 9v4M12 17h.01" />
-    </svg>
   );
 }
