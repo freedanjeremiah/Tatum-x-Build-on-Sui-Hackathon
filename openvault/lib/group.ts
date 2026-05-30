@@ -5,8 +5,37 @@
 // unconfirmed. Until confirmed, gating falls back to per-IP gating (each member
 // IP keeps its own LicenseReadCondition); the group only governs reward splits.
 
-import { EVEN_SPLIT_GROUP_POOL } from "./constants";
+import { encodeAbiParameters } from "viem";
+import {
+  EVEN_SPLIT_GROUP_POOL,
+  GROUP_LICENSE_READ_CONDITION,
+  LICENSE_READ_CONDITION,
+  LICENSE_TOKEN,
+} from "./constants";
 import { WIP_TOKEN } from "./licensing";
+
+/**
+ * Build the CDR read-condition for a GROUP-GATED vault: a reader who holds a
+ * valid license for ANY member IP can decrypt. Uses our deployed
+ * GroupLicenseReadCondition, which composes the audited LicenseReadCondition over
+ * every member (resolves SPEC §8.7 — one subscription unlocks the family).
+ *
+ * Pass the result as `readConditionAddr` + `readConditionData` to
+ * `cdr.uploader.uploadFile`. The reader supplies `accessAuxData =
+ * encodeAccessAuxData([licenseTokenId])` for a license they hold on any member.
+ */
+export function groupReadCondition(memberIpIds: `0x${string}`[]): {
+  readConditionAddr: `0x${string}`;
+  readConditionData: `0x${string}`;
+} {
+  return {
+    readConditionAddr: GROUP_LICENSE_READ_CONDITION,
+    readConditionData: encodeAbiParameters(
+      [{ type: "address" }, { type: "address" }, { type: "address[]" }],
+      [LICENSE_READ_CONDITION, LICENSE_TOKEN, memberIpIds]
+    ),
+  };
+}
 
 /** Register a group, attach a license, and add initial member IPs. */
 export async function createGroup(

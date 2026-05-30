@@ -22,6 +22,28 @@ export const PUBLIC_SPG_COLLECTION =
 export const IP_ASSET_REGISTRY =
   "0x77319B4031e6eF1250907aa00018B8B1c67a244b" as `0x${string}`;
 
+// --- OpenVault custom CDR read-condition contracts (deployed on Aeneid) --------
+// Authored in `contracts/`, deployed via `scripts/contracts/deploy.mjs`. These
+// turn our two disclosed fallbacks into real on-chain enforcement and are the
+// CDR-hackathon "advanced / composable read conditions" deliverable.
+//
+// AnyOf: OR-composer over sub-conditions. Group: one license for ANY group member
+// unlocks every member vault (composes LICENSE_READ_CONDITION, resolves §8.7).
+// ComputeWorker: vault readable ONLY by an allowlisted compute-worker operator —
+// consumers can never decrypt (real "computable, not downloadable", §C4/§C9).
+export const ANY_OF_READ_CONDITION =
+  "0x97820c14c861d8be1fc7b17a4cb5335312383c8a" as `0x${string}`;
+export const GROUP_LICENSE_READ_CONDITION =
+  "0x58fbf091fedfe898465c1fbef7588a3f7e7128df" as `0x${string}`;
+export const COMPUTE_WORKER_READ_CONDITION =
+  "0x834c06ba613481401df4972a746ddd529b97b5c2" as `0x${string}`;
+
+// The confidential-compute worker operator(s) allowed to decrypt compute-tier
+// vaults. The server signer (WALLET_PRIVATE_KEY) address. Consumers are NOT here,
+// so a consumer's vault read reverts — compute results only, never raw rows.
+export const COMPUTE_WORKER_OPERATOR =
+  "0x29bCb9811A60434514c245629DCE2FE4843E3C50" as `0x${string}`;
+
 export const EXPLORER_IPA = "https://aeneid.explorer.story.foundation/ipa/";
 export const STORYSCAN_TX = "https://aeneid.storyscan.io/tx/";
 

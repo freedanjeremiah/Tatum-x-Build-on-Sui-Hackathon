@@ -50,7 +50,7 @@ async function decryptDataset(
   clients: Clients,
   dataset: Artifact | undefined,
   datasetIpId: `0x${string}`
-): Promise<{ rows: number[][]; plaintext: Uint8Array; licenseTokenId: bigint }> {
+): Promise<{ rows: number[][]; plaintext: Uint8Array }> {
   const uuid = dataset?.vaultUuid;
   if (uuid === undefined || dataset === undefined) {
     throw new Error("compute: dataset has no CDR vault (vaultUuid) — cannot decrypt");
@@ -58,18 +58,17 @@ async function decryptDataset(
   if (!clients.cdr?.consumer?.downloadFile) {
     throw new Error("compute: CDR consumer unavailable");
   }
+  void datasetIpId; // gating is by worker identity, not the dataset license
 
-  // Mint the real compute license token and encode it as accessAuxData.
-  const { mintLicense, encodeAccessAuxData } = await import("../lib/licensing");
-  const termsId = dataset.computeLicenseTermsId ?? dataset.licenseTermsId;
-  if (!termsId) throw new Error("compute: dataset has no compute license terms id");
-  const licenseTokenId = await mintLicense(clients.story, datasetIpId, termsId);
-  const accessAuxData = encodeAccessAuxData([licenseTokenId]);
-
+  // Compute-tier vaults are gated by ComputeWorkerReadCondition: the vault opens
+  // ONLY for an allowlisted worker operator (this CDR client's signer), so no
+  // license token is needed to READ — accessAuxData is unused by that condition.
+  // The consumer separately mints a compute license (payment → royalties); that
+  // is decoupled from decryption access. This also removes the prior double-mint.
   const storageProvider = await heliaProvider();
   const out = await clients.cdr.consumer.downloadFile({
     uuid,
-    accessAuxData,
+    accessAuxData: "0x",
     storageProvider,
     timeoutMs: 120000,
   });
@@ -83,7 +82,7 @@ async function decryptDataset(
     plaintext.fill(0); // wipe before propagating — never leave decrypted bytes in memory
     throw e;
   }
-  return { rows, plaintext, licenseTokenId };
+  return { rows, plaintext };
 }
 
 /** Parse decrypted plaintext into a numeric matrix. Accepts a few shapes. */
@@ -150,12 +149,10 @@ export async function runComputeJob(
   let plaintext: Uint8Array | null = null;
   let rows: number[][] | null = null;
   let scratchCleared = false;
-  let licenseTokenId: bigint | undefined;
   try {
     const dec = await decryptDataset(clients, input.dataset, input.datasetIpId);
     plaintext = dec.plaintext;
     rows = dec.rows;
-    licenseTokenId = dec.licenseTokenId;
 
     // STEP 4: run the ALLOWLISTED algorithm over the plaintext rows.
     const algoOut = algo.run(rows, input.params) as Record<string, unknown>;
@@ -221,7 +218,6 @@ export async function runComputeJob(
       isolationMode: ISOLATION_MODE,
       decryptCalled: true,
       scratchCleared,
-      licenseTokenId: licenseTokenId !== undefined ? licenseTokenId.toString() : undefined,
       warning,
     };
   } catch (e) {

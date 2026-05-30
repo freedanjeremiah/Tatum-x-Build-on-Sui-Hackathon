@@ -9,6 +9,8 @@ import {
   OWNER_WRITE_CONDITION,
   LICENSE_READ_CONDITION,
   LICENSE_TOKEN,
+  COMPUTE_WORKER_READ_CONDITION,
+  COMPUTE_WORKER_OPERATOR,
 } from "./constants";
 import { buildIpaMetadata, type BuildIpaMetadataArgs } from "./metadata";
 import { pinFile } from "./storage";
@@ -240,9 +242,13 @@ export async function uploadCompute(clients: Clients, input: ComputeInput): Prom
 
   const storageProvider = await heliaProvider();
   const writeConditionData = encodeAbiParameters([{ type: "address" }], [owner]);
-  const readConditionDataReal = encodeAbiParameters(
-    [{ type: "address" }, { type: "address" }],
-    [LICENSE_TOKEN, ipId]
+  // Compute tier: gate the vault by ComputeWorkerReadCondition so ONLY the
+  // allowlisted confidential-compute worker can decrypt — a consumer's read
+  // reverts. The consumer still mints a compute license (payment → royalties);
+  // decryption access is the worker's, not the consumer's. (SPEC §C4/§C9.)
+  const computeReadData = encodeAbiParameters(
+    [{ type: "address[]" }],
+    [[COMPUTE_WORKER_OPERATOR]]
   );
   const up = await cdr.uploader.uploadFile({
     content: input.bytes,
@@ -250,9 +256,9 @@ export async function uploadCompute(clients: Clients, input: ComputeInput): Prom
     globalPubKey: await cdr.observer.getGlobalPubKey(),
     updatable: false,
     writeConditionAddr: OWNER_WRITE_CONDITION,
-    readConditionAddr: LICENSE_READ_CONDITION,
+    readConditionAddr: COMPUTE_WORKER_READ_CONDITION,
     writeConditionData,
-    readConditionData: readConditionDataReal,
+    readConditionData: computeReadData,
     accessAuxData: "0x",
   });
 
