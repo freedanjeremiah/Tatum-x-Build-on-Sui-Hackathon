@@ -15,8 +15,10 @@ export const ROYALTY_POLICY_LAP =
   "0xBe54FB168b3c982b7AaE60dB6CF75Bd8447b390E" as `0x${string}`;
 export const EVEN_SPLIT_GROUP_POOL =
   "0xf96f2c30b41Cb6e0290de43C8528ae83d4f33F89" as `0x${string}`;
+// SPGNFT collection uploads mint from (public minting enabled). Created via
+// scripts/00-create-collection.ts on Aeneid; verified publicMinting()==true.
 export const PUBLIC_SPG_COLLECTION =
-  "0xc32A8a0FF3beDDDa58393d022aF433e78739FAbc" as `0x${string}`;
+  "0x0a26682c8E6e8eAe0b6F643C8Df4aE6aaf2791A6" as `0x${string}`;
 export const IP_ASSET_REGISTRY =
   "0x77319B4031e6eF1250907aa00018B8B1c67a244b" as `0x${string}`;
 

@@ -39,8 +39,29 @@ export async function makeClientsFromProvider(provider: any, address: `0x${strin
   await initWasm();
   const publicClient = createPublicClient({ chain: aeneid, transport: http(RPC_URL) });
   const walletClient = createWalletClient({ account: address, chain: aeneid, transport: custom(provider) });
+
+  // Ensure the connected wallet is on Aeneid (1315) before any write, so txs
+  // broadcast to the right chain. Without this, a wallet left on another network
+  // makes the SDK's contract reads (e.g. publicMinting()) hit a chain where the
+  // contract has no code and return "0x".
+  try {
+    if ((await walletClient.getChainId()) !== aeneid.id) {
+      await walletClient.switchChain({ id: aeneid.id });
+    }
+  } catch {
+    try {
+      await walletClient.addChain({ chain: aeneid });
+      await walletClient.switchChain({ id: aeneid.id });
+    } catch {
+      throw new Error(`Switch your wallet to Story Aeneid (chain ${aeneid.id}) and retry.`);
+    }
+  }
+
   const cdr = new CDRClient({ network: "testnet", publicClient, walletClient, apiUrl: CDR_API_URL } as any);
-  const realStory = StoryClient.newClient({ transport: custom(provider), account: address, chainId: "aeneid" } as any);
+  // Reads use the dedicated Aeneid RPC (transport); writes are signed by the
+  // wallet. Separating them means SDK contract reads never depend on whatever
+  // network the wallet happens to have selected.
+  const realStory = StoryClient.newClient({ transport: http(RPC_URL), wallet: walletClient, chainId: "aeneid" } as any);
   const story = wrapStory(realStory);
   // Expose `account.address` to match makeClientsFromKey; consumers
   // (artifacts.ownerOf, UploadWizard, worker) all read clients.account.address.
