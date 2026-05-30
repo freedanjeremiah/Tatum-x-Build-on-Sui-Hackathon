@@ -45,10 +45,14 @@ export async function GET(req: Request): Promise<Response> {
     return jsonResponse(artifact);
   }
 
+  const sortParam = url.searchParams.get("sort");
   const artifacts = listArtifacts(db(), {
     tier: url.searchParams.get("tier") ?? undefined,
     modality: url.searchParams.get("modality") ?? undefined,
     q: url.searchParams.get("q") ?? undefined,
+    owner: url.searchParams.get("owner") ?? undefined,
+    tag: url.searchParams.get("tag") ?? undefined,
+    sort: sortParam === "newest" || sortParam === "score" ? sortParam : undefined,
   });
   return jsonResponse(artifacts);
 }
@@ -109,6 +113,10 @@ function parseArtifact(body: unknown): Artifact {
   if (b.groupId !== undefined && b.groupId !== null) {
     if (!isHex(b.groupId)) throw new Error("groupId must be a 0x-hex string");
     a.groupId = b.groupId;
+  }
+  if (b.owner !== undefined && b.owner !== null) {
+    if (!isHex(b.owner)) throw new Error("owner must be a 0x-hex string");
+    a.owner = b.owner;
   }
   if (b.ownerNftTokenId !== undefined && b.ownerNftTokenId !== null) {
     const v = b.ownerNftTokenId;

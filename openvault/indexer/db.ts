@@ -20,7 +20,22 @@ export function openDb(path: string = DEFAULT_DB_PATH): DB {
   db.pragma("journal_mode = WAL");
   const schema = readFileSync(join(HERE, "schema.sql"), "utf8");
   db.exec(schema);
+  migrate(db);
   return db;
+}
+
+/**
+ * Additive migrations for DBs created before a column existed. `CREATE TABLE IF
+ * NOT EXISTS` never alters an existing table, so newly-added columns must be
+ * backfilled with ALTER TABLE. Safe to run on every open (idempotent).
+ */
+function migrate(db: DB): void {
+  const cols = new Set(
+    (db.prepare("PRAGMA table_info(artifacts)").all() as Array<{ name: string }>).map((c) => c.name),
+  );
+  if (!cols.has("owner")) {
+    db.exec("ALTER TABLE artifacts ADD COLUMN owner TEXT");
+  }
 }
 
 // --- (de)serialization helpers ---
