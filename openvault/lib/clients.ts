@@ -38,7 +38,14 @@ export async function makeClientsFromProvider(provider: any, address: `0x${strin
 
   await initWasm();
   const publicClient = createPublicClient({ chain: aeneid, transport: http(RPC_URL) });
-  const walletClient = createWalletClient({ account: address, chain: aeneid, transport: custom(provider) });
+  // timeout 180s + no retries: the user may sit on MetaMask's Blockaid "Review
+  // alert" gate for a while before confirming; the default wallet timeout aborts
+  // too early and surfaces as "Wallet timeout".
+  const walletClient = createWalletClient({
+    account: address,
+    chain: aeneid,
+    transport: custom(provider, { timeout: 180_000, retryCount: 0 }),
+  });
 
   // Ensure the connected wallet is on Aeneid (1315) before any write, so txs
   // broadcast to the right chain. Without this, a wallet left on another network
