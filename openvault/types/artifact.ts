@@ -15,6 +15,8 @@ export interface Artifact {
   parentIpId?: `0x${string}`;
   groupId?: `0x${string}`;
   ownerNftTokenId?: bigint;
+  // EOA (wallet) that registered this IP asset — distinct from the NFT token id.
+  owner?: `0x${string}`;
   createdTx: `0x${string}`;
   // v2:
   computeEnabled?: boolean;
