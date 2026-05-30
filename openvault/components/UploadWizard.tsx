@@ -177,6 +177,10 @@ export default function UploadWizard() {
         throw new Error("Select a tier before submitting.");
       }
 
+      // Record the registering wallet so owner-derived views (profile, "my
+      // tokens") and the owner filter on /api/index work for this artifact.
+      artifact.owner = clients.account.address;
+
       setProgress("Indexing artifact…");
       try {
         await postArtifactToIndex(artifact);
