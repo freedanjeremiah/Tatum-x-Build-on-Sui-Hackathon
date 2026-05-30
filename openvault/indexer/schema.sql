@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS artifacts (
   parentIpId            TEXT,
   groupId               TEXT,
   ownerNftTokenId       TEXT,    -- bigint serialized as decimal string
+  owner                 TEXT,    -- EOA that registered the IP asset (0x-hex)
   createdTx             TEXT,
   computeEnabled        INTEGER, -- 0 / 1 boolean
   allowedAlgoHashes     TEXT,    -- JSON array of strings

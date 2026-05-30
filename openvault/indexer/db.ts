@@ -39,6 +39,7 @@ interface Row {
   parentIpId: string | null;
   groupId: string | null;
   ownerNftTokenId: string | null;
+  owner: string | null;
   createdTx: string | null;
   computeEnabled: number | null;
   allowedAlgoHashes: string | null;
@@ -62,6 +63,7 @@ function toRow(a: Artifact): Row {
     parentIpId: a.parentIpId ?? null,
     groupId: a.groupId ?? null,
     ownerNftTokenId: a.ownerNftTokenId !== undefined ? a.ownerNftTokenId.toString() : null,
+    owner: a.owner ?? null,
     createdTx: a.createdTx,
     computeEnabled: a.computeEnabled === undefined ? null : a.computeEnabled ? 1 : 0,
     allowedAlgoHashes: a.allowedAlgoHashes ? JSON.stringify(a.allowedAlgoHashes) : null,
@@ -88,6 +90,7 @@ function fromRow(r: Row): Artifact {
   if (r.parentIpId !== null) a.parentIpId = r.parentIpId as `0x${string}`;
   if (r.groupId !== null) a.groupId = r.groupId as `0x${string}`;
   if (r.ownerNftTokenId !== null) a.ownerNftTokenId = BigInt(r.ownerNftTokenId);
+  if (r.owner !== null) a.owner = r.owner as `0x${string}`;
   if (r.computeEnabled !== null) a.computeEnabled = r.computeEnabled === 1;
   if (r.allowedAlgoHashes !== null) a.allowedAlgoHashes = JSON.parse(r.allowedAlgoHashes) as string[];
   if (r.computeLicenseTermsId !== null) a.computeLicenseTermsId = r.computeLicenseTermsId;
@@ -99,7 +102,7 @@ function fromRow(r: Row): Artifact {
 const COLUMNS = [
   "ipId", "tier", "modality", "title", "description", "tags", "ipMetadataURI",
   "vaultUuid", "cid", "licenseTermsId", "parentIpId", "groupId", "ownerNftTokenId",
-  "createdTx", "computeEnabled", "allowedAlgoHashes", "computeLicenseTermsId",
+  "owner", "createdTx", "computeEnabled", "allowedAlgoHashes", "computeLicenseTermsId",
   "externalSource", "score",
 ] as const;
 
@@ -126,6 +129,9 @@ export interface ListFilter {
   tier?: string;
   modality?: string;
   q?: string;
+  owner?: string;
+  tag?: string;
+  sort?: "newest" | "score";
 }
 
 /** List artifacts with optional tier/modality filters and a free-text query. */
@@ -146,7 +152,22 @@ export function listArtifacts(db: DB, filter: ListFilter): Artifact[] {
     const like = "%" + filter.q.toLowerCase() + "%";
     params.push(like, like, like);
   }
+  if (filter.owner) {
+    where.push("LOWER(owner) = ?");
+    params.push(filter.owner.toLowerCase());
+  }
+  if (filter.tag) {
+    // tags is a JSON array string; match a quoted token, case-insensitive.
+    where.push("LOWER(tags) LIKE ?");
+    params.push('%"' + filter.tag.toLowerCase() + '"%');
+  }
   const clause = where.length ? " WHERE " + where.join(" AND ") : "";
-  const rows = db.prepare(`SELECT * FROM artifacts${clause}`).all(...params) as Row[];
+  const order =
+    filter.sort === "newest"
+      ? " ORDER BY rowid DESC"
+      : filter.sort === "score"
+        ? " ORDER BY score DESC"
+        : "";
+  const rows = db.prepare(`SELECT * FROM artifacts${clause}${order}`).all(...params) as Row[];
   return rows.map(fromRow);
 }

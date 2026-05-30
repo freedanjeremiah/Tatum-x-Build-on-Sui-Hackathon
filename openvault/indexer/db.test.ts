@@ -186,3 +186,33 @@ test("seeding FIXTURE yields 6 rows", () => {
   for (const a of FIXTURE) upsertArtifact(db, a);
   expect(listArtifacts(db, {})).toHaveLength(6);
 });
+
+test("owner round-trips through upsert/get", () => {
+  const db = openDb(":memory:");
+  const a: Artifact = {
+    ipId: "0xown0000000000000000000000000000000000099",
+    tier: "public",
+    modality: "dataset",
+    title: "Owned",
+    description: "has an owner",
+    tags: ["x"],
+    ipMetadataURI: "ipfs://m",
+    createdTx: "0xtxOwn",
+    owner: "0x29bCb9811A60434514c245629DCE2FE4843E3C50",
+  };
+  upsertArtifact(db, a);
+  const got = getArtifact(db, a.ipId);
+  expect(got?.owner).toBe("0x29bCb9811A60434514c245629DCE2FE4843E3C50");
+});
+
+test("listArtifacts filters by owner (case-insensitive)", () => {
+  const db = openDb(":memory:");
+  const base = {
+    tier: "public" as const, modality: "dataset" as const,
+    description: "d", tags: ["t"], ipMetadataURI: "ipfs://m", createdTx: "0xtx" as `0x${string}`,
+  };
+  upsertArtifact(db, { ...base, ipId: "0xa1", title: "A", owner: "0xAaAa000000000000000000000000000000000001" });
+  upsertArtifact(db, { ...base, ipId: "0xb2", title: "B", owner: "0xBbBb000000000000000000000000000000000002" });
+  const mine = listArtifacts(db, { owner: "0xaaaa000000000000000000000000000000000001" });
+  expect(mine.map((x) => x.ipId)).toEqual(["0xa1"]);
+});
