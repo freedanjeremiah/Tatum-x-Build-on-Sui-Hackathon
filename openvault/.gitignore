@@ -46,3 +46,5 @@ scripts/.last-upload.json
 # indexer sqlite db
 indexer/*.db
 indexer/*.db-*
+
+certificates
