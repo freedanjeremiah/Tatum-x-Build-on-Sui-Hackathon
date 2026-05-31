@@ -186,9 +186,15 @@ export default function ModelCard({ artifact: a }: { artifact: Artifact }) {
             }}
           >
             {a.tags.slice(0, 4).map((tg) => (
-              <span key={tg} className="tag-chip">
+              <Link
+                key={tg}
+                href={`/tags/${encodeURIComponent(tg)}`}
+                onClick={(e) => e.stopPropagation()}
+                className="tag-chip"
+                style={{ textDecoration: "none" }}
+              >
                 {tg}
-              </span>
+              </Link>
             ))}
           </div>
         ) : null}
