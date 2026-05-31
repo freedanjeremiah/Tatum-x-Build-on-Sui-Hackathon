@@ -5,7 +5,7 @@ import { useState } from "react";
 import type { Artifact } from "@/types/artifact";
 import { tierMeta } from "@/lib/tiers";
 import TxLink from "./TxLink";
-import { ModalityChip, TierBadge, TierGlyph } from "./ui/TierBadge";
+import { TierGlyph } from "./ui/TierBadge";
 import DownloadButton from "./DownloadButton";
 import LineageGraph from "./LineageGraph";
 import ReportDialog from "./ReportDialog";
@@ -20,74 +20,52 @@ export default function ArtifactDetail({ artifact }: { artifact: Artifact }) {
   const isCompute = artifact.tier === "compute";
 
   return (
-    <div
-      className="container maxw-artifact"
-      style={{ paddingTop: 26, paddingBottom: 60 }}
-    >
-      {/* breadcrumb */}
-      <div className="meta anim-up" style={{ marginBottom: 18 }}>
-        <Link
-          href="/"
-          style={{ color: "var(--ov-text-faint)" }}
+    <div>
+      {/* Title / tier / modality / breadcrumb are rendered by the artifact
+          layout (the shared tab shell). This Card body renders the dispute
+          chip + report action, description, tags, and the detail grid. */}
+      <div
+        className="anim-up"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 9,
+          flexWrap: "wrap",
+          marginBottom: 12,
+        }}
+      >
+        {disputeId ? (
+          <span
+            className="tier-badge"
+            style={{
+              color: "var(--tier-gated)",
+              borderColor: "var(--tier-gated)",
+              background:
+                "color-mix(in srgb, var(--tier-gated) 12%, transparent)",
+            }}
+          >
+            <span
+              className="tier-dot"
+              style={{
+                background: "var(--tier-gated)",
+                animation: "ov-pulse-ring 1.4s infinite",
+              }}
+            />
+            In dispute #{disputeId}
+          </span>
+        ) : null}
+        <span style={{ flex: 1 }} />
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          onClick={() => setReportOpen(true)}
         >
-          Browse
-        </Link>{" "}
-        / {artifact.modality}
+          <Icon name="flag" size={13} />
+          Report
+        </button>
       </div>
 
-      {/* header */}
       <div className="anim-up" style={{ animationDelay: "40ms" }}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 9,
-            flexWrap: "wrap",
-          }}
-        >
-          <TierBadge tier={artifact.tier} />
-          <ModalityChip modality={artifact.modality} />
-          {disputeId ? (
-            <span
-              className="tier-badge"
-              style={{
-                color: "var(--tier-gated)",
-                borderColor: "var(--tier-gated)",
-                background:
-                  "color-mix(in srgb, var(--tier-gated) 12%, transparent)",
-              }}
-            >
-              <span
-                className="tier-dot"
-                style={{
-                  background: "var(--tier-gated)",
-                  animation: "ov-pulse-ring 1.4s infinite",
-                }}
-              />
-              In dispute #{disputeId}
-            </span>
-          ) : null}
-          <span style={{ flex: 1 }} />
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm"
-            onClick={() => setReportOpen(true)}
-          >
-            <Icon name="flag" size={13} />
-            Report
-          </button>
-        </div>
-
-        <h1
-          className="h1"
-          style={{
-            fontSize: "clamp(28px, 4vw, 40px)",
-            margin: "16px 0 12px",
-            color: "var(--ov-text)",
-          }}
-        >
-          {artifact.title}
-        </h1>
         <p
           style={{
             maxWidth: 620,
