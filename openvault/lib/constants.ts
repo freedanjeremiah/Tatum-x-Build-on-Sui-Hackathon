@@ -1,26 +1,71 @@
 // Story Aeneid testnet constants for OpenVault.
+//
+// Every constant here is env-overrideable so the same code runs against a
+// different network (e.g. Story mainnet, an alternative CDR endpoint, or a
+// future fork) without code edits. Defaults preserve the Aeneid testnet
+// behaviour the rest of the codebase was authored against.
+//
+// Naming: vars are read in this order for each constant:
+//   1. NEXT_PUBLIC_OV_<NAME>   (works in client + server bundles)
+//   2. OV_<NAME>               (server-only override)
+//   3. Aeneid testnet default
+// Browsers only see NEXT_PUBLIC_ vars; the server reads both.
 
-export const RPC_URL = "https://aeneid.storyrpc.io";
-export const CDR_API_URL = "http://172.192.41.96:1317";
+function envStr(name: string, fallback: string): string {
+  const fromPublic = process.env[`NEXT_PUBLIC_OV_${name}`];
+  if (fromPublic && fromPublic.length > 0) return fromPublic;
+  const fromServer = process.env[`OV_${name}`];
+  if (fromServer && fromServer.length > 0) return fromServer;
+  return fallback;
+}
 
-export const OWNER_WRITE_CONDITION =
-  "0x4C9bFC96d7092b590D497A191826C3dA2277c34B" as `0x${string}`;
-export const LICENSE_READ_CONDITION =
-  "0xC0640AD4CF2CaA9914C8e5C44234359a9102f7a3" as `0x${string}`;
-export const LICENSE_TOKEN =
-  "0xFe3838BFb30B34170F00030B52eA4893d8aAC6bC" as `0x${string}`;
-export const ROYALTY_MODULE =
-  "0xD2f60c40fEbccf6311f8B47c4f2Ec6b040400086" as `0x${string}`;
-export const ROYALTY_POLICY_LAP =
-  "0xBe54FB168b3c982b7AaE60dB6CF75Bd8447b390E" as `0x${string}`;
-export const EVEN_SPLIT_GROUP_POOL =
-  "0xf96f2c30b41Cb6e0290de43C8528ae83d4f33F89" as `0x${string}`;
+function envAddr(name: string, fallback: `0x${string}`): `0x${string}` {
+  const v = envStr(name, fallback);
+  if (!/^0x[0-9a-fA-F]{40}$/.test(v)) {
+    throw new Error(
+      `[constants] invalid address override for ${name}: ${v} — must be 0x + 40 hex chars`,
+    );
+  }
+  return v as `0x${string}`;
+}
+
+export const RPC_URL: string = envStr("RPC_URL", "https://aeneid.storyrpc.io");
+export const CDR_API_URL: string = envStr("CDR_API_URL", "http://172.192.41.96:1317");
+
+export const OWNER_WRITE_CONDITION = envAddr(
+  "OWNER_WRITE_CONDITION",
+  "0x4C9bFC96d7092b590D497A191826C3dA2277c34B",
+);
+export const LICENSE_READ_CONDITION = envAddr(
+  "LICENSE_READ_CONDITION",
+  "0xC0640AD4CF2CaA9914C8e5C44234359a9102f7a3",
+);
+export const LICENSE_TOKEN = envAddr(
+  "LICENSE_TOKEN",
+  "0xFe3838BFb30B34170F00030B52eA4893d8aAC6bC",
+);
+export const ROYALTY_MODULE = envAddr(
+  "ROYALTY_MODULE",
+  "0xD2f60c40fEbccf6311f8B47c4f2Ec6b040400086",
+);
+export const ROYALTY_POLICY_LAP = envAddr(
+  "ROYALTY_POLICY_LAP",
+  "0xBe54FB168b3c982b7AaE60dB6CF75Bd8447b390E",
+);
+export const EVEN_SPLIT_GROUP_POOL = envAddr(
+  "EVEN_SPLIT_GROUP_POOL",
+  "0xf96f2c30b41Cb6e0290de43C8528ae83d4f33F89",
+);
 // SPGNFT collection uploads mint from (public minting enabled). Created via
 // scripts/00-create-collection.ts on Aeneid; verified publicMinting()==true.
-export const PUBLIC_SPG_COLLECTION =
-  "0x0a26682c8E6e8eAe0b6F643C8Df4aE6aaf2791A6" as `0x${string}`;
-export const IP_ASSET_REGISTRY =
-  "0x77319B4031e6eF1250907aa00018B8B1c67a244b" as `0x${string}`;
+export const PUBLIC_SPG_COLLECTION = envAddr(
+  "PUBLIC_SPG_COLLECTION",
+  "0x0a26682c8E6e8eAe0b6F643C8Df4aE6aaf2791A6",
+);
+export const IP_ASSET_REGISTRY = envAddr(
+  "IP_ASSET_REGISTRY",
+  "0x77319B4031e6eF1250907aa00018B8B1c67a244b",
+);
 
 // --- OpenVault custom CDR read-condition contracts (deployed on Aeneid) --------
 // Authored in `contracts/`, deployed via `scripts/contracts/deploy.mjs`. These
@@ -31,21 +76,35 @@ export const IP_ASSET_REGISTRY =
 // unlocks every member vault (composes LICENSE_READ_CONDITION, resolves §8.7).
 // ComputeWorker: vault readable ONLY by an allowlisted compute-worker operator —
 // consumers can never decrypt (real "computable, not downloadable", §C4/§C9).
-export const ANY_OF_READ_CONDITION =
-  "0x97820c14c861d8be1fc7b17a4cb5335312383c8a" as `0x${string}`;
-export const GROUP_LICENSE_READ_CONDITION =
-  "0x58fbf091fedfe898465c1fbef7588a3f7e7128df" as `0x${string}`;
-export const COMPUTE_WORKER_READ_CONDITION =
-  "0x834c06ba613481401df4972a746ddd529b97b5c2" as `0x${string}`;
+export const ANY_OF_READ_CONDITION = envAddr(
+  "ANY_OF_READ_CONDITION",
+  "0x97820c14c861d8be1fc7b17a4cb5335312383c8a",
+);
+export const GROUP_LICENSE_READ_CONDITION = envAddr(
+  "GROUP_LICENSE_READ_CONDITION",
+  "0x58fbf091fedfe898465c1fbef7588a3f7e7128df",
+);
+export const COMPUTE_WORKER_READ_CONDITION = envAddr(
+  "COMPUTE_WORKER_READ_CONDITION",
+  "0x834c06ba613481401df4972a746ddd529b97b5c2",
+);
 
 // The confidential-compute worker operator(s) allowed to decrypt compute-tier
 // vaults. The server signer (WALLET_PRIVATE_KEY) address. Consumers are NOT here,
 // so a consumer's vault read reverts — compute results only, never raw rows.
-export const COMPUTE_WORKER_OPERATOR =
-  "0x29bCb9811A60434514c245629DCE2FE4843E3C50" as `0x${string}`;
+export const COMPUTE_WORKER_OPERATOR = envAddr(
+  "COMPUTE_WORKER_OPERATOR",
+  "0x29bCb9811A60434514c245629DCE2FE4843E3C50",
+);
 
-export const EXPLORER_IPA = "https://aeneid.explorer.story.foundation/ipa/";
-export const STORYSCAN_TX = "https://aeneid.storyscan.io/tx/";
+export const EXPLORER_IPA: string = envStr(
+  "EXPLORER_IPA",
+  "https://aeneid.explorer.story.foundation/ipa/",
+);
+export const STORYSCAN_TX: string = envStr(
+  "STORYSCAN_TX",
+  "https://aeneid.storyscan.io/tx/",
+);
 
 // Auto-wrap native IP -> WIP (and auto-approve) for any fee-bearing call. Fees
 // (minting fee, royalties, dispute bonds) are denominated in WIP, but wallets

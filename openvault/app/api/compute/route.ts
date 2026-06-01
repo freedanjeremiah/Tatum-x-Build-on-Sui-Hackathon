@@ -78,6 +78,8 @@ export async function POST(req: Request): Promise<Response> {
 
   // Self-index the result derivative so the read model (browse, leaderboard,
   // parent's "claimable derivatives" count) reflects the run immediately.
+  // If the local index write fails, the on-chain derivative is still real —
+  // we surface the failure as a non-fatal warning instead of swallowing it.
   if (result.status === "done" && result.resultIpId && result.resultTx) {
     try {
       const { upsertArtifact } = await import("@/indexer/db");
@@ -93,16 +95,17 @@ export async function POST(req: Request): Promise<Response> {
         parentIpId: datasetIpId as `0x${string}`,
         createdTx: result.resultTx,
       });
-      // Bump parent compute score (+3) — the indexed-derivative path mirrors
-      // what POST /api/index does for client-side self-index.
       const { getArtifact } = await import("@/indexer/db");
       const parent = getArtifact(db(), datasetIpId);
       if (parent) {
         parent.score = (parent.score ?? 0) + 3;
         upsertArtifact(db(), parent);
       }
-    } catch {
-      // Self-index is best-effort; the metrics + on-chain derivative still stand.
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "unknown error";
+      const note = `server-side index update failed: ${msg}. On-chain derivative is real; only the local read model is stale.`;
+      result.warning = result.warning ? `${result.warning}; ${note}` : note;
+      console.warn("[api/compute] self-index failed:", e);
     }
   }
 

@@ -95,22 +95,34 @@ export function encodeAccessAuxData(tokenIds: bigint[]): `0x${string}` {
 }
 
 /**
- * Mint a license token for `ipId` under `termsId`. The SDK auto-wraps the
- * exact minting fee from native IP -> WIP and auto-approves the royalty module in
- * the same multicall (via WIP_OPTIONS), then mints (maxMintingFee = `fee`,
- * maxRevenueShare = 100). Returns the first minted licenseTokenId.
+ * Mint a license token for `ipId` under `termsId`.
+ *
+ * `maxFeeCap` is a CAP, not an override: the caller declares the maximum fee
+ * (in WIP wei) they are willing to pay. The SDK then auto-wraps EXACTLY the
+ * on-chain `defaultMintingFee` from native IP → WIP and auto-approves the
+ * royalty module in the same multicall (via WIP_OPTIONS), then mints. If the
+ * on-chain fee exceeds `maxFeeCap`, the mint reverts loudly.
+ *
+ * REQUIRED — there is no silent default cap. Pass the explicit ceiling the
+ * caller actually understands. A hidden cap could overcharge a user who saw
+ * one fee in the UI but signed for a higher one.
+ *
+ * Returns the first minted licenseTokenId.
  */
 export async function mintLicense(
   story: any,
   ipId: `0x${string}`,
   termsId: string,
-  fee: bigint = 1_000_000_000_000_000_000n
+  maxFeeCap: bigint,
 ): Promise<bigint> {
+  if (typeof maxFeeCap !== "bigint") {
+    throw new Error("mintLicense: maxFeeCap (bigint) is required — no silent fee cap default");
+  }
   const res = await story.license.mintLicenseTokens({
     licensorIpId: ipId,
     licenseTermsId: BigInt(termsId),
     amount: 1,
-    maxMintingFee: fee,
+    maxMintingFee: maxFeeCap,
     maxRevenueShare: 100,
     ...WIP_OPTIONS,
   });

@@ -235,7 +235,45 @@ export default function GroupPage({
 }
 
 function AccessPanel({ group }: { group: Artifact }) {
-  const [subbed, setSubbed] = useState(false);
+  const [phase, setPhase] = useState<"idle" | "minting" | "done" | "error">(
+    "idle",
+  );
+  const [tokenId, setTokenId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const canSubscribe = !!group.licenseTermsId;
+
+  async function handleSubscribe() {
+    if (!group.licenseTermsId) return;
+    setPhase("minting");
+    setError(null);
+    setTokenId(null);
+    try {
+      const clients = await getClients();
+      const { mintLicense } = await import("@/lib/licensing");
+      // 10 WIP cap — explicit ceiling. Actual fee is whatever the group's
+      // license terms charge on-chain; if higher than this cap, the mint
+      // reverts loudly. No silent default.
+      const { parseEther } = await import("viem");
+      const id = await mintLicense(
+        clients.story,
+        group.ipId,
+        group.licenseTermsId,
+        parseEther("10"),
+      );
+      setTokenId(id.toString());
+      setPhase("done");
+    } catch (e) {
+      setError(
+        e instanceof WalletNotConnectedError
+          ? e.message
+          : e instanceof Error
+            ? e.message
+            : "Subscribe failed.",
+      );
+      setPhase("error");
+    }
+  }
+
   return (
     <div
       className="panel"
@@ -263,7 +301,10 @@ function AccessPanel({ group }: { group: Artifact }) {
           marginTop: 0,
         }}
       >
-        One subscription is intended to unlock every member vault in the family.
+        Mints one license token against the group&apos;s terms. Vaults gated by
+        the deployed <code className="font-mono">GroupLicenseReadCondition</code>{" "}
+        will accept this token as <code className="font-mono">accessAuxData</code>{" "}
+        for ANY member.
       </p>
       <button
         type="button"
@@ -273,24 +314,45 @@ function AccessPanel({ group }: { group: Artifact }) {
           background: "var(--tier-group)",
           color: "#fff",
           boxShadow: "3px 3px 0 var(--ov-navy)",
+          opacity: canSubscribe ? 1 : 0.55,
+          cursor: canSubscribe ? "pointer" : "not-allowed",
         }}
-        onClick={() => setSubbed(true)}
+        disabled={!canSubscribe || phase === "minting"}
+        onClick={handleSubscribe}
       >
-        <Icon name="key" size={15} />
-        Subscribe to unlock family
+        {phase === "minting" ? <Spinner /> : <Icon name="key" size={15} />}
+        {phase === "minting" ? "Minting…" : "Subscribe to unlock family"}
       </button>
-      {subbed ? (
+      {!canSubscribe ? (
         <div style={{ marginTop: 12 }}>
-          <DisclosureStrip tone="gated" icon="shield">
-            Group-license subscribe is a stub — the CDR contract path is not
-            wired. Members remain gated per-IP below.
+          <DisclosureStrip tone="gated" icon="flag">
+            This group has no license terms id indexed — subscribe is disabled
+            until a terms id is attached to the group.
+          </DisclosureStrip>
+        </div>
+      ) : null}
+      {phase === "done" && tokenId ? (
+        <div style={{ marginTop: 12 }}>
+          <DisclosureStrip tone="public" icon="check">
+            License token #
+            <span className="font-mono" style={{ fontSize: 12 }}>{tokenId}</span>{" "}
+            minted. Present it as accessAuxData on any member vault to unlock.
+          </DisclosureStrip>
+        </div>
+      ) : null}
+      {phase === "error" && error ? (
+        <div style={{ marginTop: 12 }}>
+          <DisclosureStrip tone="gated" icon="flag">
+            {error}
           </DisclosureStrip>
         </div>
       ) : null}
       <div style={{ marginTop: 14 }}>
-        <DisclosureStrip tone="gated" icon="flag">
-          <strong>SPEC §8.7</strong> — group license → member-vault unlock is
-          unconfirmed in CDR; per-IP gating fallback applied.
+        <DisclosureStrip tone="public" icon="shield">
+          §8.7 wired: GROUP_LICENSE_READ_CONDITION is deployed and member vaults
+          accept any holder of a valid license on the group&apos;s terms. If a
+          specific member was sealed under per-IP gating, that fallback still
+          applies.
         </DisclosureStrip>
       </div>
       {group.licenseTermsId ? (

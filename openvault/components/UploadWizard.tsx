@@ -60,6 +60,7 @@ export default function UploadWizard() {
   const [progress, setProgress] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<Artifact | null>(null);
+  const [indexWarning, setIndexWarning] = useState<string | null>(null);
 
   const steps = useMemo<StepId[]>(
     () => ["artifact", "details", "tier", "lineage", "review"],
@@ -182,13 +183,17 @@ export default function UploadWizard() {
       artifact.owner = clients.account.address;
 
       setProgress("Indexing artifact…");
+      let indexWarning: string | undefined;
       try {
         await postArtifactToIndex(artifact);
       } catch (idxErr) {
+        const msg = idxErr instanceof Error ? idxErr.message : "unknown error";
+        indexWarning = `local index update failed: ${msg}. On-chain registration is real and your ipId is final; the artifact may take longer to appear in browse until the indexer catches up.`;
         // eslint-disable-next-line no-console
         console.warn("[upload] self-index failed:", idxErr);
       }
 
+      if (indexWarning) setIndexWarning(indexWarning);
       setResult(artifact);
     } catch (e) {
       setError(
@@ -201,7 +206,7 @@ export default function UploadWizard() {
   }
 
   if (result) {
-    return <SuccessScreen artifact={result} />;
+    return <SuccessScreen artifact={result} indexWarning={indexWarning} />;
   }
 
   return (
@@ -924,7 +929,13 @@ function StepReview({
   );
 }
 
-function SuccessScreen({ artifact }: { artifact: Artifact }) {
+function SuccessScreen({
+  artifact,
+  indexWarning,
+}: {
+  artifact: Artifact;
+  indexWarning?: string | null;
+}) {
   const t = tierMeta(artifact.tier);
   const sealed = artifact.tier !== "public";
   return (
@@ -991,6 +1002,13 @@ function SuccessScreen({ artifact }: { artifact: Artifact }) {
             </ReviewRow>
           ) : null}
         </div>
+        {indexWarning ? (
+          <div style={{ marginTop: 18, maxWidth: 520, marginLeft: "auto", marginRight: "auto", textAlign: "left" }}>
+            <DisclosureStrip tone="gated" icon="flag">
+              {indexWarning}
+            </DisclosureStrip>
+          </div>
+        ) : null}
         <div
           style={{
             display: "flex",

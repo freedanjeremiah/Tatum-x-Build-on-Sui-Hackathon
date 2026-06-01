@@ -43,11 +43,40 @@ export interface ComputeJob {
  * "rejected" run (algorithm not on the dataset allowlist) where `decryptCalled`
  * is provably false: the worker refused before any decryption.
  */
+/** Sim quote shape (server-only) — declared here so client code can type-check
+ *  it without importing node:crypto via lib/tee-sim. */
+export interface SimulatedQuoteInfo {
+  kind: "sim-sgx-quote";
+  header: {
+    teeType: "SGX-SIM";
+    version: 1;
+    qeSvn: number;
+    pceSvn: number;
+    qeVendorId: string;
+  };
+  body: {
+    mrEnclave: `0x${string}`;
+    mrSigner: `0x${string}`;
+    isvProdId: number;
+    isvSvn: number;
+    reportData: `0x${string}`;
+  };
+  signature: `0x${string}`;
+  generatedAt: string;
+  disclosure: string;
+}
+
 export interface AttestationInfo {
   validatorAttestationEnabled: boolean;
   enforced: boolean;
   untrustedValidators: number;
-  workerIsolation: "enclave" | "plain-server";
+  /** "enclave-sim" = simulated TEE for development; honestly disclosed as not
+   *  hardware-attested. "enclave" = real attested SGX/TDX in production. */
+  workerIsolation: "enclave" | "enclave-sim" | "plain-server";
+  /** Present iff workerIsolation === "enclave-sim". Sim verification result. */
+  simQuote?: SimulatedQuoteInfo;
+  /** Present iff workerIsolation === "enclave-sim". `true` = sim sig verified. */
+  simVerified?: boolean;
 }
 
 export interface ComputeJobResult {

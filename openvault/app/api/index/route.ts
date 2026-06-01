@@ -28,6 +28,15 @@ function db(): DB {
   return _db;
 }
 
+/** Read an integer env override; fall back to the supplied default. Used by the
+ *  leaderboard scoring weights so an operator can re-tune without code edits. */
+function numEnv(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const v = Number(raw);
+  return Number.isFinite(v) ? v : fallback;
+}
+
 // JSON.stringify replacer: bigint (ownerNftTokenId) → decimal string.
 function jsonResponse(data: unknown, status = 200): Response {
   const body = JSON.stringify(data, (_k, v) => (typeof v === "bigint" ? v.toString() : v));
@@ -173,14 +182,16 @@ export async function POST(req: Request): Promise<Response> {
       artifact.score = existing.score;
     }
     // First-insert baseline by tier — gated/compute carry real fees, so they
-    // start higher. Derivatives bump the parent score below.
+    // start higher. Derivatives bump the parent score below. Weights are
+    // env-overridable so an operator can re-tune the leaderboard without code
+    // changes (e.g. OV_SCORE_BASELINE_PUBLIC=2).
     if (!existing && artifact.score === undefined) {
       const baseline: Record<string, number> = {
-        public: 1,
-        private: 1,
-        gated: 5,
-        group: 3,
-        compute: 10,
+        public: numEnv("OV_SCORE_BASELINE_PUBLIC", 1),
+        private: numEnv("OV_SCORE_BASELINE_PRIVATE", 1),
+        gated: numEnv("OV_SCORE_BASELINE_GATED", 5),
+        group: numEnv("OV_SCORE_BASELINE_GROUP", 3),
+        compute: numEnv("OV_SCORE_BASELINE_COMPUTE", 10),
       };
       artifact.score = baseline[artifact.tier] ?? 1;
     }
@@ -194,10 +205,10 @@ export async function POST(req: Request): Promise<Response> {
       if (parent) {
         const weight =
           parent.tier === "compute"
-            ? 3
+            ? numEnv("OV_SCORE_DERIV_COMPUTE", 3)
             : parent.tier === "gated"
-              ? 2
-              : 1;
+              ? numEnv("OV_SCORE_DERIV_GATED", 2)
+              : numEnv("OV_SCORE_DERIV_DEFAULT", 1);
         parent.score = (parent.score ?? 0) + weight;
         upsertArtifact(db(), parent);
       }

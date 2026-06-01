@@ -38,6 +38,8 @@ async function main() {
       creators: [{ name: "OpenVault Demo", address: owner, contributionPercent: 100 }],
       modality: "dataset",
     },
+    // Explicit terms — no silent default.
+    terms: { rev: 5, fee: 1n },
     allowedAlgoHashes: ALLOWED_ALGOS,
   });
   const datasetIpId = dataset.ipId;

@@ -54,7 +54,7 @@ export default function ComputeJobPanel({ artifact }: { artifact: Artifact }) {
         setPhase("done");
         if (res.resultIpId && res.resultTx) {
           try {
-            await fetch("/api/index", {
+            const resp = await fetch("/api/index", {
               method: "POST",
               headers: { "content-type": "application/json" },
               body: JSON.stringify({
@@ -70,8 +70,15 @@ export default function ComputeJobPanel({ artifact }: { artifact: Artifact }) {
                 createdTx: res.resultTx,
               }),
             });
-          } catch {
-            // best-effort
+            if (!resp.ok) {
+              const txt = await resp.text().catch(() => "");
+              const note = `local index update failed (${resp.status}). On-chain derivative is real and still flows royalties; only the local read model is stale.${txt ? " " + txt.slice(0, 200) : ""}`;
+              setResult({ ...res, warning: res.warning ? `${res.warning}; ${note}` : note });
+            }
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : "unknown error";
+            const note = `local index update failed: ${msg}. On-chain derivative is real and still flows royalties; only the local read model is stale.`;
+            setResult({ ...res, warning: res.warning ? `${res.warning}; ${note}` : note });
           }
         }
       } else if (res.status === "rejected") {
@@ -458,6 +465,23 @@ function IsolationStrip({
   mode?: string;
   decryptCalled?: boolean;
 }) {
+  // Detect mode from the disclosure string the worker returned. We don't
+  // hardcode "plain server" — the UI must reflect whatever the worker says.
+  const lower = (mode ?? "").toLowerCase();
+  const isSim = lower.includes("simulated enclave") || lower.includes("enclave-sim");
+  const isEnclave = !isSim && lower.includes("attested enclave");
+  const headline = isEnclave
+    ? "Isolation: attested enclave (production)."
+    : isSim
+      ? "Isolation: simulated enclave (TEE-SIM, NOT hardware-attested — development only)."
+      : mode
+        ? `Isolation: ${mode}.`
+        : "Isolation: plain server (operator-trusted, demo).";
+  const body = isEnclave
+    ? "Worker measurements are verified by hardware attestation. CDR delivers keys only; privacy comes from the attested worker + the algorithm allowlist."
+    : isSim
+      ? "The simulator exercises the same verification code path real attestation would take, but the signature is HMAC over a server-side secret — not chained to Intel's quoting enclave. Do not trust for production data."
+      : "The operator can see plaintext in memory. A production deployment would run in an attested SGX/TDX enclave. CDR does key-delivery only; compute privacy comes from worker isolation + the algorithm allowlist, not from CDR.";
   return (
     <div
       style={{
@@ -480,25 +504,19 @@ function IsolationStrip({
         <Icon name="shield" size={16} />
       </span>
       <div>
-        <strong>
-          Isolation: plain server (operator-trusted, demo
-          {mode && mode !== "plain-server" ? ` · ${mode}` : ""}).
-        </strong>{" "}
-        The operator can see plaintext in memory. A production deployment would
-        run in an attested SGX/TDX enclave. CDR does key-delivery only; compute
-        privacy comes from worker isolation + the algorithm allowlist, not from
-        CDR.
-        {typeof decryptCalled === "boolean" ? (
+        <strong>{headline}</strong> {body}
+        {typeof decryptCalled === "boolean" || mode ? (
           <div
             className="font-mono"
             style={{
               marginTop: 6,
               fontSize: 11,
               color: "var(--ov-text-faint)",
+              wordBreak: "break-word",
             }}
           >
-            isolationMode: {mode ?? "plain-server"} · decryptCalled:{" "}
-            {String(decryptCalled)}
+            isolationMode: {mode ?? "(declared from env)"}
+            {typeof decryptCalled === "boolean" ? ` · decryptCalled: ${String(decryptCalled)}` : ""}
           </div>
         ) : null}
       </div>

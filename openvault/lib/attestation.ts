@@ -32,9 +32,16 @@ export function getAttestationConfig(): AttestationConfig | undefined {
   return cfg;
 }
 
-/** Compute-worker isolation mode. "enclave" only if the operator declares one. */
-export function workerIsolation(): "enclave" | "plain-server" {
-  return process.env.WORKER_ISOLATION_MODE === "enclave" ? "enclave" : "plain-server";
+/** Compute-worker isolation mode.
+ *  - "enclave"     — operator declares this process runs in an attested SGX/TDX enclave.
+ *  - "enclave-sim" — TEE simulator (lib/tee-sim) is active; HONESTLY disclosed as
+ *                    NOT hardware-attested. Operator can still see plaintext.
+ *  - "plain-server" — default; plain Node process. */
+export function workerIsolation(): "enclave" | "enclave-sim" | "plain-server" {
+  const mode = process.env.WORKER_ISOLATION_MODE;
+  if (mode === "enclave") return "enclave";
+  if (mode === "enclave-sim" || mode === "sim") return "enclave-sim";
+  return "plain-server";
 }
 
 /** Expected measurements present -> hard enforcement; else report-only. */
@@ -47,9 +54,16 @@ export function isolationDisclosure(info: AttestationInfo): string {
   const cdr = info.validatorAttestationEnabled
     ? info.enforced ? "CDR validator TEEs attested (enforced)" : "CDR validator TEEs attested (report-only)"
     : "CDR validator TEEs not attested";
-  const worker = info.workerIsolation === "enclave"
-    ? "compute worker in attested enclave"
-    : "compute worker on plain server (operator-trusted, demo)";
+  const worker =
+    info.workerIsolation === "enclave"
+      ? "compute worker in attested enclave"
+      : info.workerIsolation === "enclave-sim"
+        ? info.simVerified === true
+          ? "compute worker in SIMULATED enclave (TEE-SIM, sim-signature verified — NOT hardware-attested)"
+          : info.simVerified === false
+            ? "compute worker in SIMULATED enclave (TEE-SIM, sim-signature INVALID — NOT hardware-attested)"
+            : "compute worker in SIMULATED enclave (TEE-SIM declared but no sim-attestation step reached — NOT hardware-attested)"
+        : "compute worker on plain server (operator-trusted, demo)";
   return `${worker}; ${cdr}`;
 }
 

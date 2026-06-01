@@ -20,7 +20,20 @@ import { heliaProvider } from "../lib/storage";
 import { getAlgo } from "./algoRegistry";
 import type { ComputeJobResult, Artifact, AttestationInfo } from "../types/artifact";
 
-const ISOLATION_MODE = "plain-server (operator-trusted, demo)";
+/** Honest isolation disclosure based on the currently-declared isolation mode,
+ *  whether or not CDR validator attestation actually ran. Used on every result
+ *  path (rejected / failed / done) so the UI never silently shows "plain-server"
+ *  when the operator declared enclave-sim. */
+async function currentIsolationDisclosure(info?: AttestationInfo): Promise<string> {
+  const { workerIsolation, isolationDisclosure } = await import("../lib/attestation");
+  const merged: AttestationInfo = info ?? {
+    validatorAttestationEnabled: false,
+    enforced: false,
+    untrustedValidators: 0,
+    workerIsolation: workerIsolation(),
+  };
+  return isolationDisclosure(merged);
+}
 
 /** Input for one confidential-compute run. */
 export interface WorkerInput {
@@ -78,7 +91,13 @@ async function decryptDataset(
   });
   const plaintext = out?.content as Uint8Array;
   if (!plaintext) throw new Error("compute: CDR returned no content");
-  const attestation: AttestationInfo = { validatorAttestationEnabled: !!attCfg, enforced: attestationEnforced(attCfg), untrustedValidators, workerIsolation: workerIsolation() };
+  const isolation = workerIsolation();
+  const attestation: AttestationInfo = {
+    validatorAttestationEnabled: !!attCfg,
+    enforced: attestationEnforced(attCfg),
+    untrustedValidators,
+    workerIsolation: isolation,
+  };
 
   let rows: number[][];
   try {
@@ -135,7 +154,7 @@ export async function runComputeJob(
       status: "rejected",
       reason: "algorithm not on dataset allowlist (or not registered)",
       decryptCalled: false,
-      isolationMode: ISOLATION_MODE,
+      isolationMode: await currentIsolationDisclosure(),
     };
   }
 
@@ -150,6 +169,39 @@ export async function runComputeJob(
     clients = (await makeClientsFromKey(pk as `0x${string}`)) as unknown as Clients;
   }
 
+  // Pre-attestation: if the operator declared enclave-sim mode, generate +
+  // verify a sim TEE quote BEFORE any decryption. The sim verification result
+  // is bound to the algoHash and the worker EOA, then surfaced in the result.
+  // This exercises the same code path real hardware attestation would take.
+  const { workerIsolation: declaredIsolation } = await import("../lib/attestation");
+  const isolationModeNow = declaredIsolation();
+  let preSimQuote: import("../types/artifact").SimulatedQuoteInfo | undefined;
+  let preSimVerified: boolean | undefined;
+  if (isolationModeNow === "enclave-sim") {
+    const { generateSimulatedQuote, verifySimulatedQuote } = await import("../lib/tee-sim");
+    const q = generateSimulatedQuote({
+      workerIdentity: clients.account.address as `0x${string}`,
+      algoHash: input.algoHash,
+    });
+    const expectMrEnclave = process.env.WORKER_SIM_EXPECT_MRENCLAVE as `0x${string}` | undefined;
+    const expectMrSigner = process.env.WORKER_SIM_EXPECT_MRSIGNER as `0x${string}` | undefined;
+    const expectMinSvnRaw = process.env.WORKER_SIM_MIN_SVN;
+    const verdict = verifySimulatedQuote(q, {
+      expectedMrEnclave: expectMrEnclave,
+      expectedMrSigner: expectMrSigner,
+      minSecurityVersion: expectMinSvnRaw ? Number(expectMinSvnRaw) : undefined,
+    });
+    preSimQuote = q as unknown as import("../types/artifact").SimulatedQuoteInfo;
+    preSimVerified = verdict.ok;
+    if (!verdict.ok) {
+      // Enforced mismatch is a loud failure: refuse to run rather than silently
+      // pretending the simulator is good. Honest failure beats silent success.
+      throw new Error(
+        "compute worker: enclave-sim verification failed — " + verdict.reasons.join("; ")
+      );
+    }
+  }
+
   // STEP 3: CDR-decrypt the dataset INSIDE the worker.
   let plaintext: Uint8Array | null = null;
   let rows: number[][] | null = null;
@@ -159,7 +211,11 @@ export async function runComputeJob(
     const dec = await decryptDataset(clients, input.dataset, input.datasetIpId);
     plaintext = dec.plaintext;
     rows = dec.rows;
-    attestationOut = dec.attestation;
+    attestationOut = {
+      ...dec.attestation,
+      simQuote: preSimQuote,
+      simVerified: preSimVerified,
+    };
 
     // STEP 4: run the ALLOWLISTED algorithm over the plaintext rows.
     const algoOut = algo.run(rows, input.params) as Record<string, unknown>;
@@ -222,7 +278,7 @@ export async function runComputeJob(
       metrics,
       resultIpId,
       resultTx,
-      isolationMode: attestationOut ? (await import("../lib/attestation")).isolationDisclosure(attestationOut) : ISOLATION_MODE,
+      isolationMode: await currentIsolationDisclosure(attestationOut),
       decryptCalled: true,
       scratchCleared,
       warning,
@@ -234,12 +290,26 @@ export async function runComputeJob(
     const cleared = isCleared(plaintext, rows);
     plaintext = null;
     rows = null;
+    // Build an AttestationInfo even on failure — the sim quote (if present)
+    // is generated BEFORE decrypt, so it should travel with the result so the
+    // caller can see what was attested even when the job fell over downstream.
+    const failedAttestation: AttestationInfo | undefined = preSimQuote
+      ? {
+          validatorAttestationEnabled: false,
+          enforced: false,
+          untrustedValidators: 0,
+          workerIsolation: isolationModeNow,
+          simQuote: preSimQuote,
+          simVerified: preSimVerified,
+        }
+      : undefined;
     return {
       status: "failed",
       reason: (e as Error).message,
-      isolationMode: ISOLATION_MODE,
+      isolationMode: await currentIsolationDisclosure(failedAttestation),
       decryptCalled: true,
       scratchCleared: cleared,
+      attestation: failedAttestation,
     };
   }
 }

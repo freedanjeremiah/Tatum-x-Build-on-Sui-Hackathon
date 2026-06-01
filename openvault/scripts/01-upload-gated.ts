@@ -26,6 +26,8 @@ async function main() {
       creators: [{ name: "OpenVault Demo", address: owner, contributionPercent: 100 }],
       modality: "model",
     },
+    // Explicit terms — no silent default. 5% rev-share, 1-wei nominal fee.
+    terms: { rev: 5, fee: 1n },
   });
 
   // Persist ids for the download script.

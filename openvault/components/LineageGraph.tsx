@@ -19,22 +19,31 @@ interface LineageGraphProps {
 export default function LineageGraph({ artifact }: LineageGraphProps) {
   const [parents, setParents] = useState<Artifact[]>([]);
   const [children, setChildren] = useState<Artifact[]>([]);
+  const [readError, setReadError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     async function walk() {
-      // Up — at most two levels.
+      // Up — at most two levels. On error we record it AND stop the walk; the
+      // graph honestly tells the user it's partial rather than silently rendering
+      // a misleading "no parent" view.
       const upChain: Artifact[] = [];
       let parentId = artifact.parentIpId;
       let depth = 0;
+      let firstError: string | null = null;
       while (parentId && depth < 2) {
         try {
           const r = await fetch(`/api/index?ipId=${parentId}`);
           const data = (await r.json()) as Artifact | { error: string };
-          if (!data || "error" in data) break;
+          if (!data) break;
+          if ("error" in data) {
+            firstError = firstError ?? `index lookup for parent ${parentId} returned: ${data.error}`;
+            break;
+          }
           upChain.unshift(data);
           parentId = data.parentIpId;
-        } catch {
+        } catch (e) {
+          firstError = firstError ?? `index lookup for parent ${parentId} failed: ${e instanceof Error ? e.message : "unknown error"}`;
           break;
         }
         depth++;
@@ -48,13 +57,14 @@ export default function LineageGraph({ artifact }: LineageGraphProps) {
         if (Array.isArray(all)) {
           downKids = all.filter((a) => a.parentIpId === artifact.ipId).slice(0, 3);
         }
-      } catch {
-        /* best-effort */
+      } catch (e) {
+        firstError = firstError ?? `index lookup for derivatives failed: ${e instanceof Error ? e.message : "unknown error"}`;
       }
 
       if (!cancelled) {
         setParents(upChain);
         setChildren(downKids);
+        setReadError(firstError);
       }
     }
     walk();
@@ -124,6 +134,17 @@ export default function LineageGraph({ artifact }: LineageGraphProps) {
         </span>
         Royalties route upstream per each link&apos;s license terms.
       </p>
+      {readError ? (
+        <p
+          style={{
+            margin: "8px 0 0",
+            fontSize: 11.5,
+            color: "var(--tier-gated)",
+          }}
+        >
+          ⚠ Lineage graph is partial — {readError}
+        </p>
+      ) : null}
     </div>
   );
 }

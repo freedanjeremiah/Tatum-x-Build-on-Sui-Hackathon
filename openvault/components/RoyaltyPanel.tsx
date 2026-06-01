@@ -27,20 +27,28 @@ export default function RoyaltyPanel({ artifact }: RoyaltyPanelProps) {
   const [lastTx, setLastTx] = useState<`0x${string}` | null>(null);
   const [payAmount, setPayAmount] = useState("0.01");
   const [derivativeIds, setDerivativeIds] = useState<string[]>([]);
+  const [derivLoadError, setDerivLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const r = await fetch(`/api/index`);
+        if (!r.ok) {
+          if (!cancelled) setDerivLoadError(`derivatives index returned ${r.status}`);
+          return;
+        }
         const data = (await r.json()) as Artifact[];
         if (!Array.isArray(data) || cancelled) return;
         const kids = data
           .filter((a) => a.parentIpId === artifact.ipId)
           .map((a) => a.ipId);
         setDerivativeIds(kids);
-      } catch {
-        /* best-effort — leave empty */
+      } catch (e) {
+        if (!cancelled)
+          setDerivLoadError(
+            e instanceof Error ? e.message : "derivatives index unreachable",
+          );
       }
     })();
     return () => {
@@ -190,6 +198,17 @@ export default function RoyaltyPanel({ artifact }: RoyaltyPanelProps) {
             {derivativeIds.length} indexed derivative
             {derivativeIds.length === 1 ? "" : "s"} route to this IP.
           </div>
+          {derivLoadError ? (
+            <div
+              style={{
+                fontSize: 11,
+                color: "var(--tier-gated)",
+                marginTop: 6,
+              }}
+            >
+              ⚠ derivatives index error: {derivLoadError}
+            </div>
+          ) : null}
         </div>
         <button
           type="button"

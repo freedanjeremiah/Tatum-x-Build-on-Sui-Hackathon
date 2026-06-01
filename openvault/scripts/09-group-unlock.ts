@@ -5,7 +5,7 @@
 //
 // Run: pnpm real scripts/09-group-unlock.ts
 
-import { encodeAbiParameters } from "viem";
+import { encodeAbiParameters, parseEther } from "viem";
 import { getClients } from "./_util";
 import { uploadGated } from "../lib/artifacts";
 import { groupReadCondition } from "../lib/group";
@@ -53,7 +53,13 @@ async function main() {
 
   // 3) Mint a license for the MEMBER (the "subscription").
   console.log("minting member license (the subscription)...");
-  const tokenId = await mintLicense(clients.story, member.ipId, member.licenseTermsId!);
+  // 10 WIP cap — explicit ceiling. No silent default.
+  const tokenId = await mintLicense(
+    clients.story,
+    member.ipId,
+    member.licenseTermsId!,
+    parseEther("10"),
+  );
   console.log("  license token:", tokenId.toString());
 
   // 4) Read the GROUP vault using the MEMBER license — cross-IP unlock.

@@ -40,7 +40,21 @@ interface UploadInput {
   terms?: { rev: number; fee: bigint };
 }
 
-const DEFAULT_TERMS = { rev: 5, fee: 1n };
+/** Loud assertion for fee-bearing tiers: callers MUST supply explicit terms. No
+ *  silent rev/fee default — the on-chain license terms id is derived from these
+ *  values, so a hidden default could send royalties to the wrong terms or
+ *  charge a user a fee they never agreed to. */
+function requireTerms(
+  input: UploadInput,
+  tierLabel: string,
+): { rev: number; fee: bigint } {
+  if (!input.terms) {
+    throw new Error(
+      `upload ${tierLabel}: missing required \`terms\` ({ rev, fee }) — fee-bearing tiers cannot use silent defaults`,
+    );
+  }
+  return input.terms;
+}
 
 /** Thrown when a gated download fails (no license, or a vault timeout). */
 export class DownloadGateError extends Error {
@@ -75,7 +89,7 @@ export async function uploadGated(clients: Clients, input: UploadInput): Promise
   const owner = ownerOf(clients);
 
   const md = await buildIpaMetadata({ ...input.meta, commercial: true });
-  const terms = await resolveTerms("commercialRemix", input.terms ?? DEFAULT_TERMS);
+  const terms = await resolveTerms("commercialRemix", requireTerms(input, "gated"));
   const reg = await story.ipAsset.registerIpAsset({
     nft: { type: "mint", spgNftContract: PUBLIC_SPG_COLLECTION },
     licenseTermsData: [{ terms }],
@@ -228,7 +242,7 @@ export async function uploadCompute(clients: Clients, input: ComputeInput): Prom
   const md = await buildIpaMetadata({ ...input.meta, commercial: true });
   const reg = await story.ipAsset.registerIpAsset({
     nft: { type: "mint", spgNftContract: PUBLIC_SPG_COLLECTION },
-    licenseTermsData: [{ terms: await resolveTerms("compute", input.terms ?? DEFAULT_TERMS) }],
+    licenseTermsData: [{ terms: await resolveTerms("compute", requireTerms(input, "compute")) }],
     ipMetadata: {
       ipMetadataURI: md.ipMetadataURI,
       ipMetadataHash: md.ipMetadataHash,
@@ -382,6 +396,9 @@ interface DownloadInput {
   ipId: `0x${string}`;
   uuid: number;
   licenseTermsId: string;
+  /** Maximum WIP wei the caller is willing to pay to mint a license. Required
+   *  when `mint !== false`. No silent cap — caller must declare the ceiling. */
+  maxFeeCap?: bigint;
   /** When false, do not mint a license (used to prove the no-token revert). */
   mint?: boolean;
 }
@@ -398,7 +415,17 @@ export async function download(clients: Clients, input: DownloadInput): Promise<
 
   let accessAuxData: string;
   if (shouldMint) {
-    const tokenId = await mintLicense(story, input.ipId, input.licenseTermsId);
+    if (input.maxFeeCap === undefined) {
+      throw new Error(
+        "download(): maxFeeCap (bigint, in WIP wei) is required when mint!=false — no silent fee cap",
+      );
+    }
+    const tokenId = await mintLicense(
+      story,
+      input.ipId,
+      input.licenseTermsId,
+      input.maxFeeCap,
+    );
     accessAuxData = encodeAccessAuxData([tokenId]);
   } else {
     accessAuxData = "0x";

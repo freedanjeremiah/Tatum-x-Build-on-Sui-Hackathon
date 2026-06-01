@@ -24,6 +24,8 @@ async function main() {
       creators: [{ name: "OpenVault Demo", address: owner, contributionPercent: 100 }],
       modality: "model",
     },
+    // Explicit terms — no silent default.
+    terms: { rev: 5, fee: 1n },
   });
   const PARENT = parent.ipId;
   const PARENT_TERMS = parent.licenseTermsId!;

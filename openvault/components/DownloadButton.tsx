@@ -73,11 +73,16 @@ export default function DownloadButton({ artifact }: DownloadButtonProps) {
     try {
       const clients = await getClients();
       const { download } = await import("@/lib/artifacts");
+      // 10 WIP cap — explicit ceiling on what we'll pay to mint the access
+      // license. The actual on-chain fee is whatever the terms charge; if the
+      // terms exceed this cap, the mint reverts loudly. (No silent default.)
+      const { parseEther } = await import("viem");
       const bytes = await download(clients, {
         ipId: artifact.ipId,
         uuid: artifact.vaultUuid ?? 0,
         licenseTermsId: artifact.licenseTermsId ?? "",
         mint: !isPrivate,
+        maxFeeCap: parseEther("10"),
       });
       triggerBrowserDownload(bytes);
       setPhase("done");
