@@ -142,18 +142,22 @@ export default function DatasetPreview({
   useEffect(() => {
     if (locked || !cid) return;
     let cancelled = false;
-    setState({ phase: "loading" });
-    buildPreview(cid)
-      .then((preview) => {
+    // State updates live in a nested async fn (not the synchronous effect body)
+    // so the loading reset doesn't trigger the set-state-in-effect cascade.
+    const run = async () => {
+      setState({ phase: "loading" });
+      try {
+        const preview = await buildPreview(cid);
         if (!cancelled) setState({ phase: "ready", preview });
-      })
-      .catch((e: unknown) => {
+      } catch (e: unknown) {
         if (!cancelled)
           setState({
             phase: "error",
             message: e instanceof Error ? e.message : "Preview failed.",
           });
-      });
+      }
+    };
+    run();
     return () => {
       cancelled = true;
     };

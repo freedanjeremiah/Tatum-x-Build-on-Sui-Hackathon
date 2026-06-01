@@ -22,7 +22,9 @@ let _db: DB | null = null;
 
 function db(): DB {
   if (_db) return _db;
-  _db = openDb();
+  // OPENVAULT_DB_PATH lets tests point at an isolated/in-memory DB so they never
+  // write throwaway rows into the real index (indexer/openvault.db).
+  _db = openDb(process.env.OPENVAULT_DB_PATH || undefined);
   return _db;
 }
 

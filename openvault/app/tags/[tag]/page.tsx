@@ -18,18 +18,23 @@ export default function TagPage({
 
   useEffect(() => {
     const controller = new AbortController();
-    setLoading(true);
-    fetch(`/api/index?tag=${encodeURIComponent(tag)}`, {
-      signal: controller.signal,
-    })
-      .then((r) => r.json())
-      .then((data: Artifact[]) => {
+    // State updates live in a nested async fn (not the synchronous effect body)
+    // so the loading reset doesn't trigger the set-state-in-effect cascade.
+    const run = async () => {
+      setLoading(true);
+      try {
+        const r = await fetch(`/api/index?tag=${encodeURIComponent(tag)}`, {
+          signal: controller.signal,
+        });
+        const data: Artifact[] = await r.json();
         if (Array.isArray(data)) setArtifacts(data);
-      })
-      .catch((e) => {
-        if (e?.name !== "AbortError") setArtifacts([]);
-      })
-      .finally(() => setLoading(false));
+      } catch (e: unknown) {
+        if ((e as { name?: string })?.name !== "AbortError") setArtifacts([]);
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    };
+    run();
     return () => controller.abort();
   }, [tag]);
 

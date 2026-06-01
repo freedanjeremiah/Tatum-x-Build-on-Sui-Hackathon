@@ -1,5 +1,11 @@
 import { test, expect } from "vitest";
-import { POST, GET } from "./route";
+
+// Isolate the route's datastore BEFORE importing it — the route lazily opens
+// `process.env.OPENVAULT_DB_PATH` on first request, so an in-memory DB here means
+// these tests never pollute the real index (indexer/openvault.db).
+process.env.OPENVAULT_DB_PATH = ":memory:";
+
+const { POST, GET } = await import("./route");
 
 // NOTE: the route's parseArtifact validates ipId/createdTx as strict 0x-hex
 // (`/^0x[0-9a-fA-F]+$/`). The plan's sample fixtures ("0xapi…001", "0xtxApi")

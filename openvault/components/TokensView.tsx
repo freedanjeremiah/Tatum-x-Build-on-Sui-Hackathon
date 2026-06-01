@@ -28,27 +28,24 @@ export default function TokensView() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!address) {
-      setResult(null);
-      setError(null);
-      return;
-    }
+    if (!address) return;
     let cancelled = false;
-    setLoading(true);
-    setError(null);
-    setResult(null);
-    listLicenseTokens(address)
-      .then((r) => {
+    // State updates live in a nested async fn (not the synchronous effect body)
+    // so the loading reset doesn't trigger the set-state-in-effect cascade.
+    const run = async () => {
+      setLoading(true);
+      setError(null);
+      setResult(null);
+      try {
+        const r = await listLicenseTokens(address);
         if (!cancelled) setResult(r);
-      })
-      .catch((e: unknown) => {
-        if (!cancelled) {
-          setError(e instanceof Error ? e.message : String(e));
-        }
-      })
-      .finally(() => {
+      } catch (e: unknown) {
+        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+      } finally {
         if (!cancelled) setLoading(false);
-      });
+      }
+    };
+    run();
     return () => {
       cancelled = true;
     };
