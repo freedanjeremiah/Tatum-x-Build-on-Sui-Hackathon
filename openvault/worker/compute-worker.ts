@@ -18,7 +18,7 @@ import { allowlistCheck } from "../lib/compute";
 import { registerDerivative, type Clients } from "../lib/artifacts";
 import { heliaProvider } from "../lib/storage";
 import { getAlgo } from "./algoRegistry";
-import type { ComputeJobResult, Artifact } from "../types/artifact";
+import type { ComputeJobResult, Artifact, AttestationInfo } from "../types/artifact";
 
 const ISOLATION_MODE = "plain-server (operator-trusted, demo)";
 
@@ -50,7 +50,7 @@ async function decryptDataset(
   clients: Clients,
   dataset: Artifact | undefined,
   datasetIpId: `0x${string}`
-): Promise<{ rows: number[][]; plaintext: Uint8Array }> {
+): Promise<{ rows: number[][]; plaintext: Uint8Array; attestation: AttestationInfo }> {
   const uuid = dataset?.vaultUuid;
   if (uuid === undefined || dataset === undefined) {
     throw new Error("compute: dataset has no CDR vault (vaultUuid) — cannot decrypt");
@@ -65,15 +65,20 @@ async function decryptDataset(
   // license token is needed to READ — accessAuxData is unused by that condition.
   // The consumer separately mints a compute license (payment → royalties); that
   // is decoupled from decryption access. This also removes the prior double-mint.
+  const { getAttestationConfig, attestationEnforced, workerIsolation } = await import("../lib/attestation");
+  const attCfg = getAttestationConfig();
+  let untrustedValidators = 0;
   const storageProvider = await heliaProvider();
   const out = await clients.cdr.consumer.downloadFile({
     uuid,
     accessAuxData: "0x",
     storageProvider,
     timeoutMs: 120000,
+    ...(attCfg ? { attestationConfig: attCfg, onInvalidPartial: () => { untrustedValidators++; } } : {}),
   });
   const plaintext = out?.content as Uint8Array;
   if (!plaintext) throw new Error("compute: CDR returned no content");
+  const attestation: AttestationInfo = { validatorAttestationEnabled: !!attCfg, enforced: attestationEnforced(attCfg), untrustedValidators, workerIsolation: workerIsolation() };
 
   let rows: number[][];
   try {
@@ -82,7 +87,7 @@ async function decryptDataset(
     plaintext.fill(0); // wipe before propagating — never leave decrypted bytes in memory
     throw e;
   }
-  return { rows, plaintext };
+  return { rows, plaintext, attestation };
 }
 
 /** Parse decrypted plaintext into a numeric matrix. Accepts a few shapes. */
@@ -149,10 +154,12 @@ export async function runComputeJob(
   let plaintext: Uint8Array | null = null;
   let rows: number[][] | null = null;
   let scratchCleared = false;
+  let attestationOut: AttestationInfo | undefined;
   try {
     const dec = await decryptDataset(clients, input.dataset, input.datasetIpId);
     plaintext = dec.plaintext;
     rows = dec.rows;
+    attestationOut = dec.attestation;
 
     // STEP 4: run the ALLOWLISTED algorithm over the plaintext rows.
     const algoOut = algo.run(rows, input.params) as Record<string, unknown>;
@@ -215,10 +222,11 @@ export async function runComputeJob(
       metrics,
       resultIpId,
       resultTx,
-      isolationMode: ISOLATION_MODE,
+      isolationMode: attestationOut ? (await import("../lib/attestation")).isolationDisclosure(attestationOut) : ISOLATION_MODE,
       decryptCalled: true,
       scratchCleared,
       warning,
+      attestation: attestationOut,
     };
   } catch (e) {
     // On any failure, still wipe whatever plaintext we hold — then verify it.
