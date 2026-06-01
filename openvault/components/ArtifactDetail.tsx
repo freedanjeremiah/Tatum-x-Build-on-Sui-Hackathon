@@ -9,12 +9,15 @@ import { TierGlyph } from "./ui/TierBadge";
 import DownloadButton from "./DownloadButton";
 import LineageGraph from "./LineageGraph";
 import ReportDialog from "./ReportDialog";
+import CounterDisputeDialog from "./CounterDisputeDialog";
 import RoyaltyPanel from "./RoyaltyPanel";
 import Icon from "./ui/Icon";
 
 export default function ArtifactDetail({ artifact }: { artifact: Artifact }) {
   const [reportOpen, setReportOpen] = useState(false);
+  const [counterOpen, setCounterOpen] = useState(false);
   const [disputeId, setDisputeId] = useState<string | null>(null);
+  const [counterTx, setCounterTx] = useState<`0x${string}` | null>(null);
 
   const t = tierMeta(artifact.tier);
   const isCompute = artifact.tier === "compute";
@@ -48,13 +51,30 @@ export default function ArtifactDetail({ artifact }: { artifact: Artifact }) {
               className="tier-dot"
               style={{
                 background: "var(--tier-gated)",
-                animation: "ov-pulse-ring 1.4s infinite",
+                animation: counterTx
+                  ? "none"
+                  : "ov-pulse-ring 1.4s infinite",
               }}
             />
             In dispute #{disputeId}
+            {counterTx ? " · countered" : ""}
           </span>
         ) : null}
         <span style={{ flex: 1 }} />
+        {disputeId && !counterTx ? (
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            onClick={() => setCounterOpen(true)}
+            style={{
+              color: "var(--tier-public)",
+              borderColor: "var(--tier-public)",
+            }}
+          >
+            <Icon name="shield" size={13} />
+            Counter dispute
+          </button>
+        ) : null}
         <button
           type="button"
           className="btn btn-ghost btn-sm"
@@ -268,6 +288,15 @@ export default function ArtifactDetail({ artifact }: { artifact: Artifact }) {
         onClose={() => setReportOpen(false)}
         onDisputed={(id) => setDisputeId(id)}
       />
+      {disputeId ? (
+        <CounterDisputeDialog
+          artifact={artifact}
+          disputeId={disputeId}
+          open={counterOpen}
+          onClose={() => setCounterOpen(false)}
+          onCountered={(_assertionId, txHash) => setCounterTx(txHash)}
+        />
+      ) : null}
     </div>
   );
 }

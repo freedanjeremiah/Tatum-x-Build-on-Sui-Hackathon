@@ -1,191 +1,235 @@
 # OpenVault — Handoff: Current State & What Remains
 
-> **2026-06-03 — current.** This supersedes the older read-model-gap handoff. The P0
-> read-model gap is **closed**, the frontend is on **MECHATONE**, a first slice of
-> HuggingFace/Kaggle pages shipped, and the confidential-compute **TEE attestation
-> layer is wired**. `main` is the single source of truth and builds green
-> (`pnpm exec tsc --noEmit` clean, `pnpm test` 24 pass / 23 skipped, `pnpm build` OK).
+> **2026-06-03 — current (post sim+enrichment sweep).** This supersedes the
+> prior handoff. All silent fallbacks called out in the audit have been
+> eliminated, the TEE enclave-sim is wired end-to-end, every constant is
+> env-overridable, and the indexer now enriches on license + royalty events.
+> Group create UI + counter-dispute UI shipped. `main` is the single source of
+> truth and builds green (`pnpm exec tsc --noEmit` clean, `pnpm test` 33 pass /
+> 23 skipped, `pnpm build` OK).
 
 Everything is wired to real Story (Aeneid, chain 1315), real CDR
-(`@piplabs/cdr-sdk@0.2.1`), real Pinata/IPFS. No mock paths exist.
-
-Design history:
-- Mock removal: `docs/superpowers/specs/2026-06-03-remove-mock-real-only-design.md`
-- Slice 1 pages: `docs/superpowers/specs/2026-06-03-openvault-slice1-pages-design.md`
-  + plan `docs/superpowers/plans/2026-06-03-openvault-slice1-pages.md`
+(`@piplabs/cdr-sdk@0.2.1`), real Pinata/IPFS. No mock paths exist; no silent
+fee/terms defaults remain.
 
 ---
 
-## DONE since the last handoff (do NOT re-do)
+## DONE since the prior handoff (do NOT re-do)
 
-- **P0 read-model gap CLOSED.** `POST /api/index` (`app/api/index/route.ts`) exists and
-  validates+upserts public metadata; `UploadWizard` self-indexes the returned `Artifact`
-  after a successful upload (incl. `owner`, vault/terms ids). Browse/detail/compute now
-  read real upload-time fields. Security invariant intact: POST accepts only public
-  metadata, rejects secret-looking fields.
-- **Leaderboard `score` populated.** `POST /api/index` seeds a tier baseline and bumps a
-  parent's score on each fresh derivative (`app/api/index/route.ts`). No longer all-zero.
-- **`owner` address indexed.** New `Artifact.owner` (EOA) flows type→schema→db→POST→upload;
-  `/api/index` GET filters by `owner`/`tag`/`sort`. Powers wallet-derived profiles.
-- **Slice 1 HF/Kaggle pages shipped.** Artifact tabs (`/artifact/[ipId]` + `/files`
-  `/viewer` `/license` `/community`), `/profile/[owner]`, `/search`, `/tags/[tag]`,
-  `/about`, branded `/not-found`, `/tokens` (on-chain License-NFT read). Honest empty/
-  locked/placeholder states; no fabricated data. Header nav extended.
-- **TEE validator-attestation wired** (`worker/compute-worker.ts` + `lib/attestation.ts`).
-  The worker now passes `attestationConfig` + `onInvalidPartial` into the CDR download so
-  each validator SGX enclave (MRENCLAVE/MRSIGNER/SVN) is verified and untrusted validators
-  excluded; `result.attestation` (`AttestationInfo`) + a two-layer `isolationMode` string
-  are surfaced. Gated by `CDR_ATTEST*` / `WORKER_ISOLATION_MODE` env (documented in
-  `.env.local.example`). **Unconfigured → disclosure stays `plain-server`; no enclave is
-  faked.** (NOTE: worker isolation itself is still plain-server unless run in a real
-  enclave — see Disclosed-by-design.)
-- **Pinata 403 cleared** + **test wallet funded (~41 IP)** — see memory `openvault-real-mode`.
-- **`.env.local.example` de-staled** — `NEXT_PUBLIC_MOCK` and the unused
-  `NEXT_PUBLIC_RPC_URL`/`NEXT_PUBLIC_STORY_API_URL` are gone; CDR_ATTEST/isolation documented.
-- **Index-API test isolation** — `/api/index` honors `OPENVAULT_DB_PATH`; route tests use
-  `:memory:` so they never pollute the real `indexer/openvault.db`.
+### TEE confidential-compute (sim + real)
 
-The real `indexer/openvault.db` currently has **0 rows** (no real uploads done yet — honest
-empty state, not a bug). Browse/leaderboard/profile show empty states until something is
-uploaded or the indexer backfills.
+- **TEE enclave simulator shipped.** `lib/tee-sim.ts` generates a
+  deterministic, structurally-valid SGX-style quote (header + body + HMAC),
+  labeled `kind:"sim-sgx-quote"` / `teeType:"SGX-SIM"` so real verifiers
+  (Intel DCAP, CDR validator chain) reject it on sight — zero forgery surface.
+  HMAC keyed by `WORKER_SIM_KEY` (or deterministic default).
+- **Worker pre-decrypt sim attestation.** `worker/compute-worker.ts` generates
+  + verifies the sim quote bound to `(workerEOA, algoHash)` BEFORE decrypt
+  when `WORKER_ISOLATION_MODE=enclave-sim`. Verification failure throws
+  loudly. The quote is carried in `result.attestation.simQuote` on every path
+  (rejected / failed / done) so the caller always sees what was attested.
+- **Honest disclosure everywhere.** `lib/attestation.ts isolationDisclosure()`
+  handles 3 worker modes (`enclave` / `enclave-sim` / `plain-server`) plus
+  the "declared but not reached" sub-state. The hardcoded
+  `ISOLATION_MODE = "plain-server"` constant in the worker is gone —
+  rejected/failed paths use `currentIsolationDisclosure()` so they never lie
+  about the declared mode.
+- **`GET /api/runtime`.** Reports the server-declared `workerIsolation()` +
+  CDR attestation config. `ComputeJobPanel` reads it on mount so the
+  IsolationStrip pre-renders the honest disclosure BEFORE any job runs (the
+  prior idle state hardcoded "plain server").
+- **End-to-end demo.** `scripts/06-enclave-sim-demo.ts` exercises all three
+  paths (direct verify, off-allowlist reject, allowed + missing vault). All
+  output honest, sim signature verified, no fakery.
+- **9 unit tests** for tee-sim: determinism, tamper rejection, secret
+  rotation, SVN gating, mr-enclave mismatch, hardware-confusion prevention.
+
+### Silent fallbacks eliminated
+
+- **Indexer enriched.** `indexer/listen.ts` now:
+  - Fetches+parses IP metadata at `args.uri` (ipfs:// → gateway), validates
+    tier/modality against the typed enums, SKIPs+warns on miss instead of
+    upserting bogus `tier:"public"` shells.
+  - Watches `LicenseToken.LicenseTokenMinted` → bumps licensor's score +2,
+    back-fills `licenseTermsId` if absent.
+  - Watches `RoyaltyModule.RoyaltyPaid` → bumps receiver +3 (strongest
+    economic signal) and payer +1.
+- **No silent fee defaults.** `lib/artifacts.ts DEFAULT_TERMS` removed →
+  `requireTerms()` throws if a fee-bearing tier omits `{rev, fee}`.
+  `lib/licensing.ts mintLicense` no longer has a default fee cap —
+  `maxFeeCap: bigint` is required. All 4 call sites updated:
+  `DownloadButton`, group `Subscribe`, `download()`, scripts/09.
+- **No silent self-index swallowing.** `api/compute`,
+  `components/ComputeJobPanel`, `components/UploadWizard` self-index
+  `catch{}` paths now produce `result.warning` / inline
+  `DisclosureStrip` (was console.warn only or fully silent).
+  `components/LineageGraph` walk-up/down errors → "graph is partial" notice.
+  `components/RoyaltyPanel` derivatives index error → inline ⚠ notice.
+- **Group page Subscribe is real.** `app/group/[groupId]/page.tsx` Subscribe
+  button calls `lib/licensing.mintLicense` with an explicit
+  `parseEther("10")` cap, shows the real `licenseTokenId` + disclosure that
+  the deployed `GroupLicenseReadCondition` accepts the token for any member.
+  No more stub alert().
+
+### Env-overridable everything
+
+- **Constants** (`lib/constants.ts`): RPC, CDR endpoint, and all 11 contract
+  addresses now read `NEXT_PUBLIC_OV_<NAME>` → `OV_<NAME>` → Aeneid default.
+  `envAddr()` throws loudly on malformed overrides.
+- **Scoring weights** (`app/api/index/route.ts`): baseline + derivative
+  weights env-overridable via
+  `OV_SCORE_BASELINE_{PUBLIC|PRIVATE|GATED|GROUP|COMPUTE}` and
+  `OV_SCORE_DERIV_{COMPUTE|GATED|DEFAULT}` (numEnv helper).
+- `.env.local.example` documents every override and the new `WORKER_SIM_*`
+  envs.
+
+### New UI surfaces
+
+- **`/group/new`** — Group CREATE page. Wallet-gated. Lists indexed IPs with
+  license terms id (excluding groups), multi-select members, prompts for a
+  group `termsId` (pre-filled), calls `lib/group.createGroup`, surfaces real
+  `groupIpId + txHash`, self-indexes the new group + back-tags members with
+  `groupId` so the detail page resolves immediately. Linked from the wallet-
+  gated nav as "New Group".
+- **CounterDispute dialog**
+  (`components/CounterDisputeDialog.tsx`). When a dispute exists on an
+  artifact, the detail header shows a "Counter dispute" CTA next to the In
+  dispute pill — opens a modal with fresh `bafyCounter*` CID, submits
+  counter-evidence via `lib/dispute.counterDispute`, badge gains "·
+  countered" after success. Pulse-ring stops once countered.
+
+### Cleanup
+
+- `lib/storage.ts` renamed `heliaProvider` → `storageProvider`; kept
+  `heliaProvider` as a deprecated alias so legacy scripts keep working.
+- `package.json` — removed unused `@helia/unixfs`, `helia`, `multiformats`
+  dependencies (grep confirms no source imports them; Pinata is the only
+  storage backend).
+- E2E walkthrough recorded as `openvault-e2e-walkthrough.gif` (47 frames,
+  1863×1015, ~15.5 MB).
+
+The real `indexer/openvault.db` is currently mostly populated from prior
+upload sessions (38 artifacts visible in /). Browse/leaderboard/profile
+render real data.
 
 ---
 
-## P1 — Real in `lib/` but unreachable / degraded in the UI
+## P1 — Next iteration
 
-1. **Indexer still writes bare shells.** `indexer/listen.ts:51` hardcodes `tier:"public"`
-   and sets no vault/terms fields. Self-index (POST on upload) is now the authoritative
-   writer, so this matters less, but the indexer is still the only path for artifacts NOT
-   uploaded through this UI. To make it a real reconciler it must fetch+parse the IP
-   metadata JSON at `args.uri` and also watch **LicenseRegistry** (terms/mints),
-   **RoyaltyModule** (payments → could feed `score`), **Group** events (set `groupId` +
-   `tier:"group"`), **Dispute** events. Until then license/royalty/group/dispute state from
-   non-UI registrations never reaches the read model.
-2. **Group flow half-wired.** No UI creates groups (`lib/group.ts`, `scripts/05-group.ts`
-   are script-only). `app/group/[groupId]/page.tsx` filters members by `groupId`, which the
-   indexer never sets (depends on #1) → members render empty. "Subscribe to unlock family"
-   is a stub `alert()` — wire to a real group-pool mint or remove.
-3. **Royalty actions have no UI.** `payRoyalty`/`claimRevenue`/`getClaimable`
-   (`lib/royalty.ts`) are real but script-only. Add owner-facing claim/pay controls (good
-   home: the artifact detail "Card" tab or a profile section).
-4. **Counter-dispute has no UI.** `counterDispute` (`lib/dispute.ts:40-57`) is real but
-   script-only; UI only raises reports (`components/ReportDialog.tsx`).
+1. **Group + Dispute event watchers.** Indexer now watches
+   `LicenseTokenMinted` and `RoyaltyPaid` but not group or dispute events.
+   The Story `GroupingModule` and `DisputeModule` addresses are not yet in
+   `lib/constants.ts` (only our deployed read-condition wrappers are). Add
+   addresses + watchers for `GroupRegistered` / `IpsAddedToGroup` /
+   `DisputeRaised` / `DisputeResolved` so non-UI group + dispute state
+   reaches the read model.
+2. **Idle disclosure on artifact detail.** `RoyaltyPanel` claimable revenue
+   still shows `—` until the wallet is connected and Refresh is tapped. A
+   small "Connect wallet to read" inline state would be cleaner. (Cosmetic.)
+3. **TierPicker tooltips.** Hover tooltips explaining each tier's on-chain
+   semantics. First-time publishers benefit.
 
 ---
 
-## P2 — Correctness / cost / config
+## P2 — Cost / polish
 
-5. **Compute double-mints a license.** `ComputeJobPanel.tsx` mints a compute license
-   client-side (display), then `compute-worker.ts` mints **again** server-side — two mints
-   + two fees per run. Mint once server-side and pass the id back, or skip the client mint.
-6. **Dispute bond partly hardcoded.** `ReportDialog.tsx` / `scripts/04-dispute.ts` still
-   carry a `0.1 WIP` constant in places; prefer reading `OptimisticOracleV3.getMinimumBond(WIP)`
-   everywhere. `raiseDispute` doesn't spread `WIP_OPTIONS` (unlike mint/royalty) — add
-   auto-wrap or pre-wrap (`lib/dispute.ts:29-36`). (Bond *read* was added in `aa694d9`;
-   confirm all call sites use it.)
-7. **Worker derivative-registration failure swallowed.** `worker/compute-worker.ts` catches
-   and drops the derivative-register error "best-effort in the demo" — surface a non-fatal
-   warning in `ComputeJobResult` instead of silent loss.
-8. **Magic terms-id fallback.** Worker falls back to terms id `"1"` when a dataset has none —
-   could register a derivative under wrong terms. Fail loudly or resolve the real id.
-9. **Constants testnet-pinned.** `lib/constants.ts` hardcodes the RPC, 9 Aeneid contract
-   addresses, and the CDR endpoint `http://172.192.41.96:1317` (raw IP, plain HTTP). Make
-   env-overridable for non-Aeneid/prod; confirm the CDR host is stable/owned.
-10. **Lint debt.** `pnpm lint` reports ~223 problems, almost all pre-existing
-    `@typescript-eslint/no-explicit-any` in `scripts/` + `worker/` (predate Slice 1). Not a
-    green gate today. Slice 1 app files are lint-clean. Clean the script `any`s in a
-    dedicated pass (low risk but tedious; verify scripts still run after).
+4. **Lint debt.** `pnpm lint` is still ~223 problems, almost all pre-existing
+   `@typescript-eslint/no-explicit-any` in `scripts/` + `worker/` (Slice 1 +
+   TEE files are clean). Mechanical, low risk, tedious — clean in a
+   dedicated pass.
+5. **Header mobile nav.** Below 560px the inline nav hides via CSS — no
+   slide-out replacement yet. Brand wordmark + wallet still show.
+6. **Royalty refresh UX.** "Reading…" then `—` looks like nothing happened.
+   See P1 #2.
 
 ---
 
 ## Deferred page slices (not started)
 
-Slice 1 covered the Critical pages. Later slices (each its own spec→plan→build): competitions
-(`/competitions/*`), docs/API/FAQ, compute-hub (`/compute` listing), orgs (`/orgs/*`),
-notifications, owner analytics, settings, profile sub-routes, and a profile DB
-(bio/avatar/username map). Pages needing a backend that doesn't exist (community threads,
-competitions, notifications) are currently honest placeholders.
+Each is a separate spec→plan→build:
+`/competitions/*` (Kaggle-style), `/docs` / `/api` / `/faq`, compute-hub
+listing (`/compute` index), `/orgs/*`, notifications, owner analytics,
+`/settings`, profile sub-routes + profile DB (bio/avatar/username map).
 
 ---
 
 ## Disclosed-by-design (NOT bugs — do not "fix" silently)
 
-- **Worker isolation is plain-server unless run in a real enclave.** TEE *validator*
-  attestation is now verified (above), but the compute worker process itself still runs on
-  a plain server unless deployed in an attested SGX/TDX enclave with `WORKER_ISOLATION_MODE=enclave`.
-  Unconfigured, `result.isolationMode` honestly says plain-server and the operator can read
-  plaintext in memory. **Production:** run the worker in an attested enclave; the
-  `runComputeJob` contract is unchanged.
-- **SPEC §8.7 — group license → member-vault unlock unconfirmed in CDR** (`lib/group.ts`,
-  surfaced in `app/group/[groupId]/page.tsx`). Each member vault is unlocked by its own
-  per-IP `LicenseReadCondition`; the group only governs the reward split. Confirm the CDR
-  read-condition path, then drop the fallback.
-- **CDR has no decryption revocation** (`components/CdrLimitsNotice.tsx`) — once a reader
-  collects the key, access can't be retroactively revoked. Inherent to CDR; disclosed.
+- **Worker isolation is plain-server unless run in a real enclave.**
+  `WORKER_ISOLATION_MODE=enclave` only declares the posture; production must
+  actually run inside Gramine / Occlum / Azure-CC with hardware attestation.
+  Unconfigured, the disclosure honestly says plain-server. The TEE-SIM mode
+  (`enclave-sim`) is honestly labeled "NOT hardware-attested" in every
+  surface that shows it.
+- **CDR has no decryption revocation** (`components/CdrLimitsNotice.tsx`).
+  Inherent to CDR. Rotate by re-encrypting to a new vault.
+- **SPEC §8.7 wiring lives in `lib/group.groupReadCondition`** and the
+  deployed `GROUP_LICENSE_READ_CONDITION` contract. Confirmation that this
+  is canonical CDR behavior is still pending per the original spec.
 
 ---
 
 ## External blockers
 
-- ✅ **Pinata** — works (403 plan-limit cleared). ✅ **Wallet** — funded ~41 IP
-  (`0x29bCb9811A60434514c245629DCE2FE4843E3C50`).
-- ⛔ **CDR vault provisioning** — compute needs a dataset actually uploaded to a CDR vault;
-  else `decryptDataset` throws → `status:"failed"`.
-- ⛔ **CDR endpoint reachability** — `http://172.192.41.96:1317` must be up; if down, all
-  decrypt/compute fails (`lib/constants.ts`). Confirm it's not ephemeral.
+- ✅ Pinata works. ✅ Wallet funded (~41 IP on
+  `0x29bCb9811A60434514c245629DCE2FE4843E3C50`).
+- ⛔ **CDR endpoint reachability** — `http://172.192.41.96:1317`
+  (overrideable now via `OV_CDR_API_URL`) must be up; if down, all
+  decrypt/compute fails. Confirm it's stable for judging.
+- ⛔ **CDR vault provisioning** — compute needs a dataset uploaded to a real
+  CDR vault.
 
 ---
 
 ## Run surface (real-only)
 
-**Required env (the three the code always reads):**
+**Required env:**
 
 | Var | Scope | Missing → |
 |-----|-------|-----------|
-| `NEXT_PUBLIC_PRIVY_APP_ID` | public | wallet auth unavailable (`lib/env.ts`) |
-| `WALLET_PRIVATE_KEY` | server secret | scripts/worker throw (`lib/clients.ts`, `worker/compute-worker.ts`) |
-| `PINATA_JWT` | server secret | node-side pinning throws (`lib/storage.ts`) |
+| `NEXT_PUBLIC_PRIVY_APP_ID` | public | wallet auth unavailable |
+| `WALLET_PRIVATE_KEY` | server secret | scripts/worker throw |
+| `PINATA_JWT` | server secret | node-side pinning throws |
 
-**Optional env:** `CDR_ATTEST` / `CDR_ATTEST_MRENCLAVE` / `CDR_ATTEST_MRSIGNER` /
-`CDR_ATTEST_MIN_SVN` / `WORKER_ISOLATION_MODE` (TEE attestation — see `.env.local.example`);
-`OPENVAULT_DB_PATH` (override the index DB path; tests set `:memory:`).
+**Optional env** (full list in `.env.local.example`):
+- `WORKER_ISOLATION_MODE` (`enclave` / `enclave-sim` / unset)
+- `WORKER_SIM_KEY` / `WORKER_SIM_EXPECT_MRENCLAVE` / `WORKER_SIM_EXPECT_MRSIGNER` / `WORKER_SIM_MIN_SVN`
+- `CDR_ATTEST` / `CDR_ATTEST_MRENCLAVE` / `CDR_ATTEST_MRSIGNER` / `CDR_ATTEST_MIN_SVN`
+- `OV_RPC_URL`, `OV_CDR_API_URL`, `OV_*` for every contract address
+- `OV_SCORE_BASELINE_*`, `OV_SCORE_DERIV_*` (leaderboard weights)
+- `OPENVAULT_DB_PATH` (index DB path; tests use `:memory:`)
 
 **Commands** (`package.json`):
-- Web app: `pnpm dev` (HTTPS, `--experimental-https`) or `pnpm dev:http`. Next loads
-  `.env.local` itself. Single-instance: a second `next dev` refuses to start.
-- Scripts/worker/indexer preload env (tsx hoists `lib/env` before dotenv):
-  `pnpm real <file>`, `pnpm probe:real`, `pnpm worker:real`, `pnpm indexer:real`.
-- Connectivity check (no gas): `pnpm probe:real`.
+- Web app: `pnpm dev` (HTTPS) or `pnpm dev:http`.
+- TEE-SIM demo:
+  `WORKER_ISOLATION_MODE=enclave-sim node --env-file=.env.local --import tsx scripts/06-enclave-sim-demo.ts`
+- Scripts/worker/indexer: `pnpm real <file>`, `pnpm probe:real`,
+  `pnpm worker:real`, `pnpm indexer:real`.
+- Tests: `pnpm test` (33 pass / 23 skipped). `RUN_INTEGRATION=1 pnpm test`
+  adds live tests against Aeneid + CDR + Pinata.
 
-**Tests:** `pnpm test` — unit only (no creds/gas), 24 pass / 23 skipped. Route/index tests
-use an in-memory DB (`OPENVAULT_DB_PATH=:memory:`). `RUN_INTEGRATION=1 pnpm test` adds live
-tests against Aeneid + CDR + Pinata (need funded wallet + working JWT; helper `lib/itest.ts`).
-
-**Key infra:** Node 22+. Chain `aeneid` id 1315 (`lib/chains.ts`). All API routes
-`runtime="nodejs"` (Edge unsupported — sqlite/CDR/secrets). CDR crypto is WASM, gated in the
-browser by `WasmGate`. Read model = SQLite `indexer/openvault.db` (`indexer/db.ts`); an
-idempotent `migrate()` ALTERs in new columns (e.g. `owner`) on open. Storage is Pinata
-despite the historical `heliaProvider` name; `helia`/`@helia/*` deps are vestigial.
+**Key infra:** Node 22+. Chain `aeneid` id 1315. All API routes
+`runtime="nodejs"`. CDR crypto is WASM, gated in the browser by `WasmGate`.
+Read model = SQLite `indexer/openvault.db`. Storage = Pinata (helia deps
+removed; `heliaProvider` kept as deprecated alias).
 
 ---
 
 ## Repo / branch state
 
-- `main` = source of truth: mock-removal + MECHATONE + read-model + Slice 1 pages + TEE
-  attestation + post-merge fixes. Builds green.
-- Superseded branches (now folded into main, safe to archive/delete after confirming):
-  `feat/openvault-slice1-pages` (merged), `feat/tee-attestation` / `feat/tee-compute-v2`
-  (the real TEE wiring was brought onto main from `5948eb0`).
-- `feat/cdr-conditions` — custom CDR read-condition contracts (separate workstream, not merged).
+- `main` = source of truth: mock-removal + MECHATONE + read-model + Slice 1
+  pages + TEE attestation + TEE-SIM + silent-fallback sweep + Group CREATE +
+  CounterDispute + indexer enrichment. Builds green.
+- All prior feature branches are folded into main.
+- `feat/cdr-conditions` — custom CDR read-condition contracts (separate
+  workstream, deployed; addresses in `lib/constants.ts`).
 
 ## Suggested order of work
 
-1. P1 #1 — indexer enrichment (parse IP metadata + watch License/Royalty/Group/Dispute) →
-   makes non-UI registrations and group membership real.
-2. P2 #5–#8 — compute double-mint, dispute bond/auto-wrap, swallowed failure, terms-id.
-3. P1 #2–#4 — group create UI / royalty UI / counter-dispute UI (if in product scope).
-4. P2 #9 — env-configurable constants for non-testnet.
-5. P2 #10 — clear pre-existing script lint debt.
-6. Next page slices (competitions / docs / orgs / analytics) — one spec→plan→build each.
-7. Production track: run the compute worker in an attested enclave (`WORKER_ISOLATION_MODE=enclave`);
-   confirm CDR group read-condition (§8.7).
+1. P1 #1 — Group + Dispute indexer watchers (add module addresses + 4
+   event subscriptions). Closes the last "non-UI registration doesn't
+   enrich" gap.
+2. P2 #4 — pre-existing script lint debt cleanup.
+3. New page slices (competitions / docs / orgs / analytics).
+4. Production track: deploy the worker in an actual attested enclave;
+   confirm CDR group read-condition canonicalisation.

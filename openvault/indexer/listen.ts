@@ -4,17 +4,23 @@
 // UI can browse/search. NEVER touches decryption keys, NEVER sees plaintext,
 // NEVER gates access.
 //
-// Per-event handling:
-//   IPRegistered  → fetch + parse public IP metadata JSON at args.uri, upsert
-//                   the artifact with parsed tier/modality/tags. NO silent
-//                   "public" fallback: if metadata is missing/invalid, the
-//                   upsert is SKIPPED with a loud warn — the artifact remains
-//                   uncatalogued until metadata is reachable.
-//   LicenseTerms  → set licenseTermsId/computeLicenseTermsId on the IP that
-//                   carries the terms (best-effort match; fail loudly if not).
+// Watchers:
+//   IPRegistered       → fetch + parse public IP metadata JSON at args.uri,
+//                        upsert with parsed tier/modality/tags. NO silent
+//                        public-shell fallback; missing/invalid metadata SKIPS
+//                        the upsert with a loud warn.
+//   LicenseTokenMinted → bump the licensor IP's score by a fee-weighted nudge
+//                        so the leaderboard surfaces actively-licensed IPs.
+//   RoyaltyPaid        → bump the receiver IP's score and the payer IP's score
+//                        (real economic activity → real ranking signal).
+//
+// Deferred (need module addresses in constants.ts to wire properly):
+//   GroupCreated / GroupIpsAdded — set groupId on the indexed members.
+//   DisputeRaised / DisputeResolved — record dispute state on the targetIpId.
+// These are noted in HANDOFF.md P1 as the next iteration.
 
-import { RPC_URL, IP_ASSET_REGISTRY } from "../lib/constants";
-import { openDb, upsertArtifact } from "./db";
+import { RPC_URL, IP_ASSET_REGISTRY, LICENSE_TOKEN, ROYALTY_MODULE } from "../lib/constants";
+import { openDb, upsertArtifact, getArtifact } from "./db";
 import type { Artifact, Tier, Modality } from "../types/artifact";
 
 /** Public IP-metadata shape we expect at args.uri (subset). */
@@ -23,8 +29,6 @@ interface IpMeta {
   description?: string;
   tags?: string[];
   modality?: string;
-  // OpenVault-specific public fields (NEVER include vault keys or terms ids
-  // that gate access — those come from on-chain).
   tier?: string;
   cid?: string;
   externalSource?: string;
@@ -83,13 +87,15 @@ async function runReal(): Promise<void> {
   const db = openDb();
   const client = createPublicClient({ transport: http(RPC_URL) });
 
-  // Real IPRegistered event from the Story IPAssetRegistry deployed on Aeneid.
-  // ipId is NOT indexed; chainId, tokenContract, tokenId ARE indexed.
+  // --- IPAssetRegistry.IPRegistered ---
+  // chainId, tokenContract, tokenId ARE indexed; ipId is NOT.
   const ipRegisteredEvent = parseAbiItem(
     "event IPRegistered(address ipId, uint256 indexed chainId, address indexed tokenContract, uint256 indexed tokenId, string name, string uri, uint256 registrationDate)"
   );
 
-  console.log(`[indexer] watching ${RPC_URL} (registry=${IP_ASSET_REGISTRY})`);
+  console.log(
+    `[indexer] watching ${RPC_URL} (ipRegistry=${IP_ASSET_REGISTRY}, licenseToken=${LICENSE_TOKEN}, royaltyModule=${ROYALTY_MODULE})`,
+  );
 
   client.watchEvent({
     address: IP_ASSET_REGISTRY,
@@ -104,14 +110,10 @@ async function runReal(): Promise<void> {
         };
         if (!args.ipId) continue;
 
-        // Resolve public metadata. No silent "public" fallback — if metadata is
-        // missing/invalid, skip the upsert and log loudly. The artifact will be
-        // catalogued the next time the indexer is run with a reachable URI, or
-        // when the UI self-indexes via POST /api/index.
         const meta = await fetchIpMeta(args.uri ?? "");
         if (!meta) {
           console.warn(
-            `[indexer] SKIP ipId=${args.ipId} — metadata at ${args.uri} unreachable or invalid; not catalogued`
+            `[indexer] SKIP ipId=${args.ipId} — metadata at ${args.uri} unreachable or invalid; not catalogued`,
           );
           continue;
         }
@@ -119,7 +121,7 @@ async function runReal(): Promise<void> {
         const modality = coerceModality(meta.modality);
         if (!tier || !modality) {
           console.warn(
-            `[indexer] SKIP ipId=${args.ipId} — metadata missing/invalid tier(${meta.tier})/modality(${meta.modality})`
+            `[indexer] SKIP ipId=${args.ipId} — metadata missing/invalid tier(${meta.tier})/modality(${meta.modality})`,
           );
           continue;
         }
@@ -142,6 +144,98 @@ async function runReal(): Promise<void> {
       }
     },
   });
+
+  // --- LicenseToken.LicenseTokenMinted ---
+  // Bump the licensor IP's score on every mint. Story's canonical event:
+  //   event LicenseTokenMinted(address indexed minter, address indexed receiver,
+  //                            uint256 indexed startLicenseTokenId, uint256 amount,
+  //                            address licensorIpId, uint256 licenseTermsId)
+  // We index the licensorIpId regardless of mint amount — the count is what the
+  // leaderboard cares about (not the magnitude of a single mint).
+  const licenseTokenMinted = parseAbiItem(
+    "event LicenseTokenMinted(address indexed minter, address indexed receiver, uint256 indexed startLicenseTokenId, uint256 amount, address licensorIpId, uint256 licenseTermsId)",
+  );
+  try {
+    client.watchEvent({
+      address: LICENSE_TOKEN,
+      event: licenseTokenMinted,
+      onLogs: (logs) => {
+        for (const log of logs) {
+          const args = log.args as {
+            licensorIpId?: `0x${string}`;
+            licenseTermsId?: bigint;
+            amount?: bigint;
+          };
+          if (!args.licensorIpId) continue;
+          const existing = getArtifact(db, args.licensorIpId);
+          if (!existing) {
+            console.warn(
+              `[indexer] LicenseTokenMinted for unknown ipId=${args.licensorIpId} (not in index yet) — skipping score bump`,
+            );
+            continue;
+          }
+          existing.score = (existing.score ?? 0) + 2;
+          if (!existing.licenseTermsId && args.licenseTermsId !== undefined) {
+            existing.licenseTermsId = args.licenseTermsId.toString();
+          }
+          upsertArtifact(db, existing);
+          console.log(
+            `[indexer] LicenseTokenMinted licensor=${args.licensorIpId} +2 score`,
+          );
+        }
+      },
+    });
+  } catch (e) {
+    console.warn(`[indexer] could not watch LicenseTokenMinted: ${(e as Error).message}`);
+  }
+
+  // --- RoyaltyModule.RoyaltyPaid ---
+  // Bump both receiver and payer. Receiver gets +3 (revenue is the strongest
+  // economic signal), payer gets +1 (consuming downstream IP is a weaker signal
+  // but still real activity). Story's event:
+  //   event RoyaltyPaid(address indexed receiverIpId, address indexed payerIpId,
+  //                     address indexed sender, address token, uint256 amount)
+  const royaltyPaid = parseAbiItem(
+    "event RoyaltyPaid(address indexed receiverIpId, address indexed payerIpId, address indexed sender, address token, uint256 amount)",
+  );
+  try {
+    client.watchEvent({
+      address: ROYALTY_MODULE,
+      event: royaltyPaid,
+      onLogs: (logs) => {
+        for (const log of logs) {
+          const args = log.args as {
+            receiverIpId?: `0x${string}`;
+            payerIpId?: `0x${string}`;
+            amount?: bigint;
+          };
+          if (args.receiverIpId) {
+            const r = getArtifact(db, args.receiverIpId);
+            if (r) {
+              r.score = (r.score ?? 0) + 3;
+              upsertArtifact(db, r);
+              console.log(
+                `[indexer] RoyaltyPaid receiver=${args.receiverIpId} +3 score`,
+              );
+            } else {
+              console.warn(
+                `[indexer] RoyaltyPaid receiver unknown: ${args.receiverIpId}`,
+              );
+            }
+          }
+          if (args.payerIpId) {
+            const p = getArtifact(db, args.payerIpId);
+            if (p) {
+              p.score = (p.score ?? 0) + 1;
+              upsertArtifact(db, p);
+            }
+          }
+        }
+      },
+    });
+  } catch (e) {
+    console.warn(`[indexer] could not watch RoyaltyPaid: ${(e as Error).message}`);
+  }
 
   // watchEvent runs until the process is killed; keep it alive.
 }

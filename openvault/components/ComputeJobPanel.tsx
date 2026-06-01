@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Artifact, ComputeJobResult } from "@/types/artifact";
 import { algoName, runJob } from "@/lib/compute";
 import TxLink from "./TxLink";
@@ -25,6 +25,40 @@ export default function ComputeJobPanel({ artifact }: { artifact: Artifact }) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [result, setResult] = useState<ComputeJobResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Server-declared isolation mode — read once so the IsolationStrip can render
+  // honestly BEFORE the user runs a job. After a job, result.isolationMode
+  // overrides this with the actual disclosure the worker produced.
+  const [declaredMode, setDeclaredMode] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/runtime")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { workerIsolation?: string; cdr?: { attestationEnabled?: boolean; enforced?: boolean } } | null) => {
+        if (cancelled || !data) return;
+        const wi = data.workerIsolation ?? "plain-server";
+        const cdrPart = data.cdr?.attestationEnabled
+          ? data.cdr.enforced
+            ? "CDR validator TEEs attested (enforced)"
+            : "CDR validator TEEs attested (report-only)"
+          : "CDR validator TEEs not attested";
+        const wiPart =
+          wi === "enclave"
+            ? "compute worker in attested enclave"
+            : wi === "enclave-sim"
+              ? "compute worker in SIMULATED enclave (TEE-SIM declared) — NOT hardware-attested"
+              : "compute worker on plain server (operator-trusted, demo)";
+        setDeclaredMode(`${wiPart}; ${cdrPart}`);
+      })
+      .catch(() => {
+        // /api/runtime missing → leave declaredMode null; IsolationStrip falls
+        // back to its honest default (which says plain-server, true for a
+        // process that can't even tell us otherwise).
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const running = phase === "verifying" || phase === "running";
 
@@ -148,7 +182,7 @@ export default function ComputeJobPanel({ artifact }: { artifact: Artifact }) {
           >
             Try again
           </button>
-          <IsolationStrip />
+          <IsolationStrip mode={declaredMode ?? undefined} />
         </div>
       ) : (
         <div style={{ display: "grid", gap: 16, marginTop: 14 }}>
@@ -264,7 +298,7 @@ export default function ComputeJobPanel({ artifact }: { artifact: Artifact }) {
             </DisclosureStrip>
           ) : null}
 
-          <IsolationStrip />
+          <IsolationStrip mode={declaredMode ?? undefined} />
         </div>
       )}
     </div>

@@ -162,16 +162,13 @@ function sha256js(data: Uint8Array): string {
 }
 
 /**
- * Returns the StorageProvider the CDR uploader/consumer need.
- * Always real: a Pinata-backed provider (lib/pinataStorage) implementing the CDR
- * SDK's `upload(data,opts)→cid` / `download(cid)→bytes` contract. Pinata is used
- * for reliable cross-process retrieval (the worker/consumer can fetch ciphertext
- * that another process uploaded).
- *
- * Kept named `heliaProvider` so existing callers (artifacts.ts, worker) need no
- * churn; the name is historical — real mode is Pinata, not Helia.
+ * Returns the StorageProvider the CDR uploader/consumer need. Always real:
+ * a Pinata-backed provider (lib/pinataStorage) implementing the CDR SDK's
+ * `upload(data,opts)→cid` / `download(cid)→bytes` contract. Pinata is used
+ * for reliable cross-process retrieval (the worker/consumer can fetch
+ * ciphertext that another process uploaded).
  */
-export async function heliaProvider(): Promise<StorageProvider> {
+export async function storageProvider(): Promise<StorageProvider> {
   // Browser: pin via our server route (JWT stays server-side).
   if (isBrowser) return remotePinProvider();
   // Node (scripts, worker, API routes): direct Pinata with the JWT.
@@ -179,6 +176,10 @@ export async function heliaProvider(): Promise<StorageProvider> {
   const { pinataStorageProvider } = await import("./pinataStorage");
   return pinataStorageProvider(nodeJwt()) as unknown as StorageProvider;
 }
+
+/** Deprecated alias for backwards compatibility — Pinata is the real backend,
+ *  not Helia. Prefer `storageProvider`. Kept so legacy scripts keep working. */
+export const heliaProvider = storageProvider;
 
 /**
  * Pin a JSON object to IPFS via Pinata.

@@ -20,6 +20,12 @@ export default function WalletNavLinksPrivy() {
   return (
     <>
       <Link
+        href="/group/new"
+        className={`nav-link${pathname === "/group/new" ? " active" : ""}`}
+      >
+        New Group
+      </Link>
+      <Link
         href="/tokens"
         className={`nav-link${pathname.startsWith("/tokens") ? " active" : ""}`}
       >
