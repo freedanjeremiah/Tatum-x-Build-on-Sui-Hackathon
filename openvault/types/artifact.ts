@@ -43,6 +43,13 @@ export interface ComputeJob {
  * "rejected" run (algorithm not on the dataset allowlist) where `decryptCalled`
  * is provably false: the worker refused before any decryption.
  */
+export interface AttestationInfo {
+  validatorAttestationEnabled: boolean;
+  enforced: boolean;
+  untrustedValidators: number;
+  workerIsolation: "enclave" | "plain-server";
+}
+
 export interface ComputeJobResult {
   status: ComputeJob["status"];
   /** Aggregate metrics — never raw rows. Present on a "done" run. */
@@ -69,4 +76,5 @@ export interface ComputeJobResult {
   licenseTokenId?: string;
   /** Non-fatal warning surfaced from a best-effort step (e.g. derivative reg). */
   warning?: string;
+  attestation?: AttestationInfo;
 }
