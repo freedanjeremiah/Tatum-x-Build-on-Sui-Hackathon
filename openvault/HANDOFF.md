@@ -1,16 +1,58 @@
 # OpenVault — Handoff: Current State & What Remains
 
-> **2026-06-03 — current (post sim+enrichment sweep).** This supersedes the
-> prior handoff. All silent fallbacks called out in the audit have been
-> eliminated, the TEE enclave-sim is wired end-to-end, every constant is
-> env-overridable, and the indexer now enriches on license + royalty events.
-> Group create UI + counter-dispute UI shipped. `main` is the single source of
-> truth and builds green (`pnpm exec tsc --noEmit` clean, `pnpm test` 33 pass /
-> 23 skipped, `pnpm build` OK).
+> **2026-06-03 — current (post sim+enrichment sweep, PRD-verified).** This
+> supersedes the prior handoff. All silent fallbacks called out in the audit
+> have been eliminated, the TEE enclave-sim is wired end-to-end, every constant
+> is env-overridable, the indexer enriches on license + royalty events, Group
+> create UI + counter-dispute UI shipped, and a full **`FRONTEND_PRD.md`
+> compliance audit** returned **PASS on every section §3–§8** with file:line
+> evidence. `main` is the single source of truth and builds green
+> (`pnpm exec tsc --noEmit` clean, `pnpm test` 33 pass / 23 skipped,
+> `pnpm build` OK).
 
 Everything is wired to real Story (Aeneid, chain 1315), real CDR
 (`@piplabs/cdr-sdk@0.2.1`), real Pinata/IPFS. No mock paths exist; no silent
 fee/terms defaults remain.
+
+---
+
+## PRD compliance — last verified 2026-06-03
+
+A focused audit walked every section of `docs/FRONTEND_PRD.md` against the
+codebase and returned **PASS** for all of:
+
+| Section | Status | Key evidence |
+|---|---|---|
+| §3.1 Color tokens | PASS | `app/globals.css:8-44`, `lib/tiers.ts:11-66` |
+| §3.2 Typography | PASS | next/font in `app/layout.tsx:3-37`, `.h1/.h2/.eyebrow/.meta` in `globals.css:117-158` |
+| §3.3 Spacing/radius | PASS | `maxw-browse/artifact/upload/leaderboard/compute` + `--radius-*` |
+| §3.4 Motion | PASS | `ov-anim-up`, `ov-spin`, `ov-pulse-ring`, `ov-shimmer` keyframes |
+| §3.5 Iconography | PASS | `components/ui/Icon.tsx`, `VaultMark.tsx` (2px offset shadow) |
+| §3.6 Primitives | PASS | TierBadge / TierGlyph / ModalityChip / Dropdown / DisclosureStrip / Spinner / VaultMark / TxLink |
+| §4 IA | PASS | All 6 routes + 4 API routes + Header + WasmGate + CdrLimitsNotice |
+| §5.1 Browse | PASS | Hero / tier legend / filter chips / modality / search / N ARTIFACTS / responsive grid / ModelCard 3px rail |
+| §5.2 Upload | PASS | 5-step stepper (Artifact/Details/Tier/Lineage/Review), TierPicker, AlgoAllowlist, success screen |
+| §5.3 Artifact detail | PASS | Breadcrumb / dispute pill / Report / ACCESS / LINEAGE / ROYALTIES / 280px PROVENANCE sidebar |
+| §5.4 Compute | PASS | TierBadge + "COMPUTABLE · NEVER DOWNLOADABLE", allowlist, run panel, progress trail, isolation strip ALWAYS visible (now dynamic via /api/runtime) |
+| §5.5 Group | PASS | Eyebrow / H1 / member grid / AccessPanel / §8.7 disclosure / empty 404 state |
+| §5.6 Leaderboard | PASS | Trophy badges top 3 / Score / IPA TxLink |
+| §5.7 Auth | PASS | Privy WalletButton + post-login chip + dropdown |
+| §5.8 CdrLimitsNotice | PASS | Collapsible 3-item disclosure footer |
+| §6 Components (23) | PASS | All cross-cutting components present |
+| §7 Data contracts | PASS | `Artifact` + `ComputeJobResult` complete |
+| §8 Honest disclosures (5) | PASS | Plain-server, not-downloadable, no-revoke, §8.7, provenance |
+
+**E2E run captured live** as `openvault-prd-e2e-final.gif` (42 frames,
+1926×980, ~15 MB). Dev server brought up with
+`WORKER_ISOLATION_MODE=enclave-sim WORKER_SIM_KEY=demo-secret`. `/api/runtime`
+returned `{workerIsolation:"enclave-sim"}` and the IsolationStrip rendered the
+honest "Isolation: simulated enclave (TEE-SIM, NOT hardware-attested —
+development only)" disclosure **before any job ran** — proving the
+`/api/runtime` wiring. Pages walked: Browse (38 cards) → Artifact detail
+(gated SentimentLLM-7B with full provenance sidebar) → Compute (sim
+disclosure visible) → Group CREATE `/group/new` (4 candidates, 2 selected,
+Create button enabled) → Leaderboard (trophy badges + scores) → Upload (5-step
+stepper) → Report dialog modal.
 
 ---
 
