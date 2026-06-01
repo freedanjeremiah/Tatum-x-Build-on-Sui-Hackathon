@@ -31,10 +31,12 @@ VID_DIR = "/tmp/openvault_demo_video"
 MP4 = "/tmp/openvault_demo.mp4"
 
 # ---------- COMPUTE artifact to drive ----------
-# Confidential Numeric Rows — gated by ComputeWorkerReadCondition. We pick this
-# one because /compute/<ipId> visibly demonstrates the enclave-sim TEE
-# disclosure that ships with this branch.
-COMPUTE_IP_ID = "0x013316E563F6676E62aEEeB772D7450dd388740e"
+# Live compute artifact sealed by the deployed ComputeWorkerReadCondition.
+# (The older 0x0133…740e vault was sealed by a pre-contract condition and
+# reverts when read via the new worker path — that diagnosis lives in the
+# diag script scripts/diag/compute-roundtrip.ts.) Uploading a fresh vault
+# with the current uploadCompute() + decrypting it round-trips cleanly.
+COMPUTE_IP_ID = "0x934A141E7A529AA0a543B7b06950DE3e3520C5aA"
 ARTIFACT_IP_ID = "0xfAC62e62018CAAe65B13398A1fb4B2e492D069a1"  # SentimentLLM-7B (gated)
 
 # Each step: do = goto|click|fill|wait; wait = ms after action.
