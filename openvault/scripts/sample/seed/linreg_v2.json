@@ -1,0 +1,22 @@
+{
+  "schema": "openvault.model.v1",
+  "algorithm": "linear_regression",
+  "task": "regression",
+  "features": [
+    "sqft_k",
+    "bedrooms",
+    "age"
+  ],
+  "params": {
+    "intercept": 49.3786,
+    "coef": [
+      119.6011,
+      8.3615,
+      -0.568
+    ]
+  },
+  "metrics": {
+    "r2": 0.9981
+  },
+  "predict": "y = intercept + coef\u00b7x"
+}

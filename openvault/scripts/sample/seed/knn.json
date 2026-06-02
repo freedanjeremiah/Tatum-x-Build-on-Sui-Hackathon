@@ -1,0 +1,123 @@
+{
+  "schema": "openvault.model.v1",
+  "algorithm": "knn_classifier",
+  "task": "multiclass_classification",
+  "features": [
+    "petal_len",
+    "petal_wid"
+  ],
+  "params": {
+    "k": 3,
+    "prototypes": [
+      {
+        "x": [
+          1.56,
+          0.289
+        ],
+        "label": "setosa"
+      },
+      {
+        "x": [
+          4.401,
+          1.187
+        ],
+        "label": "versicolor"
+      },
+      {
+        "x": [
+          5.683,
+          2.056
+        ],
+        "label": "virginica"
+      },
+      {
+        "x": [
+          1.18,
+          0.221
+        ],
+        "label": "setosa"
+      },
+      {
+        "x": [
+          4.109,
+          1.205
+        ],
+        "label": "versicolor"
+      },
+      {
+        "x": [
+          5.505,
+          2.022
+        ],
+        "label": "virginica"
+      },
+      {
+        "x": [
+          1.523,
+          0.368
+        ],
+        "label": "setosa"
+      },
+      {
+        "x": [
+          4.292,
+          1.335
+        ],
+        "label": "versicolor"
+      },
+      {
+        "x": [
+          5.424,
+          2.028
+        ],
+        "label": "virginica"
+      },
+      {
+        "x": [
+          1.494,
+          0.235
+        ],
+        "label": "setosa"
+      },
+      {
+        "x": [
+          4.305,
+          1.395
+        ],
+        "label": "versicolor"
+      },
+      {
+        "x": [
+          5.648,
+          2.044
+        ],
+        "label": "virginica"
+      },
+      {
+        "x": [
+          1.473,
+          0.266
+        ],
+        "label": "setosa"
+      },
+      {
+        "x": [
+          4.479,
+          1.429
+        ],
+        "label": "versicolor"
+      },
+      {
+        "x": [
+          5.634,
+          2.056
+        ],
+        "label": "virginica"
+      }
+    ]
+  },
+  "metrics": {
+    "n_prototypes": 15
+  },
+  "predict": "label = majority vote over k nearest prototypes (euclidean)"
+}

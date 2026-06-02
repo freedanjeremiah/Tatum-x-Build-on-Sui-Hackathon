@@ -1,0 +1,375 @@
+[
+  {
+    "key": "d_housing",
+    "kind": "dataset",
+    "file": "housing.csv",
+    "title": "US Housing Prices (sample)",
+    "description": "60-row tabular sample: square footage, bedrooms, age → sale price. Clean regression target.",
+    "tags": [
+      "housing",
+      "regression",
+      "tabular",
+      "dataset"
+    ],
+    "tier": "public",
+    "terms": null,
+    "parent": null
+  },
+  {
+    "key": "d_iris",
+    "kind": "dataset",
+    "file": "iris.csv",
+    "title": "Iris Flowers (sample)",
+    "description": "45-row classic multiclass classification set: 4 floral measurements → species.",
+    "tags": [
+      "iris",
+      "classification",
+      "tabular",
+      "dataset"
+    ],
+    "tier": "gated",
+    "terms": {
+      "rev": 10,
+      "fee": "0.01"
+    },
+    "parent": null
+  },
+  {
+    "key": "d_weather",
+    "kind": "dataset",
+    "file": "weather.csv",
+    "title": "Daily Weather (sample)",
+    "description": "48-day weather time series: temperature, humidity, rainfall. Autocorrelated temp.",
+    "tags": [
+      "weather",
+      "timeseries",
+      "tabular",
+      "dataset"
+    ],
+    "tier": "gated",
+    "terms": {
+      "rev": 25,
+      "fee": "0"
+    },
+    "parent": null
+  },
+  {
+    "key": "d_sales",
+    "kind": "dataset",
+    "file": "sales.csv",
+    "title": "Regional Sales (compute-only)",
+    "description": "Monthly sales by region — computable aggregations only; raw rows never downloadable.",
+    "tags": [
+      "sales",
+      "compute",
+      "tabular",
+      "dataset"
+    ],
+    "tier": "compute",
+    "terms": {
+      "rev": 15,
+      "fee": "0.02"
+    },
+    "parent": null,
+    "allowedAlgoHashes": [
+      "sha256:mean-aggregate",
+      "sha256:logistic-regression"
+    ]
+  },
+  {
+    "key": "d_patients",
+    "kind": "dataset",
+    "file": "patients.csv",
+    "title": "Patient Records (private)",
+    "description": "40 synthetic clinical records — owner-only. Demonstrates private, encrypted, non-downloadable PII.",
+    "tags": [
+      "health",
+      "private",
+      "tabular",
+      "dataset"
+    ],
+    "tier": "private",
+    "terms": null,
+    "parent": null
+  },
+  {
+    "key": "d_wine",
+    "kind": "dataset",
+    "file": "wine_quality.csv",
+    "title": "Wine Quality (sample)",
+    "description": "50-row wine chemistry → quality score. Ordinal regression target.",
+    "tags": [
+      "wine",
+      "regression",
+      "tabular",
+      "dataset"
+    ],
+    "tier": "gated",
+    "terms": {
+      "rev": 50,
+      "fee": "0.05"
+    },
+    "parent": null
+  },
+  {
+    "key": "d_energy",
+    "kind": "dataset",
+    "file": "energy.csv",
+    "title": "Grid Load (compute-only)",
+    "description": "72-hour electrical load + ambient temp. Compute-only forecasting source.",
+    "tags": [
+      "energy",
+      "timeseries",
+      "compute",
+      "dataset"
+    ],
+    "tier": "compute",
+    "terms": {
+      "rev": 20,
+      "fee": "0"
+    },
+    "parent": null,
+    "allowedAlgoHashes": [
+      "sha256:mean-aggregate",
+      "sha256:logistic-regression"
+    ]
+  },
+  {
+    "key": "d_titanic",
+    "kind": "dataset",
+    "file": "titanic.csv",
+    "title": "Titanic Survival (sample)",
+    "description": "55-row passenger class/age/fare → survival. Binary classification.",
+    "tags": [
+      "titanic",
+      "classification",
+      "tabular",
+      "dataset"
+    ],
+    "tier": "gated",
+    "terms": {
+      "rev": 5,
+      "fee": "0.1"
+    },
+    "parent": null
+  },
+  {
+    "key": "d_iris_aug",
+    "kind": "dataset",
+    "file": "iris_augmented.csv",
+    "title": "Iris + Engineered Features",
+    "description": "Derivative of the Iris set with an added petal_len/petal_wid ratio feature. Royalties flow to the parent.",
+    "tags": [
+      "iris",
+      "derivative",
+      "feature-engineering",
+      "dataset"
+    ],
+    "tier": "derivative",
+    "terms": null,
+    "parent": "d_iris"
+  },
+  {
+    "key": "d_stocks",
+    "kind": "dataset",
+    "file": "stocks.csv",
+    "title": "Equity Prices (sample)",
+    "description": "60-day OHLC-style price/volume series. Fee-only license (0% revenue share).",
+    "tags": [
+      "stocks",
+      "timeseries",
+      "finance",
+      "dataset"
+    ],
+    "tier": "gated",
+    "terms": {
+      "rev": 0,
+      "fee": "0.02"
+    },
+    "parent": null
+  },
+  {
+    "key": "m_linreg",
+    "kind": "model",
+    "file": "linreg_housing.json",
+    "title": "LinReg: Housing Price",
+    "description": "Ordinary least squares price model (sqft, bedrooms). R² reported.",
+    "tags": [
+      "regression",
+      "linear",
+      "ols",
+      "model"
+    ],
+    "tier": "public",
+    "terms": null,
+    "parent": null
+  },
+  {
+    "key": "m_logreg",
+    "kind": "model",
+    "file": "logreg_iris.json",
+    "title": "LogReg: Iris (setosa)",
+    "description": "Logistic regression (gradient descent) separating setosa. Accuracy reported.",
+    "tags": [
+      "classification",
+      "logistic",
+      "model"
+    ],
+    "tier": "gated",
+    "terms": {
+      "rev": 10,
+      "fee": "0.01"
+    },
+    "parent": null
+  },
+  {
+    "key": "m_poly",
+    "kind": "model",
+    "file": "polyreg.json",
+    "title": "PolyReg: Degree-2 Curve",
+    "description": "Degree-2 polynomial regression fit by OLS on expanded features.",
+    "tags": [
+      "regression",
+      "polynomial",
+      "model"
+    ],
+    "tier": "gated",
+    "terms": {
+      "rev": 30,
+      "fee": "0"
+    },
+    "parent": null
+  },
+  {
+    "key": "m_ridge",
+    "kind": "model",
+    "file": "ridge.json",
+    "title": "Ridge: 3-Feature (compute)",
+    "description": "L2-regularized linear regression. Compute-only inference.",
+    "tags": [
+      "regression",
+      "ridge",
+      "compute",
+      "model"
+    ],
+    "tier": "compute",
+    "terms": {
+      "rev": 15,
+      "fee": "0.02"
+    },
+    "parent": null,
+    "allowedAlgoHashes": [
+      "sha256:mean-aggregate",
+      "sha256:logistic-regression"
+    ]
+  },
+  {
+    "key": "m_fraud",
+    "kind": "model",
+    "file": "fraud_model.json",
+    "title": "Fraud Detector (private)",
+    "description": "Proprietary fraud logistic model — owner-only, encrypted, non-downloadable.",
+    "tags": [
+      "classification",
+      "fraud",
+      "private",
+      "model"
+    ],
+    "tier": "private",
+    "terms": null,
+    "parent": null
+  },
+  {
+    "key": "m_multireg",
+    "kind": "model",
+    "file": "multireg.json",
+    "title": "MultiReg: 4-Feature",
+    "description": "Multivariate OLS over four features.",
+    "tags": [
+      "regression",
+      "multivariate",
+      "model"
+    ],
+    "tier": "gated",
+    "terms": {
+      "rev": 50,
+      "fee": "0.05"
+    },
+    "parent": null
+  },
+  {
+    "key": "m_ar",
+    "kind": "model",
+    "file": "ar2.json",
+    "title": "AR(2): Time Series (compute)",
+    "description": "Order-2 autoregression fit by OLS on lagged values. Compute-only.",
+    "tags": [
+      "timeseries",
+      "autoregression",
+      "compute",
+      "model"
+    ],
+    "tier": "compute",
+    "terms": {
+      "rev": 20,
+      "fee": "0"
+    },
+    "parent": null,
+    "allowedAlgoHashes": [
+      "sha256:mean-aggregate",
+      "sha256:logistic-regression"
+    ]
+  },
+  {
+    "key": "m_knn",
+    "kind": "model",
+    "file": "knn.json",
+    "title": "kNN: Iris (k=3)",
+    "description": "k-nearest-neighbour classifier carrying 15 labelled prototypes.",
+    "tags": [
+      "classification",
+      "knn",
+      "model"
+    ],
+    "tier": "gated",
+    "terms": {
+      "rev": 5,
+      "fee": "0.1"
+    },
+    "parent": null
+  },
+  {
+    "key": "m_linreg_v2",
+    "kind": "model",
+    "file": "linreg_v2.json",
+    "title": "LinReg v2 (derivative)",
+    "description": "Refined 3-feature regression registered as a derivative — royalties flow to the parent model.",
+    "tags": [
+      "regression",
+      "linear",
+      "derivative",
+      "model"
+    ],
+    "tier": "derivative",
+    "terms": null,
+    "parent": "m_logreg"
+  },
+  {
+    "key": "m_tree",
+    "kind": "model",
+    "file": "decision_stump.json",
+    "title": "Decision Stump",
+    "description": "Single-split decision tree fit by best threshold. Fee-only license (0% rev share).",
+    "tags": [
+      "classification",
+      "tree",
+      "model"
+    ],
+    "tier": "gated",
+    "terms": {
+      "rev": 0,
+      "fee": "0.02"
+    },
+    "parent": null
+  }
+]

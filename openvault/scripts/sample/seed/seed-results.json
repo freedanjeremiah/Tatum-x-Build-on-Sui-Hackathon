@@ -1,0 +1,196 @@
+[
+  {
+    "key": "d_housing",
+    "kind": "dataset",
+    "tier": "public",
+    "ipId": "0xA3C11faf05aDaC4Fa289a5AA46b79fbfCD8d48F5",
+    "licenseTermsId": "1300",
+    "parent": null,
+    "vault": "0x0000000000000000000000000000000000000000",
+    "hasVault": false
+  },
+  {
+    "key": "d_iris",
+    "kind": "dataset",
+    "tier": "gated",
+    "ipId": "0xe67cE24f104a9dD1161bA52e612D2deD29C747D5",
+    "licenseTermsId": "1203",
+    "parent": null,
+    "vault": "0x322A556d16A26bf1B780ee2903A3965780F4D1f4",
+    "hasVault": true
+  },
+  {
+    "key": "d_weather",
+    "kind": "dataset",
+    "tier": "gated",
+    "ipId": "0x87F1F4Bf277a4A5C3aaB3CFfAedc79B1940C88e9",
+    "licenseTermsId": "2832",
+    "parent": null,
+    "vault": "0x509dBBea5C9623429ea26d4Bcc3Dc1c572885b31",
+    "hasVault": true
+  },
+  {
+    "key": "d_sales",
+    "kind": "dataset",
+    "tier": "compute",
+    "ipId": "0x508B47B2bB6a3cDd7F25045E0B3d0Ece171546EF",
+    "parent": null,
+    "vault": "0x0000000000000000000000000000000000000000",
+    "hasVault": false
+  },
+  {
+    "key": "d_patients",
+    "kind": "dataset",
+    "tier": "private",
+    "ipId": "0xFaB22F7b275cDe85d2824A31EC5E5f50A3523945",
+    "licenseTermsId": "1300",
+    "parent": null,
+    "vault": "0x0000000000000000000000000000000000000000",
+    "hasVault": false
+  },
+  {
+    "key": "d_wine",
+    "kind": "dataset",
+    "tier": "gated",
+    "ipId": "0x2cA86FE289FE988766B2367331280c3B9F590991",
+    "licenseTermsId": "2859",
+    "parent": null,
+    "vault": "0x0b21403147BFb9613Da10D67805DbB3118bfF7A3",
+    "hasVault": true
+  },
+  {
+    "key": "d_energy",
+    "kind": "dataset",
+    "tier": "compute",
+    "ipId": "0x02Ed59caE177943112ea4D75163FC8cD7f03f23d",
+    "parent": null,
+    "vault": "0x0000000000000000000000000000000000000000",
+    "hasVault": false
+  },
+  {
+    "key": "d_titanic",
+    "kind": "dataset",
+    "tier": "gated",
+    "ipId": "0xA85358EDd8377E4F6EaE22a5b57F50008973bEb7",
+    "licenseTermsId": "2546",
+    "parent": null,
+    "vault": "0x6Aa4831761162CcCAb264254AeC37C986AC26Fe6",
+    "hasVault": true
+  },
+  {
+    "key": "d_iris_aug",
+    "kind": "dataset",
+    "tier": "public",
+    "ipId": "0x6C45BDEfD497CF97f0a8E5C4C87B8Ca40c04cA2f",
+    "parent": "d_iris",
+    "vault": "0xC5e17feBc8E89E158e4c806F541C3d3064f74379",
+    "hasVault": true
+  },
+  {
+    "key": "d_stocks",
+    "kind": "dataset",
+    "tier": "gated",
+    "ipId": "0x9AbCb8a010420C12F3a95a1A44Ade82c6734160E",
+    "licenseTermsId": "2860",
+    "parent": null,
+    "vault": "0x69C585d8b99798d434c9FEfAb0bc5D7B8a7FB4c4",
+    "hasVault": true
+  },
+  {
+    "key": "m_linreg",
+    "kind": "model",
+    "tier": "public",
+    "ipId": "0xEb47b4C47e98Fe865B3B099A5896f1c122baa5C5",
+    "licenseTermsId": "1300",
+    "parent": null,
+    "vault": "0x0000000000000000000000000000000000000000",
+    "hasVault": false
+  },
+  {
+    "key": "m_logreg",
+    "kind": "model",
+    "tier": "gated",
+    "ipId": "0x58C8afA5866aDb3C8D2fed1b55439bA04c03D064",
+    "licenseTermsId": "1203",
+    "parent": null,
+    "vault": "0x913444C443b40b76F846A0DFeF573Dd306123F4b",
+    "hasVault": true
+  },
+  {
+    "key": "m_poly",
+    "kind": "model",
+    "tier": "gated",
+    "ipId": "0xAb78d754257B00cecaaC8766B7AFAff2382b4aea",
+    "licenseTermsId": "2833",
+    "parent": null,
+    "vault": "0xB832ca66DF59ea76889DAfC159CeE00Db092d97D",
+    "hasVault": true
+  },
+  {
+    "key": "m_ridge",
+    "kind": "model",
+    "tier": "compute",
+    "ipId": "0x15322Ca3E4eCBBEb9AE3a2e0338c549b4EbD3344",
+    "parent": null,
+    "vault": "0x0000000000000000000000000000000000000000",
+    "hasVault": false
+  },
+  {
+    "key": "m_fraud",
+    "kind": "model",
+    "tier": "private",
+    "ipId": "0xB0e9e29f34d205Ff52dd5D8fE4ABaC910D97ef00",
+    "licenseTermsId": "1300",
+    "parent": null,
+    "vault": "0x0000000000000000000000000000000000000000",
+    "hasVault": false
+  },
+  {
+    "key": "m_multireg",
+    "kind": "model",
+    "tier": "gated",
+    "ipId": "0x4b990f2330E9526627E98bE8eCE5aDFBb85E2E10",
+    "licenseTermsId": "2859",
+    "parent": null,
+    "vault": "0x9a19345014827d084a1980353cA29CAfB75b6bEc",
+    "hasVault": true
+  },
+  {
+    "key": "m_ar",
+    "kind": "model",
+    "tier": "compute",
+    "ipId": "0x16992aD945bBD5232E67F04867d79815D96C28CF",
+    "parent": null,
+    "vault": "0x0000000000000000000000000000000000000000",
+    "hasVault": false
+  },
+  {
+    "key": "m_knn",
+    "kind": "model",
+    "tier": "gated",
+    "ipId": "0xB0001d2a9AC2836C46B922761F2139b91fe2C1a9",
+    "licenseTermsId": "2546",
+    "parent": null,
+    "vault": "0xA3cD67312Eb3a2858B94dBf3f4aaEDeBe803f1b4",
+    "hasVault": true
+  },
+  {
+    "key": "m_linreg_v2",
+    "kind": "model",
+    "tier": "public",
+    "ipId": "0xB87916C4FBf3CE256243C97375210e22AE6D272E",
+    "parent": "m_logreg",
+    "vault": "0x83d561dbfEf1229651a4b0445Cd3F2714aa84A49",
+    "hasVault": true
+  },
+  {
+    "key": "m_tree",
+    "kind": "model",
+    "tier": "gated",
+    "ipId": "0x031a0B8f764A2bADFBe9261065d098bC64B91981",
+    "licenseTermsId": "2860",
+    "parent": null,
+    "vault": "0x789D7A4F92189B5a969c92D7AdAaE2F49Aa433Aa",
+    "hasVault": true
+  }
+]

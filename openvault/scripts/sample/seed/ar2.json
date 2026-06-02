@@ -1,0 +1,21 @@
+{
+  "schema": "openvault.model.v1",
+  "algorithm": "autoregression",
+  "task": "timeseries_forecast",
+  "features": [
+    "lag1",
+    "lag2"
+  ],
+  "params": {
+    "const": -0.0213,
+    "phi": [
+      0.5084,
+      -0.3157
+    ],
+    "order": 2
+  },
+  "metrics": {
+    "r2": 0.2229
+  },
+  "predict": "x_t = const + phi1\u00b7x_{t-1} + phi2\u00b7x_{t-2}"
+}

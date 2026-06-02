@@ -1,0 +1,23 @@
+{
+  "schema": "openvault.model.v1",
+  "algorithm": "ridge_regression",
+  "task": "regression",
+  "features": [
+    "a",
+    "b",
+    "c"
+  ],
+  "params": {
+    "intercept": 0.9864,
+    "coef": [
+      1.8781,
+      -0.8937,
+      0.519
+    ],
+    "alpha": 0.5
+  },
+  "metrics": {
+    "r2": 0.9868
+  },
+  "predict": "y = intercept + coef\u00b7x (L2-regularized)"
+}

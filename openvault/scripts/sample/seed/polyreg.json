@@ -1,0 +1,21 @@
+{
+  "schema": "openvault.model.v1",
+  "algorithm": "polynomial_regression",
+  "task": "regression",
+  "features": [
+    "x",
+    "x^2"
+  ],
+  "params": {
+    "intercept": 2.0154,
+    "coef": [
+      1.4852,
+      -0.8066
+    ],
+    "degree": 2
+  },
+  "metrics": {
+    "r2": 0.9881
+  },
+  "predict": "y = c0 + c1\u00b7x + c2\u00b7x\u00b2"
+}

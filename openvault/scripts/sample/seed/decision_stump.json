@@ -1,0 +1,17 @@
+{
+  "schema": "openvault.model.v1",
+  "algorithm": "decision_stump",
+  "task": "binary_classification",
+  "features": [
+    "f1"
+  ],
+  "params": {
+    "threshold": 0.55,
+    "left_class": 0,
+    "right_class": 1
+  },
+  "metrics": {
+    "sse": 0
+  },
+  "predict": "class = f1 <= threshold ? left_class : right_class"
+}

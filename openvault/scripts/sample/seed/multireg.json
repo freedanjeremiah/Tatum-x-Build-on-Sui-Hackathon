@@ -1,0 +1,24 @@
+{
+  "schema": "openvault.model.v1",
+  "algorithm": "multivariate_linear_regression",
+  "task": "regression",
+  "features": [
+    "f1",
+    "f2",
+    "f3",
+    "f4"
+  ],
+  "params": {
+    "intercept": 3.0195,
+    "coef": [
+      2.0097,
+      -1.5012,
+      0.6774,
+      -0.3367
+    ]
+  },
+  "metrics": {
+    "r2": 0.9893
+  },
+  "predict": "y = intercept + coef\u00b7x"
+}
