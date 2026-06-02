@@ -1,11 +1,64 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-# verification harness
-/verify/node_modules/
-/verify/shots/
-/verify/package-lock.json
-/verify/.cf-profile/
-/verify/.privy-profile/
-/verify/*-headed.mjs
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files
+.env*
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# script flow state
+scripts/.last-upload.json
+
+# indexer sqlite db
+indexer/*.db
+indexer/*.db-*
+
+# dev https certs
+certificates
+
+# e2e verification harness
+/e2e/node_modules/
+/e2e/shots/
+/e2e/package-lock.json
+/e2e/.cf-profile/
+/e2e/.privy-profile/
+/e2e/*-headed.mjs
+
+# screenshots
 our-landing.png
 /landing-with-model.png
 /landing-seeded.png
