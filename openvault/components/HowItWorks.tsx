@@ -35,9 +35,24 @@ const PILLARS: PillarDef[] = [
 export default function HowItWorks() {
   return (
     <section className="anim-up" style={{ marginTop: 8, marginBottom: 8 }}>
-      <p className="eyebrow" style={{ marginBottom: 16 }}>
-        HOW IT WORKS
-      </p>
+      <div style={{ textAlign: "center", marginBottom: 28 }}>
+        <p className="eyebrow" style={{ marginBottom: 10 }}>
+          HOW IT WORKS
+        </p>
+        <h2
+          className="font-display"
+          style={{
+            margin: "0 auto",
+            maxWidth: 640,
+            fontSize: 26,
+            fontWeight: 700,
+            lineHeight: 1.15,
+            color: "var(--ov-text)",
+          }}
+        >
+          Confidential data, permissioned on-chain
+        </h2>
+      </div>
       <div
         style={{
           display: "grid",

@@ -6,6 +6,7 @@ import type { Artifact, Modality, Tier } from "@/types/artifact";
 import { TIER_ORDER, tierMeta } from "@/lib/tiers";
 import ModelCard from "@/components/ModelCard";
 import HowItWorks from "@/components/HowItWorks";
+import TrendingVault, { type BrowseIntent } from "@/components/TrendingVault";
 import Dropdown from "@/components/ui/Dropdown";
 import Icon from "@/components/ui/Icon";
 
@@ -22,9 +23,38 @@ export default function BrowsePage() {
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Unfiltered catalog for the "Trending in the vault" columns — fetched once so
+  // it stays stable no matter what the grid below is filtered to.
+  const [topArtifacts, setTopArtifacts] = useState<Artifact[]>([]);
+  const [topLoading, setTopLoading] = useState(true);
+
   const [tier, setTier] = useState<Tier | "all">("all");
   const [modality, setModality] = useState<Modality | "all">("all");
   const [q, setQ] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setTopLoading(true);
+    fetch("/api/index", { signal: controller.signal })
+      .then((r) => r.json())
+      .then((data: Artifact[]) => {
+        if (Array.isArray(data)) setTopArtifacts(data);
+      })
+      .catch((e) => {
+        if (e?.name !== "AbortError") setTopArtifacts([]);
+      })
+      .finally(() => setTopLoading(false));
+    return () => controller.abort();
+  }, []);
+
+  function browse(intent: BrowseIntent) {
+    setTier(intent.tier ?? "all");
+    setModality(intent.modality ?? "all");
+    setQ("");
+    document
+      .getElementById("vault")
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   useEffect(() => {
     const controller = new AbortController();
@@ -52,6 +82,15 @@ export default function BrowsePage() {
   return (
     <div className="container maxw-browse">
       <Hero />
+
+      <TrendingVault
+        artifacts={topArtifacts}
+        loading={topLoading}
+        onBrowse={browse}
+      />
+
+      <div style={{ height: 48 }} />
+
       <FilterBar
         tier={tier}
         setTier={setTier}
@@ -62,12 +101,31 @@ export default function BrowsePage() {
       />
 
       <div
-        className="meta"
-        style={{ margin: "20px 0 14px", color: "var(--ov-text-faint)" }}
+        style={{
+          display: "flex",
+          alignItems: "baseline",
+          justifyContent: "space-between",
+          gap: 12,
+          margin: "26px 0 16px",
+        }}
       >
-        {loading
-          ? "LOADING…"
-          : `${artifacts.length} ARTIFACT${artifacts.length === 1 ? "" : "S"}`}
+        <h2
+          className="font-display"
+          style={{
+            margin: 0,
+            fontSize: 22,
+            fontWeight: 700,
+            letterSpacing: "0.01em",
+            color: "var(--ov-text)",
+          }}
+        >
+          Explore all artifacts
+        </h2>
+        <span className="meta" style={{ color: "var(--ov-text-faint)" }}>
+          {loading
+            ? "LOADING…"
+            : `${artifacts.length} ARTIFACT${artifacts.length === 1 ? "" : "S"}`}
+        </span>
       </div>
 
       {loading ? (
@@ -102,53 +160,47 @@ export default function BrowsePage() {
 
 function Hero() {
   return (
-    <section style={{ position: "relative", paddingTop: 46, paddingBottom: 34 }}>
+    <section
+      style={{
+        position: "relative",
+        paddingTop: 60,
+        paddingBottom: 40,
+        textAlign: "center",
+      }}
+    >
       <div
         className="anim-up"
         style={{
           display: "flex",
           alignItems: "center",
+          justifyContent: "center",
           gap: 9,
-          marginBottom: 18,
+          marginBottom: 16,
         }}
       >
-        <span
-          className="tier-dot"
-          style={{ background: "var(--ov-accent)" }}
-        />
+        <span className="tier-dot" style={{ background: "var(--ov-accent)" }} />
         <span className="eyebrow">STORY · CONFIDENTIAL DATA REGISTRY</span>
-      </div>
-      <div
-        className="anim-up font-jp"
-        style={{
-          fontSize: 14,
-          letterSpacing: "0.3em",
-          color: "var(--ov-accent)",
-          marginBottom: 12,
-          animationDelay: "40ms",
-        }}
-      >
-        コンフィデンシャル データ レジストリ
       </div>
       <h1
         className="h1 anim-up"
-        style={{ maxWidth: 880, animationDelay: "80ms" }}
+        style={{
+          maxWidth: 820,
+          margin: "0 auto",
+          animationDelay: "60ms",
+        }}
       >
-        Access control as a
-        <br />
-        <span style={{ color: "var(--ov-accent)" }}>
-          property of the data.
-        </span>
+        Access control as a{" "}
+        <span style={{ color: "var(--ov-accent)" }}>property of the data.</span>
       </h1>
       <p
         className="anim-up"
         style={{
-          maxWidth: 560,
-          marginTop: 16,
-          fontSize: 14.5,
+          maxWidth: 600,
+          margin: "18px auto 0",
+          fontSize: 15.5,
           color: "var(--ov-text-dim)",
           lineHeight: 1.6,
-          animationDelay: "120ms",
+          animationDelay: "110ms",
         }}
       >
         Datasets and models registered as Story IP Assets, threshold-encrypted on
@@ -161,50 +213,61 @@ function Hero() {
         style={{
           display: "flex",
           flexWrap: "wrap",
-          gap: 10,
+          justifyContent: "center",
+          gap: 11,
+          marginTop: 28,
+          animationDelay: "150ms",
+        }}
+      >
+        <a href="#vault" className="btn btn-accent">
+          <Icon name="search" size={14} />
+          Browse the vault
+        </a>
+        <Link href="/upload" className="btn btn-navy">
+          <Icon name="upload" size={14} />
+          Register an artifact
+        </Link>
+      </div>
+
+      <div
+        className="anim-up"
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          justifyContent: "center",
+          alignItems: "center",
+          gap: "8px 16px",
           marginTop: 26,
-          animationDelay: "160ms",
+          animationDelay: "190ms",
         }}
       >
         {TIER_ORDER.map((k) => {
           const t = tierMeta(k);
           return (
-            <div
+            <span
               key={k}
+              title={t.blurb}
               style={{
-                display: "flex",
+                display: "inline-flex",
                 alignItems: "center",
-                gap: 9,
-                padding: "8px 13px",
-                borderRadius: 999,
-                border: "1.5px solid var(--ov-line)",
-                background: "var(--ov-panel)",
+                gap: 7,
+                fontSize: 12,
+                color: "var(--ov-text-dim)",
               }}
             >
               <span
                 style={{
-                  width: 11,
-                  height: 11,
+                  width: 10,
+                  height: 10,
                   borderRadius: 3,
                   background: t.color,
                   flex: "none",
                 }}
               />
-              <span
-                style={{
-                  fontWeight: 700,
-                  fontSize: 12.5,
-                  color: "var(--ov-text)",
-                }}
-              >
+              <span style={{ fontWeight: 600, color: "var(--ov-text)" }}>
                 {t.label}
               </span>
-              <span
-                style={{ fontSize: 12, color: "var(--ov-text-faint)" }}
-              >
-                {t.blurb}
-              </span>
-            </div>
+            </span>
           );
         })}
       </div>
@@ -229,9 +292,11 @@ function FilterBar({
 }) {
   return (
     <div
+      id="vault"
       style={{
         position: "sticky",
         top: 62,
+        scrollMarginTop: 62,
         zIndex: 30,
         background: "color-mix(in srgb, var(--ov-bg) 88%, transparent)",
         backdropFilter: "blur(8px)",
