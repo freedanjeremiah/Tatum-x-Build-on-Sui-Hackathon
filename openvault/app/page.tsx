@@ -89,7 +89,7 @@ export default function BrowsePage() {
         onBrowse={browse}
       />
 
-      <div style={{ height: 48 }} />
+      <div style={{ height: 72 }} />
 
       <FilterBar
         tier={tier}
@@ -106,16 +106,16 @@ export default function BrowsePage() {
           alignItems: "baseline",
           justifyContent: "space-between",
           gap: 12,
-          margin: "26px 0 16px",
+          margin: "40px 0 22px",
         }}
       >
         <h2
           className="font-display"
           style={{
             margin: 0,
-            fontSize: 22,
+            fontSize: 26,
             fontWeight: 700,
-            letterSpacing: "0.01em",
+            letterSpacing: "0.005em",
             color: "var(--ov-text)",
           }}
         >
@@ -151,9 +151,9 @@ export default function BrowsePage() {
         </div>
       )}
 
-      <div style={{ height: 56 }} />
+      <div style={{ height: 84 }} />
       <HowItWorks />
-      <div style={{ height: 56 }} />
+      <div style={{ height: 96 }} />
     </div>
   );
 }
@@ -163,28 +163,38 @@ function Hero() {
     <section
       style={{
         position: "relative",
-        paddingTop: 60,
-        paddingBottom: 40,
+        paddingTop: 96,
+        paddingBottom: 72,
         textAlign: "center",
       }}
     >
       <div
         className="anim-up"
         style={{
-          display: "flex",
+          display: "inline-flex",
           alignItems: "center",
           justifyContent: "center",
-          gap: 9,
-          marginBottom: 16,
+          gap: 10,
+          marginBottom: 22,
+          padding: "7px 14px 7px 11px",
+          borderRadius: 999,
+          border: "1.5px solid var(--ov-line)",
+          background: "color-mix(in srgb, var(--ov-panel) 70%, transparent)",
         }}
       >
-        <span className="tier-dot" style={{ background: "var(--ov-accent)" }} />
+        <span
+          className="tier-dot"
+          style={{
+            background: "var(--ov-accent)",
+            boxShadow: "0 0 0 4px rgba(232, 71, 43, 0.18)",
+          }}
+        />
         <span className="eyebrow">STORY · CONFIDENTIAL DATA REGISTRY</span>
       </div>
       <h1
         className="h1 anim-up"
         style={{
-          maxWidth: 820,
+          maxWidth: 920,
           margin: "0 auto",
           animationDelay: "60ms",
         }}
@@ -195,11 +205,11 @@ function Hero() {
       <p
         className="anim-up"
         style={{
-          maxWidth: 600,
-          margin: "18px auto 0",
-          fontSize: 15.5,
+          maxWidth: 640,
+          margin: "26px auto 0",
+          fontSize: 16,
           color: "var(--ov-text-dim)",
-          lineHeight: 1.6,
+          lineHeight: 1.65,
           animationDelay: "110ms",
         }}
       >
@@ -214,8 +224,8 @@ function Hero() {
           display: "flex",
           flexWrap: "wrap",
           justifyContent: "center",
-          gap: 11,
-          marginTop: 28,
+          gap: 14,
+          marginTop: 38,
           animationDelay: "150ms",
         }}
       >
@@ -236,8 +246,8 @@ function Hero() {
           flexWrap: "wrap",
           justifyContent: "center",
           alignItems: "center",
-          gap: "8px 16px",
-          marginTop: 26,
+          gap: "10px 22px",
+          marginTop: 40,
           animationDelay: "190ms",
         }}
       >
@@ -250,15 +260,15 @@ function Hero() {
               style={{
                 display: "inline-flex",
                 alignItems: "center",
-                gap: 7,
-                fontSize: 12,
+                gap: 8,
+                fontSize: 12.5,
                 color: "var(--ov-text-dim)",
               }}
             >
               <span
                 style={{
-                  width: 10,
-                  height: 10,
+                  width: 11,
+                  height: 11,
                   borderRadius: 3,
                   background: t.color,
                   flex: "none",
@@ -295,14 +305,15 @@ function FilterBar({
       id="vault"
       style={{
         position: "sticky",
-        top: 62,
-        scrollMarginTop: 62,
+        top: 72,
+        scrollMarginTop: 80,
         zIndex: 30,
-        background: "color-mix(in srgb, var(--ov-bg) 88%, transparent)",
-        backdropFilter: "blur(8px)",
+        background: "color-mix(in srgb, var(--ov-bg) 86%, transparent)",
+        backdropFilter: "blur(12px) saturate(1.1)",
+        WebkitBackdropFilter: "blur(12px) saturate(1.1)",
         borderBottom: "1.5px solid var(--ov-line)",
-        margin: "0 -20px",
-        padding: "12px 20px",
+        margin: "0 -28px",
+        padding: "16px 28px",
       }}
     >
       <div
@@ -313,7 +324,7 @@ function FilterBar({
           flexWrap: "wrap",
         }}
       >
-        <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {FILTER_TIERS.map((k) => {
             const active = tier === k;
             const t = k === "all" ? null : tierMeta(k);
@@ -327,8 +338,8 @@ function FilterBar({
                 style={{
                   textTransform: "uppercase",
                   fontSize: 11,
-                  letterSpacing: "0.08em",
-                  padding: "6px 12px",
+                  letterSpacing: "0.1em",
+                  padding: "8px 14px",
                   borderRadius: 999,
                   border: "1.5px solid",
                   cursor: "pointer",
@@ -344,6 +355,7 @@ function FilterBar({
                       ? "var(--ov-navy)"
                       : `color-mix(in srgb, ${col} 14%, transparent)`
                     : "transparent",
+                  transition: "all .18s ease",
                 }}
               >
                 {k === "all" ? "All" : t!.label}

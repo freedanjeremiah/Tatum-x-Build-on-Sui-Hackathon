@@ -75,11 +75,11 @@ export default function ModelCard({ artifact: a }: { artifact: Artifact }) {
         cursor: "pointer",
         background: "var(--ov-panel)",
         border: "1.5px solid var(--ov-line-ink)",
-        borderRadius: "var(--radius-xl)",
-        transition: "transform .16s ease, box-shadow .16s ease",
-        transform: hover ? "translate(-2px,-3px)" : "none",
+        borderRadius: "var(--radius-2xl)",
+        transition: "transform .22s cubic-bezier(.2,.7,.3,1), box-shadow .22s ease",
+        transform: hover ? "translate(-3px,-4px)" : "none",
         boxShadow: hover
-          ? `6px 8px 0 ${t.color}`
+          ? `8px 10px 0 ${t.color}`
           : "3px 4px 0 rgba(33,53,108,0.14)",
       }}
     >
@@ -99,7 +99,7 @@ export default function ModelCard({ artifact: a }: { artifact: Artifact }) {
       <div
         style={{
           position: "relative",
-          padding: "18px 16px 0",
+          padding: "22px 20px 0",
           overflow: "hidden",
         }}
       >
@@ -151,13 +151,13 @@ export default function ModelCard({ artifact: a }: { artifact: Artifact }) {
           className="font-display clamp-2"
           style={{
             position: "relative",
-            fontSize: 19,
+            fontSize: 20,
             fontWeight: 600,
             textTransform: "uppercase",
-            letterSpacing: "0.005em",
-            margin: "14px 0 8px",
-            lineHeight: 1.04,
-            minHeight: 40,
+            letterSpacing: "0.003em",
+            margin: "18px 0 10px",
+            lineHeight: 1.05,
+            minHeight: 42,
             color: "var(--ov-text)",
           }}
         >
@@ -167,10 +167,10 @@ export default function ModelCard({ artifact: a }: { artifact: Artifact }) {
           className="clamp-2"
           style={{
             position: "relative",
-            fontSize: 12.5,
+            fontSize: 13,
             color: "var(--ov-text-dim)",
             margin: 0,
-            lineHeight: 1.5,
+            lineHeight: 1.55,
           }}
         >
           {a.description}
@@ -181,8 +181,8 @@ export default function ModelCard({ artifact: a }: { artifact: Artifact }) {
             style={{
               display: "flex",
               flexWrap: "wrap",
-              gap: 5,
-              marginTop: 13,
+              gap: 6,
+              marginTop: 16,
             }}
           >
             {a.tags.slice(0, 4).map((tg) => (
@@ -203,19 +203,19 @@ export default function ModelCard({ artifact: a }: { artifact: Artifact }) {
       {a.tier === "compute" ? (
         <div
           style={{
-            margin: "13px 16px 0",
-            padding: "7px 11px",
-            borderRadius: 8,
+            margin: "16px 20px 0",
+            padding: "9px 13px",
+            borderRadius: 10,
             fontSize: 10.5,
             color: t.color,
             background: `color-mix(in srgb, ${t.color} 11%, transparent)`,
             border: `1px solid color-mix(in srgb, ${t.color} 35%, transparent)`,
             fontFamily: "var(--font-mono)",
-            letterSpacing: "0.06em",
+            letterSpacing: "0.08em",
             textTransform: "uppercase",
             display: "flex",
             alignItems: "center",
-            gap: 7,
+            gap: 8,
           }}
         >
           <Icon name="compute" size={12} />
@@ -223,13 +223,13 @@ export default function ModelCard({ artifact: a }: { artifact: Artifact }) {
         </div>
       ) : null}
 
-      <div style={{ flex: 1, minHeight: 16 }} />
+      <div style={{ flex: 1, minHeight: 20 }} />
 
       {/* footer / action stub */}
       <div
         style={{
-          padding: "13px 16px",
-          marginTop: 14,
+          padding: "16px 20px",
+          marginTop: 18,
           borderTop: "1.5px solid var(--ov-line)",
           background: "var(--ov-panel-2)",
         }}
@@ -267,11 +267,11 @@ export default function ModelCard({ artifact: a }: { artifact: Artifact }) {
             style={{
               display: "inline-flex",
               alignItems: "center",
-              gap: 6,
-              fontSize: 12,
+              gap: 7,
+              fontSize: 12.5,
               fontWeight: 600,
-              padding: "7px 13px",
-              borderRadius: 8,
+              padding: "9px 15px",
+              borderRadius: 10,
               whiteSpace: "nowrap",
               flexShrink: 0,
               background: isPrivate ? "transparent" : t.color,
@@ -281,7 +281,7 @@ export default function ModelCard({ artifact: a }: { artifact: Artifact }) {
                 : `1.5px solid ${t.color}`,
               boxShadow: isPrivate ? "none" : "2px 2px 0 var(--ov-navy)",
               transform: hover && !isPrivate ? "translate(-1px,-1px)" : "none",
-              transition: "transform .14s",
+              transition: "transform .18s ease, box-shadow .18s ease",
             }}
           >
             {ctaLabel(a)}
