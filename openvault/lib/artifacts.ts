@@ -30,6 +30,10 @@ export interface Clients {
   cdr: any;
   story: any;
   account: { address: `0x${string}` };
+  /** Read-only viem client bound to Aeneid (present at runtime via lib/clients).
+   *  Optional in the type so server/script bundles that build a partial bundle
+   *  still satisfy it; pre-flight reads (e.g. royalty vault checks) use it. */
+  publicClient?: import("viem").PublicClient;
 }
 
 export type UploadMeta = BuildIpaMetadataArgs;

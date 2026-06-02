@@ -28,6 +28,26 @@ export default function RoyaltyPanel({ artifact }: RoyaltyPanelProps) {
   const [payAmount, setPayAmount] = useState("0.01");
   const [derivativeIds, setDerivativeIds] = useState<string[]>([]);
   const [derivLoadError, setDerivLoadError] = useState<string | null>(null);
+  // null = unknown (still checking); false = no royalty vault → cannot receive
+  // royalties yet (deployed on first commercial license mint).
+  const [vaultReady, setVaultReady] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { receiverHasRoyaltyVault } = await import("@/lib/royalty");
+        const ok = await receiverHasRoyaltyVault(artifact.ipId);
+        if (!cancelled) setVaultReady(ok);
+      } catch {
+        // Read failed (RPC hiccup) — leave unknown so we don't wrongly block.
+        if (!cancelled) setVaultReady(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [artifact.ipId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -122,6 +142,7 @@ export default function RoyaltyPanel({ artifact }: RoyaltyPanelProps) {
       const out = await payRoyalty(clients.story, {
         childIpId: artifact.ipId,
         amount,
+        publicClient: clients.publicClient,
       });
       setLastTx(out.txHash);
       setPhase("done");
@@ -266,22 +287,32 @@ export default function RoyaltyPanel({ artifact }: RoyaltyPanelProps) {
         <button
           type="button"
           className="btn btn-ghost"
-          disabled={busy || !payAmount.trim()}
+          disabled={busy || !payAmount.trim() || vaultReady === false}
           onClick={handlePay}
         >
           {phase === "paying" ? <Spinner /> : null}
           {phase === "paying" ? "Sending…" : "Pay royalty"}
         </button>
       </div>
-      <div
-        style={{
-          fontSize: 11.5,
-          color: "var(--ov-text-faint)",
-          marginTop: 8,
-        }}
-      >
-        Auto-wraps native IP → WIP if needed.
-      </div>
+      {vaultReady === false ? (
+        <div style={{ marginTop: 8 }}>
+          <DisclosureStrip tone="gated" icon="flag">
+            This IP has no royalty vault yet, so it can&apos;t receive royalties.
+            A vault is deployed when its first commercial license is minted
+            (gated or compute tier).
+          </DisclosureStrip>
+        </div>
+      ) : (
+        <div
+          style={{
+            fontSize: 11.5,
+            color: "var(--ov-text-faint)",
+            marginTop: 8,
+          }}
+        >
+          Auto-wraps native IP → WIP if needed.
+        </div>
+      )}
 
       {error ? (
         <div style={{ marginTop: 16 }}>
