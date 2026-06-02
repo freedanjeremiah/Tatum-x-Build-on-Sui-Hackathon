@@ -107,13 +107,18 @@ export async function claimRevenue(
   story: any,
   { parentIpId, childIpIds }: { parentIpId: `0x${string}`; childIpIds: `0x${string}`[] }
 ): Promise<{ txHash: `0x${string}` }> {
-  return story.royalty.claimAllRevenue({
+  // SDK claimAllRevenue resolves to { txHashes: Hex[], claimedTokens } — NOT a
+  // single { txHash }. Surface the first hash so callers (and the UI) get a real
+  // tx to link instead of `undefined`.
+  const res = await story.royalty.claimAllRevenue({
     ancestorIpId: parentIpId,
     claimer: parentIpId,
     childIpIds,
     royaltyPolicies: childIpIds.map(() => ROYALTY_POLICY_LAP),
     currencyTokens: childIpIds.map(() => WIP_TOKEN),
   });
+  const txHash = (res?.txHash ?? res?.txHashes?.[0]) as `0x${string}`;
+  return { txHash };
 }
 
 /** Read an IP's claimable revenue (in WIP wei). */
