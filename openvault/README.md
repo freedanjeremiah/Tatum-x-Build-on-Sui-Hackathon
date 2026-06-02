@@ -22,6 +22,14 @@ for gated decryption; the compute-privacy guarantee comes from the worker's isol
 allowlist, **not** CDR. The demo worker runs on a plain server (operator-trusted) — a production
 deployment would run in an attested SGX/TDX enclave. The UI discloses this everywhere it matters.
 
+## Run models (inference)
+Model artifacts get a **Run** tab — enter a prompt, stream live output. Inference runs on an
+external GPU backend (Ollama, OpenAI-compatible) reached through `/api/run`, which injects a
+**server-only** bearer token so it never reaches the browser. Public-safe guards: per-IP rate limit,
+prompt-size + `max_tokens` caps, upstream timeout. If the backend isn't configured the route returns
+an honest **503** (never a fabricated reply). Datasets are not runnable. Wire it by setting the
+`INFERENCE_*` vars to any OpenAI-compatible endpoint (Ollama, vLLM, OpenAI, …).
+
 ## Run it (Story Aeneid testnet — real only)
 
 ```bash
@@ -31,14 +39,27 @@ cp .env.local.example .env.local   # fill NEXT_PUBLIC_PRIVY_APP_ID, PINATA_JWT, 
 pnpm dev                           # http://localhost:3000
 ```
 
-Required env (these are the **only three** the code reads — RPC and contract addresses
-are hardcoded in `lib/constants.ts`):
+### Environment variables
+RPC and contract addresses are hardcoded in `lib/constants.ts`, so only these matter:
+
+**Core** (needed to upload/index/run the app):
 
 | Var | Scope | Missing → |
 |-----|-------|-----------|
 | `NEXT_PUBLIC_PRIVY_APP_ID` | public | wallet auth unavailable |
 | `WALLET_PRIVATE_KEY` | server secret | scripts/worker throw |
 | `PINATA_JWT` | server secret | node-side pinning throws |
+
+**Inference** (optional — powers the model **Run** tab; omit and the Run tab returns 503):
+
+| Var | Scope | Default | Notes |
+|-----|-------|---------|-------|
+| `INFERENCE_BASE_URL` | server secret | — | OpenAI-compatible base, e.g. `https://<host>/v1` |
+| `INFERENCE_TOKEN` | server secret | — | bearer token; injected server-side, never sent to browser |
+| `INFERENCE_MODEL` | server secret | `llama3.1:8b` | model id served by the backend |
+
+Optional worker/attestation tuning (`WORKER_ISOLATION_MODE`, `CDR_ATTEST*`, `WORKER_SIM_*`) is
+documented inline in `lib/attestation.ts` / `lib/tee-sim.ts`; defaults are fine for the demo.
 
 **Node 22+** required. Real-mode IPFS storage is **Pinata** (set `PINATA_JWT`) — chosen
 over an in-process Helia node so uploads survive across processes (worker/consumer can
