@@ -1,9 +1,34 @@
 import { test, expect } from "vitest";
-import { runComputeJob } from "./compute-worker";
+import { runComputeJob, parseRows } from "./compute-worker";
 import { RUN_INTEGRATION, realClients } from "../lib/itest";
 import type { Artifact } from "../types/artifact";
 
 const itInt = test.skipIf(!RUN_INTEGRATION);
+
+const enc = (s: string) => new TextEncoder().encode(s);
+
+// PURE: dataset-shape parsing. CSV is the real seed format, so a JSON-only
+// parser fails on the header row (the original /api/compute 500).
+test("parseRows: CSV with header + categorical column → numeric matrix", () => {
+  const csv = "month,region,units,revenue_usd\n1,NA,200,4000\n2,EU,300,9000";
+  // header dropped; non-numeric "region" column dropped; month/units/revenue kept
+  expect(parseRows(enc(csv))).toEqual([
+    [1, 200, 4000],
+    [2, 300, 9000],
+  ]);
+});
+
+test("parseRows: all-numeric CSV with no header keeps every row", () => {
+  expect(parseRows(enc("1,2,3\n4,5,6"))).toEqual([
+    [1, 2, 3],
+    [4, 5, 6],
+  ]);
+});
+
+test("parseRows: JSON shapes still parse", () => {
+  expect(parseRows(enc("[[1,2],[3,4]]"))).toEqual([[1, 2], [3, 4]]);
+  expect(parseRows(enc('{"values":[5,6,7]}'))).toEqual([[5], [6], [7]]);
+});
 
 const DATASET = "0xcmp0000000000000000000000000000000000005" as `0x${string}`;
 const ALLOWED = ["sha256:mean-aggregate", "sha256:logistic-regression"];

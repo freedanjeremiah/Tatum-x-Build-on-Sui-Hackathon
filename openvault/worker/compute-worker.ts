@@ -109,20 +109,64 @@ async function decryptDataset(
   return { rows, plaintext, attestation };
 }
 
-/** Parse decrypted plaintext into a numeric matrix. Accepts a few shapes. */
-function parseRows(bytes: Uint8Array): number[][] {
-  const text = new TextDecoder().decode(bytes);
-  const data = JSON.parse(text) as unknown;
-  if (Array.isArray(data)) {
-    // [[...],[...]] matrix, or a flat [n,n,...] vector → single column.
-    if (data.length > 0 && Array.isArray(data[0])) return data as number[][];
-    return (data as number[]).map((v) => [v]);
+/**
+ * Parse decrypted plaintext into a numeric matrix. Accepts JSON shapes
+ * ([[...],[...]] matrix, flat [n,...] vector, or {values:[...]}) AND CSV — the
+ * sample datasets are uploaded as CSV (e.g. "month,region,units,revenue_usd"),
+ * so a JSON-only parser fails on the header row. We detect the shape by the
+ * first non-whitespace char and fall back to CSV otherwise.
+ *
+ * Exported for unit testing.
+ */
+export function parseRows(bytes: Uint8Array): number[][] {
+  const text = new TextDecoder().decode(bytes).trim();
+  if (!text) throw new Error("worker: empty dataset");
+
+  // JSON if it opens with a bracket/brace; CSV otherwise.
+  if (text[0] === "[" || text[0] === "{") {
+    const data = JSON.parse(text) as unknown;
+    if (Array.isArray(data)) {
+      // [[...],[...]] matrix, or a flat [n,n,...] vector → single column.
+      if (data.length > 0 && Array.isArray(data[0])) return data as number[][];
+      return (data as number[]).map((v) => [v]);
+    }
+    if (data && typeof data === "object" && "values" in data) {
+      const vals = (data as { values: number[] }).values;
+      return vals.map((v) => [v]);
+    }
+    throw new Error("worker: unrecognized dataset shape");
   }
-  if (data && typeof data === "object" && "values" in data) {
-    const vals = (data as { values: number[] }).values;
-    return vals.map((v) => [v]);
+
+  return parseCsv(text);
+}
+
+/**
+ * CSV → numeric matrix. Drops an all-non-numeric header row and any column that
+ * is not numeric across every data row (e.g. a categorical "region" column).
+ * The allowlisted algorithms operate on numeric columns only, so this keeps the
+ * matrix rectangular and well-typed without silently coercing strings to NaN.
+ */
+function parseCsv(text: string): number[][] {
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  if (lines.length === 0) throw new Error("worker: empty CSV");
+
+  const cells = lines.map((l) => l.split(",").map((c) => c.trim()));
+  const isNum = (s: string) => s !== "" && Number.isFinite(Number(s));
+
+  // Header = first row with no numeric cell at all (e.g. "month,region,...").
+  const start = cells[0].every((c) => !isNum(c)) ? 1 : 0;
+  const dataRows = cells.slice(start);
+  if (dataRows.length === 0) throw new Error("worker: CSV has no data rows");
+
+  // Keep only columns numeric in EVERY data row (drops categoricals like region).
+  const width = dataRows[0].length;
+  const keep: number[] = [];
+  for (let c = 0; c < width; c++) {
+    if (dataRows.every((r) => c < r.length && isNum(r[c]))) keep.push(c);
   }
-  throw new Error("worker: unrecognized dataset shape");
+  if (keep.length === 0) throw new Error("worker: CSV has no numeric columns");
+
+  return dataRows.map((r) => keep.map((c) => Number(r[c])));
 }
 
 /** Zero a Uint8Array / number[][] in place (best-effort plaintext wipe). */
