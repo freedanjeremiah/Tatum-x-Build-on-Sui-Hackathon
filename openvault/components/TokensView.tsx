@@ -15,7 +15,7 @@ const TOKEN_EXPLORER = "https://aeneid.storyscan.io/token/";
 
 /**
  * My License Tokens — reads the connected wallet's on-chain license token ids.
- * Only mounted inside PrivyProvider (via app/tokens/page → WalletNavLinks-style
+ * Only mounted inside PrivyProvider (via app/tokens/page → ProfileMenu-style
  * gate), so usePrivy() is always safe here. Never fabricates token ids: empty,
  * error, and non-enumerable states are all honest.
  */

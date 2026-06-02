@@ -15,6 +15,11 @@ const nextConfig: NextConfig = {
     "node-datachannel",
     "pinata-web3",
   ],
+  // /about was merged into the landing page (its unique "how it works" pillars
+  // now render under the artifact grid). Redirect old links to the root.
+  async redirects() {
+    return [{ source: "/about", destination: "/", permanent: true }];
+  },
 };
 
 export default nextConfig;

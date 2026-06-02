@@ -4,14 +4,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import VaultMark from "./ui/VaultMark";
 import WalletButton from "./WalletButton";
-import WalletNavLinks from "./WalletNavLinks";
+import ProfileMenu from "./ProfileMenu";
 
 const NAV = [
   { href: "/", label: "Browse" },
   { href: "/search", label: "Search" },
   { href: "/upload", label: "Upload" },
   { href: "/leaderboard", label: "Leaderboard" },
-  { href: "/about", label: "About" },
 ];
 
 export default function Header() {
@@ -64,7 +63,6 @@ export default function Header() {
               </Link>
             );
           })}
-          <WalletNavLinks />
         </nav>
 
         <div style={{ flex: 1 }} />
@@ -74,6 +72,7 @@ export default function Header() {
         >
           Aeneid testnet
         </span>
+        <ProfileMenu />
         <WalletButton />
       </div>
     </header>

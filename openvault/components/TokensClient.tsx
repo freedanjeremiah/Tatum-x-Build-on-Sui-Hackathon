@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import { PRIVY_APP_ID } from "@/lib/env";
 
 // usePrivy() is only safe inside PrivyProvider, which Providers.tsx mounts only
-// when PRIVY_APP_ID is set. Mirror the WalletNavLinks gate: when Privy is absent
+// when PRIVY_APP_ID is set. Mirror the ProfileMenu gate: when Privy is absent
 // render an honest connect prompt instead of calling the hook (which would
 // throw). When present, load the Privy-consuming view client-only.
 const TokensView = dynamic(() => import("./TokensView"), { ssr: false });

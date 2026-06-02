@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { Artifact, Modality, Tier } from "@/types/artifact";
 import { TIER_ORDER, tierMeta } from "@/lib/tiers";
 import ModelCard from "@/components/ModelCard";
+import HowItWorks from "@/components/HowItWorks";
 import Dropdown from "@/components/ui/Dropdown";
 import Icon from "@/components/ui/Icon";
 
@@ -92,6 +93,8 @@ export default function BrowsePage() {
         </div>
       )}
 
+      <div style={{ height: 56 }} />
+      <HowItWorks />
       <div style={{ height: 56 }} />
     </div>
   );
