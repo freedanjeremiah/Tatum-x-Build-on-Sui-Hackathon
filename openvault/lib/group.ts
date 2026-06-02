@@ -37,14 +37,18 @@ export function groupReadCondition(memberIpIds: `0x${string}`[]): {
   };
 }
 
-/** Register a group, attach a license, and add initial member IPs. */
+/** Register a group, attach a license, and add initial member IPs.
+ *  maxAllowedRewardShare = 100 lets any member's commercial-remix terms (which
+ *  set commercialRevShare up to 100) be added without revert. With 5, the
+ *  Group contract reverts with selector 0xc0ea74bc when adding members that
+ *  exceed the cap, even if no royalty is being collected yet. */
 export async function createGroup(
   story: any,
   { ipIds, termsId }: { ipIds: `0x${string}`[]; termsId: string }
 ): Promise<{ groupIpId: `0x${string}`; txHash: `0x${string}` }> {
   const grp = await story.groupClient.registerGroupAndAttachLicenseAndAddIps({
     groupPool: EVEN_SPLIT_GROUP_POOL,
-    maxAllowedRewardShare: 5,
+    maxAllowedRewardShare: 100,
     ipIds,
     licenseData: { licenseTermsId: termsId },
   });

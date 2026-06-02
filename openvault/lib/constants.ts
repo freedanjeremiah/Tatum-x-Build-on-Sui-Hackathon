@@ -88,6 +88,14 @@ export const COMPUTE_WORKER_READ_CONDITION = envAddr(
   "COMPUTE_WORKER_READ_CONDITION",
   "0x834c06ba613481401df4972a746ddd529b97b5c2",
 );
+// Read-side counterpart to OWNER_WRITE_CONDITION (the latter only implements
+// checkWriteCondition). Deployed via scripts/contracts/deploy.mjs alongside
+// the other OpenVault read conditions; without this, private-tier downloads
+// revert at the CDR precompile.
+export const OWNER_READ_CONDITION = envAddr(
+  "OWNER_READ_CONDITION",
+  "0xd5bfb61879f4a3f6983d9f4439489845e1b9c87f",
+);
 
 // The confidential-compute worker operator(s) allowed to decrypt compute-tier
 // vaults. The server signer (WALLET_PRIVATE_KEY) address. Consumers are NOT here,

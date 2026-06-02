@@ -1,5 +1,6 @@
 {
-  "AnyOfReadCondition": "0x97820c14c861d8be1fc7b17a4cb5335312383c8a",
-  "GroupLicenseReadCondition": "0x58fbf091fedfe898465c1fbef7588a3f7e7128df",
-  "ComputeWorkerReadCondition": "0x834c06ba613481401df4972a746ddd529b97b5c2"
+  "AnyOfReadCondition": "0xcc6e73bb89f023feca2795408ec1e67e443f034e",
+  "GroupLicenseReadCondition": "0x3f9654ed5724a554d2c3c2afa57f7310d92a2be1",
+  "ComputeWorkerReadCondition": "0xb1c58dba8b64162c48ed0d08a5bc2a77b64f5f5d",
+  "OwnerReadCondition": "0xd5bfb61879f4a3f6983d9f4439489845e1b9c87f"
 }

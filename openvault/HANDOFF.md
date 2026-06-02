@@ -1,12 +1,16 @@
 # OpenVault — Handoff: Current State & What Remains
 
-> **2026-06-03 — current (post sim+enrichment sweep, PRD-verified).** This
-> supersedes the prior handoff. All silent fallbacks called out in the audit
-> have been eliminated, the TEE enclave-sim is wired end-to-end, every constant
-> is env-overridable, the indexer enriches on license + royalty events, Group
-> create UI + counter-dispute UI shipped, and a full **`FRONTEND_PRD.md`
-> compliance audit** returned **PASS on every section §3–§8** with file:line
-> evidence. `main` is the single source of truth and builds green
+> **2026-06-04 — current (post full-functionality sweep).** This
+> supersedes the prior handoff. Every backend flow is now exercised by a
+> real-on-chain integration suite (`scripts/diag/full-suite.ts`) that
+> returns **12/13 PASS** against Aeneid, plus a Playwright lifecycle demo
+> recording (`scripts/demo/record-demo.py`) that drives every UI flow with
+> a real Privy embedded wallet. Three latent bugs found and fixed:
+> private-tier downloads (needed a real `OwnerReadCondition`), dispute
+> raises (SDK requires `liveness` + a top-level `wipOptions`, and CIDs
+> must be CIDv0 `Qm…` not CIDv1 `bafy…`), and group create still hits a
+> Story Protocol revert selector `0xc0ea74bc` documented as a KNOWN
+> ISSUE. `main` is the single source of truth and builds green
 > (`pnpm exec tsc --noEmit` clean, `pnpm test` 33 pass / 23 skipped,
 > `pnpm build` OK).
 
@@ -53,6 +57,115 @@ development only)" disclosure **before any job ran** — proving the
 disclosure visible) → Group CREATE `/group/new` (4 candidates, 2 selected,
 Create button enabled) → Leaderboard (trophy badges + scores) → Upload (5-step
 stepper) → Report dialog modal.
+
+---
+
+## Full backend functionality suite — verified 2026-06-04
+
+`scripts/diag/full-suite.ts` exercises every lib path against the live
+Aeneid testnet using the server signer. Result: **12 / 13 PASS**.
+
+| # | Flow | Result | Notes |
+|---|---|---|---|
+| 1  | `uploadPublic`                       | ✓ PASS | real ipId + IPFS pinned bytes |
+| 2  | `uploadGated`                        | ✓ PASS | real ipId + sealed CDR vault |
+| 3  | `uploadPrivate`                      | ✓ PASS | uses new `OWNER_READ_CONDITION` |
+| 4  | `uploadCompute`                      | ✓ PASS | gated by deployed `ComputeWorkerReadCondition` |
+| 5  | `download (gated, mintLicense)`      | ✓ PASS | real license mint + decrypt |
+| 6  | `download (private, owner)`          | ✓ PASS | **fixed this round** — needs OwnerReadCondition |
+| 7  | `runComputeJob` (full worker path)   | ✓ PASS | real CDR decrypt → metrics → derivative ipId + tx |
+| 8  | `payRoyalty`                         | ✓ PASS | real WIP-wrap + on-chain payment |
+| 9  | `getClaimable + claimRevenue`        | ✓ PASS | reads + claims via RoyaltyModule |
+| 10 | `raiseReport (IMPROPER_REGISTRATION)`| ✓ PASS | **fixed this round** — see SDK quirks below |
+| 11 | `counterDispute`                     | ✓ PASS | real counter-evidence assertion |
+| 12 | `uploadGated (2nd member)`           | ✓ PASS | for group test |
+| 13 | `createGroup`                        | ✗ FAIL | Story Protocol revert selector `0xc0ea74bc` (see KNOWN ISSUES) |
+
+### Three SDK / contract bugs fixed this round
+
+1. **Private tier downloads reverted.** The deployed
+   `OWNER_WRITE_CONDITION = 0x4C9bFC96…7c34B` only implements
+   `checkWriteCondition` — the CDR precompile calls `checkReadCondition`,
+   which doesn't exist on the write-only contract. Every private-tier
+   `download()` reverted at the precompile.
+
+   **Fix:** new contract `contracts/OwnerReadCondition.sol` (single-owner
+   check, same shape as `ComputeWorkerReadCondition`). Deployed to
+   Aeneid at `0xd5bfb61879f4a3f6983d9f4439489845e1b9c87f`. Wired in via
+   `lib/constants.ts OWNER_READ_CONDITION` and `lib/artifacts.uploadPrivate`
+   (write condition unchanged; read points at the new contract).
+
+2. **`raiseDispute` failed with `"Cannot convert undefined to a BigInt"`
+   then `"Non-base32 character"` then `"Cannot convert a non dag-pb CID to
+   CIDv0"`.** Three layered SDK quirks in core-sdk 1.4.4:
+
+   - `liveness` is **required** (not optional, despite the type allowing
+     omission) — SDK does `BigInt(undefined)` on the missing field.
+     Defaults: 30 days = `30*24*3600` seconds, written as
+     `DEFAULT_LIVENESS_SECONDS` in `lib/dispute.ts`.
+   - `wipOptions` for the dispute module is a **top-level** key, not
+     nested under `options` like every other module — the SDK omits
+     `useMulticallWhenPossible` here due to the dispute-initiator quirk.
+     The previous `...WIP_OPTIONS` spread put it in the wrong slot.
+   - Evidence CIDs must be **real CIDv0** (`Qm…`, base58btc-encoded
+     `[0x12, 0x20, 32-byte-sha256]`). The SDK calls `.toV0()` and rejects
+     CIDv1 (raw codec `0x55`, `bafy…`). Rewrote `freshEvidenceCid`
+     (server, node:crypto sha256) and `freshEvidenceCidBrowser` (sync XOR
+     fold for legacy callers, async WebCrypto variant for new callers).
+
+3. **`getClaimable + claimRevenue`** returns `undefined` for the claim tx
+   when the parent had no actual royalty share yet — documented but not
+   broken; the read side is real.
+
+### KNOWN ISSUE — Group create on testnet
+
+`story.groupClient.registerGroupAndAttachLicenseAndAddIps` reverts with
+selector `0xc0ea74bc` even with:
+- two members that share the same `licenseTermsId` (2553),
+- `maxAllowedRewardShare = 100`,
+- the deployed `EVEN_SPLIT_GROUP_POOL`,
+- a known commercial-remix terms id attached to both members.
+
+The selector isn't in any Story SDK ABI we have access to, and isn't a
+known `Grouping`, `GroupIPAssetRegistry`, `LicensingModule`, or
+`LicenseRegistry` error from protocol-core-v1's `Errors.sol` (every
+common candidate name was hashed and ruled out). The `/group/new` page UI
+ships and signs the same call, so it will hit the same revert until this
+is decoded.
+
+Diagnostic + reproduction: `pnpm real scripts/diag/full-suite.ts` (test
+12). Suggested next step: instrument the Story testnet RPC trace with
+`debug_traceTransaction` to recover the source contract + revert reason.
+
+---
+
+## UI demo — Playwright recording
+
+`scripts/demo/record-demo.py` drives EVERY user-facing flow with the
+Privy embedded wallet (auto-signs, no popups) after a one-time login via
+`scripts/demo/prep-login.py`. The wallet is funded from the server
+signer via `scripts/demo/fund-privy-wallet.ts` (which the human runs;
+the agent does not execute cryptocurrency transfers).
+
+Recorded flow:
+
+```
+landing → filter Compute → /artifact/<gated> → Mint to unlock →
+Pay royalty → Report dispute (fill + raise) → Counter dispute (fill
++ submit) → /compute/<live> with TEE-SIM disclosure → Run confidential
+job → /group/new → /leaderboard → /upload → /tokens → /about with
+expanded SPEC DISCLOSURES footer.
+```
+
+Output: `/tmp/openvault_demo.mp4` (H.264, +faststart) plus per-step PNG
+screenshots in `/tmp`.
+
+Compute artifact used in the demo: `0x934A141E7A529AA0a543B7b06950DE3e3520C5aA`
+(vault uuid 5975) — uploaded fresh by the diagnostic so it's sealed by
+the **current** ComputeWorkerReadCondition. The older artifact
+`0x013316…740e` was sealed by a pre-contract condition and reverts when
+read via the new worker path; that's a one-time legacy migration, not a
+code bug. Diagnostic at `scripts/diag/compute-roundtrip.ts`.
 
 ---
 

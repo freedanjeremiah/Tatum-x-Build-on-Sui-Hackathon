@@ -40,25 +40,46 @@ COMPUTE_IP_ID = "0x934A141E7A529AA0a543B7b06950DE3e3520C5aA"
 ARTIFACT_IP_ID = "0xfAC62e62018CAAe65B13398A1fb4B2e492D069a1"  # SentimentLLM-7B (gated)
 
 # Each step: do = goto|click|fill|wait; wait = ms after action.
+# Drives EVERY user-facing flow against the live chain via the Privy embedded
+# wallet (auto-signs, no popups).
 STEPS = [
-    {"do": "goto",  "target": "/",                                    "wait": 6000,  "label": "landing"},
-    {"do": "wait",  "target": "",                                     "wait": 4000,  "label": "browse_settle"},
-    # Show the compute filter chip (a one-click way into compute tier).
-    {"do": "click", "target": "Compute",                              "wait": 3500,  "label": "filter_compute"},
-    # Navigate to the gated artifact detail (full PROVENANCE sidebar).
-    {"do": "goto",  "target": f"/artifact/{ARTIFACT_IP_ID}",          "wait": 7000,  "label": "artifact_detail_gated"},
-    # Navigate to the compute page — the NEW honest TEE-SIM disclosure renders here.
-    {"do": "goto",  "target": f"/compute/{COMPUTE_IP_ID}",            "wait": 8000,  "label": "compute_page_with_sim_disclosure"},
-    # Actually run a confidential job (wallet must be funded for license fee).
-    {"do": "click", "target": "Run confidential job",                 "wait": 22000, "label": "run_compute_job"},
-    # Group CREATE — the new UI shipped this milestone.
-    {"do": "goto",  "target": "/group/new",                           "wait": 6000,  "label": "group_create_page"},
-    # Leaderboard — trophy badges + scores.
-    {"do": "goto",  "target": "/leaderboard",                         "wait": 5000,  "label": "leaderboard"},
-    # Upload wizard — shows the 5-step stepper.
-    {"do": "goto",  "target": "/upload",                              "wait": 5000,  "label": "upload_wizard"},
-    # About + bottom disclosure footer — wraps the honest-disclosure story.
-    {"do": "goto",  "target": "/about",                               "wait": 5000,  "label": "about"},
+    {"do": "goto",  "target": "/",                                    "wait": 5000,  "label": "landing"},
+    {"do": "click", "target": "Compute",                              "wait": 3000,  "label": "filter_compute"},
+
+    # --- Gated artifact: Mint to unlock + Download ---
+    {"do": "goto",  "target": f"/artifact/{ARTIFACT_IP_ID}",          "wait": 6000,  "label": "artifact_detail_gated"},
+    # Mint license + CDR decrypt round-trip. Privy embedded wallet auto-signs.
+    {"do": "click", "target": "Mint to unlock",                       "wait": 25000, "label": "mint_to_unlock"},
+
+    # --- Royalty pay (0.01 WIP default in the input) ---
+    {"do": "click", "target": "Pay royalty",                          "wait": 22000, "label": "pay_royalty"},
+
+    # --- Report dispute (raises a real dispute on-chain) ---
+    {"do": "click", "target": "Report",                               "wait": 2500,  "label": "open_report_dialog"},
+    {"do": "fill",  "target": ".textarea::Infringes my upstream work; see provenance.",
+                                                                      "wait": 1500,  "label": "fill_evidence"},
+    {"do": "click", "target": "Raise dispute",                        "wait": 22000, "label": "raise_dispute"},
+    {"do": "click", "target": "Done",                                 "wait": 2500,  "label": "close_report_done"},
+
+    # --- Counter dispute (submits counter-evidence assertion) ---
+    {"do": "click", "target": "Counter dispute",                      "wait": 2500,  "label": "open_counter_dialog"},
+    {"do": "fill",  "target": ".textarea::Provenance clean; counter-evidence attached.",
+                                                                      "wait": 1500,  "label": "fill_counter_evidence"},
+    {"do": "click", "target": "Submit counter-evidence",              "wait": 22000, "label": "submit_counter"},
+    {"do": "click", "target": "Done",                                 "wait": 2500,  "label": "close_counter_done"},
+
+    # --- Compute page (TEE-SIM disclosure + real job) ---
+    {"do": "goto",  "target": f"/compute/{COMPUTE_IP_ID}",            "wait": 7000,  "label": "compute_page_sim_disclosure"},
+    {"do": "click", "target": "Run confidential job",                 "wait": 25000, "label": "run_compute_job"},
+
+    # --- Group CREATE ---
+    {"do": "goto",  "target": "/group/new",                           "wait": 5000,  "label": "group_create_page"},
+
+    # --- Browse the rest of the surface ---
+    {"do": "goto",  "target": "/leaderboard",                         "wait": 4500,  "label": "leaderboard"},
+    {"do": "goto",  "target": "/upload",                              "wait": 4500,  "label": "upload_wizard"},
+    {"do": "goto",  "target": "/tokens",                              "wait": 4500,  "label": "my_tokens"},
+    {"do": "goto",  "target": "/about",                               "wait": 4500,  "label": "about"},
     {"do": "click", "target": "SPEC DISCLOSURES",                     "wait": 4000,  "label": "expand_disclosures"},
 ]
 

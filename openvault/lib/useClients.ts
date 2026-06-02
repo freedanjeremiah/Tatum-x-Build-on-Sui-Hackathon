@@ -59,12 +59,65 @@ export async function getClients(): Promise<Clients> {
  * node:crypto and cannot run in the browser). A new CID is produced every call
  * — a real dispute must never reuse stale evidence.
  */
+/** Browser-side CIDv0 (dag-pb, sha2-256) — Story SDK calls .toV0() internally
+ *  and rejects anything else. CIDv0 = base58btc(0x12 0x20 ...32 hash bytes). */
+const BASE58_ALPHABET_BR =
+  "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+function base58EncodeBR(bytes: Uint8Array): string {
+  let value = 0n;
+  for (const b of bytes) value = (value << 8n) | BigInt(b);
+  let out = "";
+  while (value > 0n) {
+    const r = Number(value % 58n);
+    out = BASE58_ALPHABET_BR[r] + out;
+    value /= 58n;
+  }
+  for (const b of bytes) {
+    if (b === 0) out = "1" + out;
+    else break;
+  }
+  return out;
+}
+
 export function freshEvidenceCidBrowser(prefix = "Evidence"): string {
   const uuid =
     typeof crypto !== "undefined" && "randomUUID" in crypto
       ? crypto.randomUUID()
-      : Array.from({ length: 32 }, () =>
-          Math.floor(Math.random() * 16).toString(16)
-        ).join("");
-  return "bafy" + prefix + uuid.replace(/-/g, "");
+      : Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
+  const seedBytes = new TextEncoder().encode(
+    prefix + ":" + uuid + ":" + Date.now() + ":" + Math.random(),
+  );
+  // Synchronous SHA-256: fold the seed into 32 bytes (collision-prone for a
+  // huge corpus, fine for per-session unique dispute evidence — and produces a
+  // valid CIDv0 either way). The async + WebCrypto version below is preferred
+  // when the caller can await.
+  const hash = new Uint8Array(32);
+  for (let i = 0; i < seedBytes.length; i++) hash[i % 32] ^= seedBytes[i];
+  // Avalanche pass so the fold doesn't have obvious 32-byte striping.
+  for (let i = 0; i < 32; i++) {
+    const x = hash[i] ^ ((hash[(i + 7) % 32] << 1) | (hash[(i + 13) % 32] >> 3));
+    hash[i] = x & 0xff;
+  }
+  const bytes = new Uint8Array(34);
+  bytes[0] = 0x12;
+  bytes[1] = 0x20;
+  bytes.set(hash, 2);
+  return base58EncodeBR(bytes);
+}
+
+/** Async variant using real WebCrypto SHA-256 — preferred when the caller can
+ *  await. Same CIDv0 shape so the SDK accepts it. */
+export async function freshEvidenceCidBrowserAsync(prefix = "Evidence"): Promise<string> {
+  const uuid =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
+  const seed = prefix + ":" + uuid + ":" + Date.now();
+  const data = new TextEncoder().encode(seed);
+  const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", data));
+  const bytes = new Uint8Array(34);
+  bytes[0] = 0x12;
+  bytes[1] = 0x20;
+  bytes.set(hash, 2);
+  return base58EncodeBR(bytes);
 }

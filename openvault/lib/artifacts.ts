@@ -7,6 +7,7 @@ import { encodeAbiParameters } from "viem";
 import {
   PUBLIC_SPG_COLLECTION,
   OWNER_WRITE_CONDITION,
+  OWNER_READ_CONDITION,
   LICENSE_READ_CONDITION,
   LICENSE_TOKEN,
   COMPUTE_WORKER_READ_CONDITION,
@@ -198,15 +199,19 @@ export async function uploadPrivate(clients: Clients, input: UploadInput): Promi
   const storageProvider = await heliaProvider();
   const ownerCondData = encodeAbiParameters([{ type: "address" }], [owner]);
 
-  // uploadFile (encrypt → store via provider → write CID ref) with
-  // OWNER-gated read+write conditions (only the owner can read).
+  // uploadFile (encrypt → store via provider → write CID ref) with OWNER gates.
+  // WRITE: OWNER_WRITE_CONDITION (implements checkWriteCondition).
+  // READ:  OWNER_READ_CONDITION (our own, implements checkReadCondition with
+  //        a single-owner check). The write contract does NOT implement the
+  //        read interface, so using it as the readConditionAddr would revert
+  //        at the CDR precompile on every download — see commit history.
   const up = await cdr.uploader.uploadFile({
     content: input.bytes,
     storageProvider,
     globalPubKey: await cdr.observer.getGlobalPubKey(),
     updatable: false,
     writeConditionAddr: OWNER_WRITE_CONDITION,
-    readConditionAddr: OWNER_WRITE_CONDITION, // owner-gated read
+    readConditionAddr: OWNER_READ_CONDITION,
     writeConditionData: ownerCondData,
     readConditionData: ownerCondData,
     accessAuxData: "0x",

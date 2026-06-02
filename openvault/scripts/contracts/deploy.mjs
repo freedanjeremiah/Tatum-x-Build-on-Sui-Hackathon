@@ -63,6 +63,7 @@ const TO_DEPLOY = [
   ["AnyOfReadCondition.sol", "AnyOfReadCondition"],
   ["GroupLicenseReadCondition.sol", "GroupLicenseReadCondition"],
   ["ComputeWorkerReadCondition.sol", "ComputeWorkerReadCondition"],
+  ["OwnerReadCondition.sol", "OwnerReadCondition"],
 ];
 
 // --- deploy --------------------------------------------------------------
@@ -86,6 +87,10 @@ for (const [file, name] of TO_DEPLOY) {
   console.log(receipt.contractAddress, `(tx ${hash})`);
 }
 
-writeFileSync(join(HERE, "deployed.json"), JSON.stringify(deployed, null, 2) + "\n");
+// Merge with any prior deployment so re-runs add new contracts without losing the old ones.
+const outPath = join(HERE, "deployed.json");
+let prior = {};
+try { prior = JSON.parse(readFileSync(outPath, "utf8")); } catch {}
+writeFileSync(outPath, JSON.stringify({ ...prior, ...deployed }, null, 2) + "\n");
 console.log("\nwrote scripts/contracts/deployed.json");
-console.log(deployed);
+console.log({ ...prior, ...deployed });
