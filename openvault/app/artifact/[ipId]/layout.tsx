@@ -126,7 +126,7 @@ export default async function ArtifactLayout({
         </h1>
       </div>
 
-      <ArtifactTabs ipId={ipId} />
+      <ArtifactTabs ipId={ipId} modality={artifact.modality} />
 
       {children}
     </div>

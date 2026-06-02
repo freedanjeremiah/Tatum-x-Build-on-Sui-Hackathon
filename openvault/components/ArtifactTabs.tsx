@@ -7,13 +7,28 @@ const TABS = [
   { seg: "", label: "Card" },
   { seg: "files", label: "Files" },
   { seg: "viewer", label: "Viewer" },
+  // "Run" injected here for models only (see below).
   { seg: "community", label: "Community" },
   { seg: "license", label: "License" },
 ];
 
-export default function ArtifactTabs({ ipId }: { ipId: string }) {
+export default function ArtifactTabs({
+  ipId,
+  modality,
+}: {
+  ipId: string;
+  modality?: "dataset" | "model";
+}) {
   const pathname = usePathname();
   const base = `/artifact/${ipId}`;
+  const tabs =
+    modality === "model"
+      ? [
+          ...TABS.slice(0, 3),
+          { seg: "run", label: "Run" },
+          ...TABS.slice(3),
+        ]
+      : TABS;
   return (
     <nav
       className="ov-tabs"
@@ -25,7 +40,7 @@ export default function ArtifactTabs({ ipId }: { ipId: string }) {
         marginBottom: 22,
       }}
     >
-      {TABS.map((t) => {
+      {tabs.map((t) => {
         const href = t.seg ? `${base}/${t.seg}` : base;
         const active = t.seg ? pathname === href : pathname === base;
         return (
