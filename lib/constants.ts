@@ -1,4 +1,4 @@
-// Story Aeneid testnet constants for OpenVault.
+// Story Aeneid testnet constants for Tessera.
 //
 // Every constant here is env-overrideable so the same code runs against a
 // different network (e.g. Story mainnet, an alternative CDR endpoint, or a
@@ -67,7 +67,7 @@ export const IP_ASSET_REGISTRY = envAddr(
   "0x77319B4031e6eF1250907aa00018B8B1c67a244b",
 );
 
-// --- OpenVault custom CDR read-condition contracts (deployed on Aeneid) --------
+// --- Tessera custom CDR read-condition contracts (deployed on Aeneid) --------
 // Authored in `contracts/`, deployed via `scripts/contracts/deploy.mjs`. These
 // turn our two disclosed fallbacks into real on-chain enforcement and are the
 // CDR-hackathon "advanced / composable read conditions" deliverable.
@@ -90,7 +90,7 @@ export const COMPUTE_WORKER_READ_CONDITION = envAddr(
 );
 // Read-side counterpart to OWNER_WRITE_CONDITION (the latter only implements
 // checkWriteCondition). Deployed via scripts/contracts/deploy.mjs alongside
-// the other OpenVault read conditions; without this, private-tier downloads
+// the other Tessera read conditions; without this, private-tier downloads
 // revert at the CDR precompile.
 export const OWNER_READ_CONDITION = envAddr(
   "OWNER_READ_CONDITION",

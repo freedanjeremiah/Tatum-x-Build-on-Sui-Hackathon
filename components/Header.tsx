@@ -37,7 +37,7 @@ export default function Header() {
               color: "var(--ov-text)",
             }}
           >
-            Open<span style={{ color: "var(--ov-accent)" }}>Vault</span>
+            Tess<span style={{ color: "var(--ov-accent)" }}>era</span>
           </span>
         </Link>
 

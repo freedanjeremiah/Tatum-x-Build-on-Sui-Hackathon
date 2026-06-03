@@ -37,7 +37,7 @@ const notoJP = Noto_Sans_JP({
 });
 
 export const metadata: Metadata = {
-  title: "OpenVault — Confidential Data Registry",
+  title: "Tessera — Confidential Data Registry",
   description:
     "Access control as a property of the data. A confidential model & dataset hub on Story + CDR.",
 };

@@ -1,6 +1,6 @@
 // Friendly-name adapter over the real Story core-sdk StoryClient.
 //
-// The rest of OpenVault (lib/artifacts, scripts, worker) calls a small,
+// The rest of Tessera (lib/artifacts, scripts, worker) calls a small,
 // stable surface — `story.ipAsset.registerIpAsset(...)`,
 // `story.ipAsset.registerDerivativeIpAsset(...)`, and pass-throughs for
 // license/royalty/dispute/group/wip/nft — and expects NORMALIZED returns of the

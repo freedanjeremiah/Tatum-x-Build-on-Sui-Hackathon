@@ -1,100 +1,181 @@
-# OpenVault
+# Tessera
 
-A decentralized Kaggle + Hugging Face. Datasets and ML models are Story Protocol **IP Assets**;
-heavy files are **threshold-encrypted on IPFS** via CDR; access tiers are enforced **on-chain** —
-no auth server, no platform that can hand out access. Testnet (Story **Aeneid**) prototype.
+> A *tessera* was a small token in the ancient world — a tile that proved your right to enter, claim a
+> ration, or be counted. Tesserae also tiled together into mosaics. Both meanings are the product: here
+> the **license token is the access credential**, and datasets tile into models tile into derivatives —
+> a mosaic of provenance with royalties flowing back along every edge.
 
-> **The thesis:** access control is a property of the *data*, not the *platform*. The license token
-> *is* the decryption credential.
+**Tessera is a decentralized Kaggle + Hugging Face.** Datasets and ML models are registered as Story
+Protocol **IP Assets**; their heavy files are **threshold-encrypted on IPFS**; and who may decrypt them
+is enforced **on-chain** — there is no auth server and no platform operator who can hand out access.
+It runs on the Story **Aeneid** testnet.
+
+> **The thesis:** access control is a property of the *data*, not the *platform*. The license token you
+> mint on-chain *is* the key that decrypts the file. Lose the platform and the rule still holds.
+
+---
+
+## Why this is different
+
+On a normal ML hub, a company server holds the files and decides — in its own code, behind its own
+login — who gets to download. You trust the platform. On Tessera the file is encrypted before it ever
+leaves the browser, the decryption key is delivered by a **CDR** (Confidential Data Retrieval) network
+only when an **on-chain condition** says you qualify, and that condition is a smart contract anyone can
+read. The registry that lists artifacts is just a cache — delete it and the access rules are unchanged,
+because they live in the encryption + the chain.
+
+This unlocks two things a download-only hub can't do:
+- **Private but provable** — you can publish a private dataset, prove it exists and who owns it, and
+  license it, without ever exposing the bytes.
+- **Private but computable** — a consumer can run an approved algorithm *over* your private data and
+  take home only the result, never the rows. See **Compute** below.
+
+---
 
 ## Access tiers
-- **Public** — open; IP Asset registered for provenance, attribution-only license.
-- **Private** — owner-only; vault gated to the owner's wallet (EOA condition).
-- **Gated** — pay/license to decrypt; CDR vault + `LicenseReadCondition(LICENSE_TOKEN, ipId)`.
-- **Group** — one license unlocks a family (per-IP gating fallback; see open item below).
-- **Compute** — *computable, never downloadable*. A consumer runs an **allowlisted** algorithm on the
-  data inside a worker; only the result (a derivative IP) leaves. Royalties route to the data owner.
 
-## Honesty (read this)
-CDR does **threshold encryption + on-chain-gated key delivery** only. It does **not** run user
-algorithms on plaintext. "Private but computable" is OpenVault's **own** compute worker that uses CDR
-for gated decryption; the compute-privacy guarantee comes from the worker's isolation + the algorithm
-allowlist, **not** CDR. The demo worker runs on a plain server (operator-trusted) — a production
-deployment would run in an attested SGX/TDX enclave. The UI discloses this everywhere it matters.
+Every artifact picks one tier at upload. The tier decides how its CDR vault is sealed:
+
+| Tier | Who can decrypt | Sealed with |
+|------|-----------------|-------------|
+| **Public** | anyone | not encrypted; registered for provenance + attribution-only license |
+| **Private** | only the owner wallet | `OwnerReadCondition` (EOA check) |
+| **Gated** | anyone holding a license token | `LicenseReadCondition(LICENSE_TOKEN, ipId)` — pay/mint to decrypt |
+| **Group** | one license unlocks a family of artifacts | group read condition (per-IP fallback today) |
+| **Compute** | *nobody downloads* — an allowlisted algorithm runs on it | `ComputeWorkerReadCondition` |
+
+For **Compute**, the data is never returned. A consumer chooses an algorithm from the dataset's
+**hash-pinned allowlist**; a worker decrypts the data in memory, runs only that algorithm, registers
+the **result as a derivative IP** of the dataset, wipes the plaintext, and returns **aggregate metrics
+only**. Royalties on the derivative flow upstream to the data owner.
+
+---
+
+## Honesty (please read)
+
+CDR provides **threshold encryption + on-chain-gated key delivery** — nothing more. It does **not** run
+user algorithms on plaintext. "Private but computable" is **Tessera's own** compute worker, which uses
+CDR only to decrypt. So the compute-privacy guarantee comes from **the worker's isolation + the
+algorithm allowlist**, not from CDR.
+
+The demo worker runs on an ordinary server (operator-trusted) — a production deployment would run it
+inside an attested **SGX/TDX enclave**. We don't hide this: the UI discloses the exact isolation
+posture everywhere a compute job runs, and the worker refuses any algorithm not on the dataset's
+allowlist **before decrypting a single byte** (`decryptCalled: false`). No silent fallbacks — if
+something can't be done honestly, the API says so instead of faking it.
+
+---
 
 ## Run models (inference)
-Model artifacts get a **Run** tab — enter a prompt, stream live output. Inference runs on an
-external GPU backend (Ollama, OpenAI-compatible) reached through `/api/run`, which injects a
-**server-only** bearer token so it never reaches the browser. Public-safe guards: per-IP rate limit,
-prompt-size + `max_tokens` caps, upstream timeout. If the backend isn't configured the route returns
-an honest **503** (never a fabricated reply). Datasets are not runnable. Wire it by setting the
-`INFERENCE_*` vars to any OpenAI-compatible endpoint (Ollama, vLLM, OpenAI, …).
 
-## Run it (Story Aeneid testnet — real only)
+Model artifacts get a **Run** tab: type a prompt, watch the output stream back live. Inference runs on
+an external GPU backend (any **OpenAI-compatible** endpoint — Ollama, vLLM, OpenAI itself) reached
+through the `/api/run` route. That route injects a **server-only** bearer token, so the secret never
+reaches the browser; visitors only ever talk to `/api/run`. Public-safe guards are built in: per-IP
+rate limit, prompt-size and `max_tokens` caps, and an upstream timeout. If no backend is configured the
+route returns an honest **503** rather than a fabricated reply. Datasets are not runnable.
+
+Wire it by setting the three `INFERENCE_*` vars (below) to your endpoint.
+
+---
+
+## Quick start (Story Aeneid testnet)
+
+Requires **Node 22+** and **pnpm**. The app is at the repo root.
 
 ```bash
-cd openvault
 pnpm install
-cp .env.local.example .env.local   # fill NEXT_PUBLIC_PRIVY_APP_ID, PINATA_JWT, WALLET_PRIVATE_KEY
-pnpm dev                           # http://localhost:3000
+cp .env.local.example .env.local   # fill the three core vars below
+pnpm dev                           # https://localhost:3000  (dev uses experimental HTTPS)
 ```
 
 ### Environment variables
-RPC and contract addresses are hardcoded in `lib/constants.ts`, so only these matter:
 
-**Core** (needed to upload/index/run the app):
+RPC URL and contract addresses are hardcoded in `lib/constants.ts`, so only these matter:
+
+**Core** — needed to upload, index, and run the app:
 
 | Var | Scope | Missing → |
 |-----|-------|-----------|
-| `NEXT_PUBLIC_PRIVY_APP_ID` | public | wallet auth unavailable |
-| `WALLET_PRIVATE_KEY` | server secret | scripts/worker throw |
-| `PINATA_JWT` | server secret | node-side pinning throws |
+| `NEXT_PUBLIC_PRIVY_APP_ID` | public (browser) | wallet auth unavailable |
+| `WALLET_PRIVATE_KEY` | server secret | scripts / worker throw |
+| `PINATA_JWT` | server secret | IPFS pinning throws |
 
-**Inference** (optional — powers the model **Run** tab; omit and the Run tab returns 503):
+**Inference** — optional; powers the model **Run** tab (omit → Run tab returns 503):
 
-| Var | Scope | Default | Notes |
-|-----|-------|---------|-------|
-| `INFERENCE_BASE_URL` | server secret | — | OpenAI-compatible base, e.g. `https://<host>/v1` |
-| `INFERENCE_TOKEN` | server secret | — | bearer token; injected server-side, never sent to browser |
-| `INFERENCE_MODEL` | server secret | `llama3.1:8b` | model id served by the backend |
+| Var | Default | Notes |
+|-----|---------|-------|
+| `INFERENCE_BASE_URL` | — | OpenAI-compatible base, e.g. `https://<host>/v1` |
+| `INFERENCE_TOKEN` | — | bearer token; injected server-side, never sent to the browser |
+| `INFERENCE_MODEL` | `llama3.1:8b` | model id the backend serves |
 
-Optional worker/attestation tuning (`WORKER_ISOLATION_MODE`, `CDR_ATTEST*`, `WORKER_SIM_*`) is
-documented inline in `lib/attestation.ts` / `lib/tee-sim.ts`; defaults are fine for the demo.
+**Optional tuning** (`WORKER_ISOLATION_MODE`, `CDR_ATTEST*`, `WORKER_SIM_*`) is documented inline in
+`lib/attestation.ts` / `lib/tee-sim.ts`; the defaults are fine for the demo.
 
-**Node 22+** required. Real-mode IPFS storage is **Pinata** (set `PINATA_JWT`) — chosen
-over an in-process Helia node so uploads survive across processes (worker/consumer can
-retrieve them).
+> Storage is **Pinata** (not an in-process IPFS node) so uploaded bytes survive across processes — the
+> worker and other consumers can retrieve them later.
+
+---
 
 ## Scripts, worker, indexer
 
 ```bash
-pnpm probe:real                                    # connectivity check (no gas)
-pnpm real scripts/01-upload-gated.ts               # … 02..08
-pnpm worker:real                                   # confidential-compute worker
-pnpm indexer:real                                  # SQLite read-model indexer
-pnpm test                                          # unit tests (no creds/gas)
-RUN_INTEGRATION=1 pnpm test                        # also runs live integration tests
+pnpm probe:real                        # connectivity check (no gas spent)
+pnpm real scripts/01-upload-gated.ts   # run any flow script (00..09, diag/, _*) against Aeneid
+pnpm worker:real                       # confidential-compute worker (long-running)
+pnpm indexer:real                      # SQLite read-model indexer (long-running)
+pnpm test                              # unit tests — no creds, no gas
+RUN_INTEGRATION=1 pnpm test            # also runs the live on-chain integration tests
 ```
 
-The `real` family preloads `.env.local` via `node --env-file` so `tsx`-hoisted
-modules see env at module-init time.
+The `real` family preloads `.env.local` via `node --env-file` so `tsx`-hoisted modules see env at
+module-init time. To re-seed the demo corpus, see `scripts/sample/` (Python generators + manifest).
 
-## Architecture
-- `lib/clients.ts` — Story + CDR clients backed by a wallet or EIP-1193 provider.
-- `lib/artifacts.ts` — high-level upload*/download/derivative API; enforces register → ipId → upload.
-- `lib/{licensing,royalty,dispute,group,compute,storage,metadata}.ts` — focused helpers.
-- `indexer/` — **index-only** SQLite mirror; `app/api/index` (GET + POST self-index) + `app/api/pin` (public JSON).
-- `worker/` — confidential-compute worker: allowlist gate → decrypt-in-worker → run algo → derivative
-  → wipe plaintext → metrics only.
-- `app/` + `components/` — Next.js App Router UI (browse, upload wizard, artifact, compute, group,
-  leaderboard) wrapped in `WasmGate` (no CDR call before `initWasm()`).
+---
 
-## Invariants enforced
-Backend never holds keys/plaintext/gating · CDR crypto client-side · register before upload ·
-`licenseTermsId` always threaded (never hardcoded) · fresh dispute CID each report · every tx/ipId
-surfaced via `TxLink` · no localStorage · compute-only has no download path · `/api/index` POST
-accepts only public Artifact descriptors (never keys/plaintext).
+## Project layout
+
+```
+.
+├─ app/            Next.js App Router — pages + API routes (/api/run, /api/compute, /api/index, …)
+├─ components/     React UI (browse, upload wizard, artifact tabs, compute panel, Run tab, wallet)
+├─ lib/            core logic: clients, artifacts, licensing, royalty, dispute, group, compute,
+│                  storage (Pinata), metadata, attestation, tee-sim, constants
+├─ worker/         confidential-compute worker + the algorithm allowlist registry (worker/algos/)
+├─ indexer/        index-only SQLite mirror of public artifact records + its API
+├─ contracts/      Solidity CDR read-condition contracts (Owner / License / Group / Compute)
+├─ scripts/        flow scripts (00..09), diagnostics (diag/), and the seed corpus (sample/)
+├─ e2e/            Playwright verification harness (own package.json)
+└─ docs/           design specs, handoffs, pitch, run logs
+```
+
+### How the layers fit
+
+- `lib/clients.ts` — Story + CDR clients backed by a wallet (server) or an EIP-1193 provider (browser).
+- `lib/artifacts.ts` — the high-level `upload*` / `download` / derivative API. Enforces the invariant
+  **register → get ipId → then upload** so encryption is always bound to a real on-chain identity.
+- `indexer/` — a cache only. `app/api/index` accepts **public** Artifact descriptors (never keys or
+  plaintext) via POST self-index, and serves them via GET. `app/api/pin` exposes public JSON.
+- `worker/` — allowlist gate → decrypt-in-worker → run the one approved algorithm → register a
+  derivative → wipe plaintext → return metrics only.
+- `app/` + `components/` — UI wrapped in `WasmGate` so no CDR call fires before `initWasm()`.
+
+---
+
+## Invariants the code enforces
+
+- The backend never holds keys, plaintext, or gating power — CDR crypto runs client-side.
+- Register before upload; `licenseTermsId` is always threaded through, never hardcoded.
+- A fresh dispute CID is minted on every report.
+- Every transaction and ipId is surfaced in the UI via `TxLink`.
+- No `localStorage`. Compute-tier artifacts have **no download path** at all.
+- `/api/index` POST accepts only public descriptors — it will not store keys or plaintext.
+
+---
 
 ## Out of scope (testnet prototype)
-Mainnet/production confidentiality · hiding metadata (CIDs/vault ids public by design) · decryption
-revocation (rotate by re-encrypting).
+
+Mainnet-grade confidentiality · hiding metadata (CIDs and vault ids are public by design) · decryption
+revocation (rotate by re-encrypting). The compute worker's production hardening (attested enclave) is
+designed for but not deployed here.
+```

@@ -52,7 +52,7 @@ export async function buildIpaMetadata(
     description,
     tags,
     creators,
-    // Custom OpenVault fields used across the app.
+    // Custom Tessera fields used across the app.
     modality,
   };
   if (externalSource) {
@@ -63,8 +63,8 @@ export async function buildIpaMetadata(
   }
 
   const nftMetadata = {
-    name: `${title} — OpenVault IP NFT`,
-    description: `Ownership NFT for the OpenVault artifact "${title}".`,
+    name: `${title} — Tessera IP NFT`,
+    description: `Ownership NFT for the Tessera artifact "${title}".`,
   };
 
   const { uri: ipMetadataURI, hash: ipMetadataHash } = await pinJSON(ipMetadata);
