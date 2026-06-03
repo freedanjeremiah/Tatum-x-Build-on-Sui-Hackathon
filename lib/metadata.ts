@@ -1,11 +1,18 @@
 // IPA + NFT metadata builder. Constructs metadata JSON per the Story IPA
-// metadata standard, pins both via lib/storage.pinJSON, and returns the four
-// fields registerIpAsset needs.
+// metadata standard and returns the four fields the registration flow needs.
+//
+// SUI MIGRATION (B2): the old Pinata/IPFS pinJSON write path is gone (lib/storage
+// pinJSON now throws — it is a write shim). Public artifact metadata is small,
+// non-secret JSON; we content-address it LOCALLY (sha-256) and return a
+// deterministic `walrus-meta://<sha256>` URI plus the matching hash. No network
+// write, no fake pin, no secrets. Durable off-chain metadata persistence (e.g. a
+// dedicated public Walrus blob or an off-chain store with a Signer) is deferred to
+// a later phase; the descriptor still carries a stable, verifiable content hash.
 //
 // Provenance rule: when `externalSource` is set (an OSS parent), the metadata
 // records the external source and asserts NO commercial terms (provenance only).
 
-import { pinJSON } from "./storage";
+import { sha256Hex } from "./storage";
 import type { Modality } from "../types/artifact";
 
 export interface Creator {
@@ -67,8 +74,14 @@ export async function buildIpaMetadata(
     description: `Ownership NFT for the Tessera artifact "${title}".`,
   };
 
-  const { uri: ipMetadataURI, hash: ipMetadataHash } = await pinJSON(ipMetadata);
-  const { uri: nftMetadataURI, hash: nftMetadataHash } = await pinJSON(nftMetadata);
+  // Content-address locally (no network write). The hash is the durable, stable
+  // identity; the uri is a `walrus-meta://<sha256>` content reference.
+  const ipJSON = JSON.stringify(ipMetadata);
+  const nftJSON = JSON.stringify(nftMetadata);
+  const ipMetadataHash = sha256Hex(ipJSON);
+  const nftMetadataHash = sha256Hex(nftJSON);
+  const ipMetadataURI = `walrus-meta://${ipMetadataHash.slice(2)}`;
+  const nftMetadataURI = `walrus-meta://${nftMetadataHash.slice(2)}`;
 
   return {
     ipMetadataURI,

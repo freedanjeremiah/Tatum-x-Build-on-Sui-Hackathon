@@ -382,6 +382,15 @@ export interface StorageProvider {
 // Internal: SHA-256 (node:crypto in Node, pure-JS fallback in browser)
 // ---------------------------------------------------------------------------
 
+/**
+ * Public content-hash helper (0x-prefixed sha-256 hex). Used by lib/metadata.ts
+ * to content-address artifact metadata locally without a network write. Works in
+ * Node (node:crypto) and the browser (pure-JS fallback).
+ */
+export function sha256Hex(input: string | Uint8Array): `0x${string}` {
+  return sha256hex(input);
+}
+
 function sha256hex(input: string | Uint8Array): `0x${string}` {
   const bytes =
     typeof input === "string" ? new TextEncoder().encode(input) : input;

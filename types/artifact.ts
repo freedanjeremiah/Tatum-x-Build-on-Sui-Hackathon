@@ -2,6 +2,15 @@ export type Tier = "public" | "private" | "gated" | "group" | "compute";
 export type Modality = "dataset" | "model";
 
 export interface Artifact {
+  // SUI MIGRATION (B2): field NAMES are preserved to minimize Phase-C churn, but
+  // their CONTENTS now carry Sui/Walrus identifiers:
+  //   - `ipId`  → the Sui `ArtifactRegistry` shared-object id (0x + 64 hex).
+  //               This is what `lib/registry.ts` returns as `artifactId` and what
+  //               `sealIdBytes(artifactId, tier)` is keyed on. It replaces the old
+  //               Story ipId. Still a 0x-hex string, so /api/index validation holds.
+  //   - `cid`   → the Walrus `blobId` for the artifact's (encrypted) blob. Replaces
+  //               the old IPFS CID. Not 0x-hex (Walrus ids are base64url) — /api/index
+  //               only requires `cid` to be a string, so this is fine.
   ipId: `0x${string}`;
   tier: Tier;
   modality: Modality;
@@ -24,6 +33,14 @@ export interface Artifact {
   computeLicenseTermsId?: string;
   externalSource?: string;
   score?: number; // leaderboard metric
+  // --- Sui core (B2) -------------------------------------------------------
+  /** ArtifactCap object id minted to the owner at register time. Held by the
+   *  owner; gates every cap-protected entry fun (add_license_holder, revoke,
+   *  add_compute_worker, set_group). Not indexed publicly by default. */
+  capId?: string;
+  /** Walrus Blob OBJECT id (on-chain), distinct from the blobId (in `cid`).
+   *  Needed for `extend`/`deleteBlob` storage renewal/GC. */
+  blobObjectId?: string;
 }
 
 export interface ComputeJob {

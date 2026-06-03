@@ -76,6 +76,14 @@ function isHex(s: unknown): s is `0x${string}` {
   return typeof s === "string" && HEX_RE.test(s);
 }
 
+// SUI MIGRATION (B2): `createdTx` now carries a Sui transaction DIGEST (base58),
+// not an EVM tx hash (0x-hex). Accept either: a 0x-hex string OR a non-empty
+// base58 digest. Still rejects empties and junk.
+const BASE58_RE = /^[1-9A-HJ-NP-Za-km-z]+$/;
+function isTxRef(s: unknown): s is `0x${string}` {
+  return typeof s === "string" && s.length > 0 && (HEX_RE.test(s) || BASE58_RE.test(s));
+}
+
 /**
  * Validate + coerce a JSON body into an Artifact. Rejects anything that looks
  * like a key, plaintext, or non-public field. Throws with a short message.
@@ -97,7 +105,7 @@ function parseArtifact(body: unknown): Artifact {
     throw new Error("tags must be a string[]");
   if (typeof b.ipMetadataURI !== "string")
     throw new Error("ipMetadataURI must be a string");
-  if (!isHex(b.createdTx)) throw new Error("createdTx must be a 0x-hex string");
+  if (!isTxRef(b.createdTx)) throw new Error("createdTx must be a 0x-hex tx hash or a base58 Sui digest");
 
   const a: Artifact = {
     ipId: b.ipId,
