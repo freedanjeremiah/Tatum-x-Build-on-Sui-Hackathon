@@ -1,6 +1,8 @@
 #[test_only]
 module tessera::registry_tests;
 
+use sui::coin;
+use sui::sui::SUI;
 use sui::test_scenario as ts;
 use tessera::registry::{Self, ArtifactRegistry, ArtifactCap};
 
@@ -19,7 +21,7 @@ const TIER_COMPUTE: u8 = 4;
 #[test]
 fun register_shares_and_sets_owner() {
     let mut sc = ts::begin(OWNER);
-    registry::register(TIER_PRIVATE, option::none(), sc.ctx());
+    registry::register(TIER_PRIVATE, 0, option::none(), sc.ctx());
     sc.next_tx(OWNER);
     let art = sc.take_shared<ArtifactRegistry>();
     let cap = sc.take_from_sender<ArtifactCap>();
@@ -35,7 +37,7 @@ fun register_shares_and_sets_owner() {
 #[test]
 fun private_owner_can_decrypt() {
     let mut sc = ts::begin(OWNER);
-    registry::register(TIER_PRIVATE, option::none(), sc.ctx());
+    registry::register(TIER_PRIVATE, 0, option::none(), sc.ctx());
     sc.next_tx(OWNER);
     let art = sc.take_shared<ArtifactRegistry>();
     let cap = sc.take_from_sender<ArtifactCap>();
@@ -50,7 +52,7 @@ fun private_owner_can_decrypt() {
 #[expected_failure(abort_code = ::tessera::registry::ENotOwner)]
 fun private_non_owner_aborts() {
     let mut sc = ts::begin(OWNER);
-    registry::register(TIER_PRIVATE, option::none(), sc.ctx());
+    registry::register(TIER_PRIVATE, 0, option::none(), sc.ctx());
     sc.next_tx(OWNER);
     let art = sc.take_shared<ArtifactRegistry>();
     let cap = sc.take_from_sender<ArtifactCap>();
@@ -69,7 +71,7 @@ fun private_non_owner_aborts() {
 #[test]
 fun gated_license_holder_passes() {
     let mut sc = ts::begin(OWNER);
-    registry::register(TIER_GATED, option::none(), sc.ctx());
+    registry::register(TIER_GATED, 0, option::none(), sc.ctx());
     sc.next_tx(OWNER);
     let mut art = sc.take_shared<ArtifactRegistry>();
     let cap = sc.take_from_sender<ArtifactCap>();
@@ -88,7 +90,7 @@ fun gated_license_holder_passes() {
 #[expected_failure(abort_code = ::tessera::registry::ENoLicense)]
 fun gated_non_holder_aborts() {
     let mut sc = ts::begin(OWNER);
-    registry::register(TIER_GATED, option::none(), sc.ctx());
+    registry::register(TIER_GATED, 0, option::none(), sc.ctx());
     sc.next_tx(OWNER);
     let art = sc.take_shared<ArtifactRegistry>();
     let cap = sc.take_from_sender<ArtifactCap>();
@@ -102,13 +104,77 @@ fun gated_non_holder_aborts() {
     sc.end();
 }
 
+// ---- buy_license (permissionless purchase) ----
+
+const PRICE: u64 = 1_000_000_000; // 1 SUI in MIST
+
+#[test]
+fun buy_license_pays_owner_and_adds_holder() {
+    let mut sc = ts::begin(OWNER);
+    registry::register(TIER_GATED, PRICE, option::none(), sc.ctx());
+    sc.next_tx(OWNER);
+    let art = sc.take_shared<ArtifactRegistry>();
+    let cap = sc.take_from_sender<ArtifactCap>();
+    assert!(registry::price(&art) == PRICE, 0);
+    ts::return_shared(art);
+    sc.return_to_sender(cap);
+
+    // BOB buys a license with an exact-price SUI coin.
+    sc.next_tx(BOB);
+    let mut art2 = sc.take_shared<ArtifactRegistry>();
+    let pay = coin::mint_for_testing<SUI>(PRICE, sc.ctx());
+    registry::buy_license(&mut art2, pay, sc.ctx());
+    assert!(registry::is_license_holder(&art2, BOB), 1); // holder added
+    let id = registry::test_seal_id(&art2);
+    ts::return_shared(art2);
+
+    // BOB now satisfies seal_approve for the gated tier.
+    sc.next_tx(BOB);
+    let art3 = sc.take_shared<ArtifactRegistry>();
+    registry::test_seal_approve(id, &art3, sc.ctx()); // -> must NOT abort
+    ts::return_shared(art3);
+
+    // Payment moved to the owner: OWNER now holds a Coin<SUI> of value PRICE.
+    sc.next_tx(OWNER);
+    let received = sc.take_from_sender<coin::Coin<SUI>>();
+    assert!(coin::value(&received) == PRICE, 2);
+    sc.return_to_sender(received);
+    sc.end();
+}
+
+#[test]
+#[expected_failure(abort_code = ::tessera::registry::ENotForSale)]
+fun buy_license_on_public_aborts() {
+    let mut sc = ts::begin(OWNER);
+    registry::register(TIER_PUBLIC, PRICE, option::none(), sc.ctx());
+    sc.next_tx(BOB);
+    let mut art = sc.take_shared<ArtifactRegistry>();
+    let pay = coin::mint_for_testing<SUI>(PRICE, sc.ctx());
+    registry::buy_license(&mut art, pay, sc.ctx()); // public tier -> ENotForSale
+    ts::return_shared(art);
+    sc.end();
+}
+
+#[test]
+#[expected_failure(abort_code = ::tessera::registry::EWrongPrice)]
+fun buy_license_wrong_price_aborts() {
+    let mut sc = ts::begin(OWNER);
+    registry::register(TIER_GATED, PRICE, option::none(), sc.ctx());
+    sc.next_tx(BOB);
+    let mut art = sc.take_shared<ArtifactRegistry>();
+    let pay = coin::mint_for_testing<SUI>(PRICE - 1, sc.ctx()); // underpay
+    registry::buy_license(&mut art, pay, sc.ctx()); // -> EWrongPrice
+    ts::return_shared(art);
+    sc.end();
+}
+
 // ---- revocation (forward-only) ----
 
 #[test]
 #[expected_failure(abort_code = ::tessera::registry::ERevoked)]
 fun revoked_address_aborts() {
     let mut sc = ts::begin(OWNER);
-    registry::register(TIER_GATED, option::none(), sc.ctx());
+    registry::register(TIER_GATED, 0, option::none(), sc.ctx());
     sc.next_tx(OWNER);
     let mut art = sc.take_shared<ArtifactRegistry>();
     let cap = sc.take_from_sender<ArtifactCap>();
@@ -130,7 +196,7 @@ fun revoked_address_aborts() {
 #[test]
 fun compute_worker_passes() {
     let mut sc = ts::begin(OWNER);
-    registry::register(TIER_COMPUTE, option::none(), sc.ctx());
+    registry::register(TIER_COMPUTE, 0, option::none(), sc.ctx());
     sc.next_tx(OWNER);
     let mut art = sc.take_shared<ArtifactRegistry>();
     let cap = sc.take_from_sender<ArtifactCap>();
@@ -149,7 +215,7 @@ fun compute_worker_passes() {
 #[expected_failure(abort_code = ::tessera::registry::ENotWorker)]
 fun compute_consumer_aborts() {
     let mut sc = ts::begin(OWNER);
-    registry::register(TIER_COMPUTE, option::none(), sc.ctx());
+    registry::register(TIER_COMPUTE, 0, option::none(), sc.ctx());
     sc.next_tx(OWNER);
     let mut art = sc.take_shared<ArtifactRegistry>();
     let cap = sc.take_from_sender<ArtifactCap>();
@@ -169,7 +235,7 @@ fun compute_consumer_aborts() {
 fun compute_owner_is_also_denied() {
     // owner must NOT be able to download a compute-tier artifact.
     let mut sc = ts::begin(OWNER);
-    registry::register(TIER_COMPUTE, option::none(), sc.ctx());
+    registry::register(TIER_COMPUTE, 0, option::none(), sc.ctx());
     sc.next_tx(OWNER);
     let art = sc.take_shared<ArtifactRegistry>();
     let cap = sc.take_from_sender<ArtifactCap>();
@@ -185,7 +251,7 @@ fun compute_owner_is_also_denied() {
 #[test]
 fun public_allows_outsider() {
     let mut sc = ts::begin(OWNER);
-    registry::register(TIER_PUBLIC, option::none(), sc.ctx());
+    registry::register(TIER_PUBLIC, 0, option::none(), sc.ctx());
     sc.next_tx(OWNER);
     let art = sc.take_shared<ArtifactRegistry>();
     let cap = sc.take_from_sender<ArtifactCap>();
@@ -205,7 +271,7 @@ fun public_allows_outsider() {
 #[expected_failure(abort_code = ::tessera::registry::EBadId)]
 fun wrong_object_prefix_aborts() {
     let mut sc = ts::begin(OWNER);
-    registry::register(TIER_PUBLIC, option::none(), sc.ctx());
+    registry::register(TIER_PUBLIC, 0, option::none(), sc.ctx());
     sc.next_tx(OWNER);
     let art = sc.take_shared<ArtifactRegistry>();
     let cap = sc.take_from_sender<ArtifactCap>();

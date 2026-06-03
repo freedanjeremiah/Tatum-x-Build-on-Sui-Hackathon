@@ -1,20 +1,25 @@
 import { test, expect } from "vitest";
-import { encodeAbiParameters } from "viem";
 import {
   commercialRemixTerms,
   attributionTerms,
   computeTerms,
   encodeAccessAuxData,
+  SUI_CURRENCY,
 } from "./licensing";
 
-test("encodeAccessAuxData([1n]) equals the direct viem encodeAbiParameters call", () => {
-  const got = encodeAccessAuxData([1n]);
-  const expected = encodeAbiParameters([{ type: "uint256[]" }], [[1n]]);
-  expect(got).toBe(expected);
+// CHANGED (B3a, Sui migration): the old test asserted encodeAccessAuxData matched
+// viem's ABI uint256[] encoding. On Sui there is no ABI read-condition aux blob —
+// access is gated entirely by on-chain `license_holders` + `seal_approve`, so the
+// helper now returns a deterministic JSON-array string of the artifact ids it is
+// given (retained only for caller compatibility). We assert that new shape here.
+test("encodeAccessAuxData stringifies ids as a JSON array", () => {
+  expect(encodeAccessAuxData([1n])).toBe('["1"]');
+  expect(encodeAccessAuxData(["0xabc", 2n])).toBe('["0xabc","2"]');
 });
 
 test("attributionTerms().commercialUse is false", () => {
   expect(attributionTerms().commercialUse).toBe(false);
+  expect(attributionTerms().currency).toBe(SUI_CURRENCY);
 });
 
 test("commercialRemixTerms({rev:5,fee:1n}).commercialRevShare === 5", () => {

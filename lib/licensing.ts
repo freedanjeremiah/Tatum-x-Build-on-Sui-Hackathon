@@ -1,50 +1,72 @@
-// Licensing helpers: PIL terms flavors, accessAuxData encoding, and license
-// minting.
+// Licensing helpers — the Sui replacement for the Story PIL license layer.
 //
-// Terms come in two forms:
-//  - The synchronous `*Terms()` builders return plain, well-formed objects so
-//    callers (and the licensing tests) can always read commercialRevShare /
-//    defaultMintingFee / commercialUse.
-//  - `resolveTerms()` is async and returns proper SDK `PILFlavor` LicenseTerms
-//    (commercialRemix / creativeCommonsAttribution).
-// The real SDK + WIP token are loaded via dynamic import inside resolveTerms.
+// In the Sui model a "license" is simply membership of an artifact's on-chain
+// `license_holders` set (lib/registry.ts / tessera::registry). Holding a license
+// is exactly what `seal_approve` checks for the gated-license / group tiers, so
+// granting a license == granting decrypt access. There are TWO grant paths:
+//
+//   - PURCHASE (permissionless): the buyer pays the artifact's `price` in SUI via
+//     the Move `buy_license` entry fun, which transfers payment to the owner and
+//     adds the buyer to `license_holders`. Backed by RegistryClient.buyLicense.
+//   - GRANT (owner, free): the owner uses their ArtifactCap to add a holder via
+//     `add_license_holder`. Backed by RegistryClient.addLicenseHolder.
+//
+// The terms-builder shape (`commercialRemixTerms` / `attributionTerms` /
+// `computeTerms` / `resolveTerms`) is kept chain-agnostic so existing callers and
+// tests keep reading commercialUse / commercialRevShare / defaultMintingFee, but
+// it is now plain descriptive metadata — there is no on-chain PIL terms object on
+// Sui; access is governed entirely by `license_holders` + `seal_approve`.
+//
+// No viem, no @story-protocol, no removed EVM constants. Never logs secrets.
 
-import { encodeAbiParameters } from "viem";
-import { ROYALTY_POLICY_LAP, WIP_OPTIONS } from "./constants";
+import { RegistryClient } from "./registry";
+import type { SuiClient, Signer } from "./clients";
 
-// WIP token (Story's wrapped IP). Mirrors WIP_TOKEN_ADDRESS exported by
-// @story-protocol/core-sdk; in real mode we import that constant directly.
-export const WIP_TOKEN = "0x1514000000000000000000000000000000000000" as `0x${string}`;
+// ---------------------------------------------------------------------------
+// Chain-agnostic terms descriptors (metadata only on Sui).
+// ---------------------------------------------------------------------------
 
 export interface PilTerms {
   commercialUse: boolean;
   commercialRevShare: number;
   defaultMintingFee: bigint;
-  currency: `0x${string}`;
+  /** Currency label. On Sui the license is paid in native SUI. */
+  currency: string;
   attribution?: boolean;
   [k: string]: unknown;
 }
 
 export type TermsKind = "commercialRemix" | "attribution" | "compute";
 
-/** Commercial-remix PIL terms (commercial use + revenue share + minting fee). */
+/** Native-SUI currency tag for license payments (replaces Story's WIP token). */
+export const SUI_CURRENCY = "0x2::sui::SUI" as const;
+
+/**
+ * Back-compat alias for the old Story WIP token constant. Several not-yet-migrated
+ * callers (lib/royalty.ts, lib/group.ts) still import `WIP_TOKEN`; on Sui it now
+ * resolves to the native SUI currency tag. Kept so those clusters keep compiling
+ * until they are migrated.
+ */
+export const WIP_TOKEN = SUI_CURRENCY;
+
+/** Commercial-remix terms (commercial use + revenue share + minting fee). */
 export function commercialRemixTerms({ rev, fee }: { rev: number; fee: bigint }): PilTerms {
   return {
     commercialUse: true,
     commercialRevShare: rev,
     defaultMintingFee: fee,
-    currency: WIP_TOKEN,
+    currency: SUI_CURRENCY,
   };
 }
 
-/** Attribution / non-commercial-social-remixing terms (no commercial use). */
+/** Attribution / non-commercial terms (no commercial use). */
 export function attributionTerms(): PilTerms {
   return {
     commercialUse: false,
     attribution: true,
     commercialRevShare: 0,
     defaultMintingFee: 0n,
-    currency: WIP_TOKEN,
+    currency: SUI_CURRENCY,
   };
 }
 
@@ -54,77 +76,117 @@ export function computeTerms({ rev, fee }: { rev: number; fee: bigint }): PilTer
     commercialUse: true,
     commercialRevShare: rev,
     defaultMintingFee: fee,
-    currency: WIP_TOKEN,
+    currency: SUI_CURRENCY,
     compute: true,
   };
 }
 
 /**
- * Resolve license terms for an artifact tier. Returns proper PILFlavor LicenseTerms:
- *  - commercialRemix : PILFlavor.commercialRemix (LAP, WIP currency)
- *  - compute         : PILFlavor.commercialRemix (distinct fee/rev → distinct id)
- *  - attribution     : PILFlavor.creativeCommonsAttribution (LAP, WIP currency)
+ * Resolve license terms for an artifact tier. On Sui this returns the same plain
+ * `PilTerms` descriptor the builders produce (there is no on-chain PIL flavor);
+ * kept async + returning `unknown` so existing call sites keep their shape.
+ *   - attribution     -> attributionTerms()
+ *   - commercialRemix  -> commercialRemixTerms(opts)
+ *   - compute          -> computeTerms(opts)
  */
 export async function resolveTerms(
   kind: TermsKind,
-  opts: { rev: number; fee: bigint } = { rev: 0, fee: 0n }
+  opts: { rev: number; fee: bigint } = { rev: 0, fee: 0n },
 ): Promise<unknown> {
-  const { PILFlavor, WIP_TOKEN_ADDRESS } = await import("@story-protocol/core-sdk");
-  // royaltyPolicy must be an ADDRESS (RoyaltyPolicyInput = Address | enum). The
-  // string "LAP" is parsed as an address → "Invalid address: LAP". Use the
-  // deployed LAP policy address on Aeneid.
-  if (kind === "attribution") {
-    return PILFlavor.creativeCommonsAttribution({
-      currency: WIP_TOKEN_ADDRESS,
-      royaltyPolicy: ROYALTY_POLICY_LAP,
-    } as any);
-  }
-  // commercialRemix + compute both use commercialRemix; distinct fee/rev yield
-  // distinct on-chain terms ids naturally.
-  return PILFlavor.commercialRemix({
-    defaultMintingFee: opts.fee,
-    commercialRevShare: opts.rev,
-    currency: WIP_TOKEN_ADDRESS,
-    royaltyPolicy: ROYALTY_POLICY_LAP,
-  } as any);
+  if (kind === "attribution") return attributionTerms();
+  if (kind === "compute") return computeTerms(opts);
+  return commercialRemixTerms(opts);
 }
 
-/** ABI-encode license token ids into the accessAuxData a read condition needs. */
-export function encodeAccessAuxData(tokenIds: bigint[]): `0x${string}` {
-  return encodeAbiParameters([{ type: "uint256[]" }], [tokenIds]);
+// ---------------------------------------------------------------------------
+// Access-aux encoding.
+// ---------------------------------------------------------------------------
+
+/**
+ * Encode the artifact ids a reader claims a license for into an opaque aux blob.
+ *
+ * On the EVM path this ABI-encoded license token ids for a read-condition. On Sui
+ * the on-chain `seal_approve` policy is the real gate (it reads `license_holders`
+ * directly), so no aux data is needed for access — this helper is retained only
+ * so callers that still thread an `accessAuxData` value keep compiling. It returns
+ * a deterministic JSON-array string of the ids (NOT consumed by seal_approve).
+ */
+export function encodeAccessAuxData(artifactIds: Array<string | bigint>): string {
+  return JSON.stringify(artifactIds.map((x) => x.toString()));
+}
+
+// ---------------------------------------------------------------------------
+// mintLicense — acquire a license (decrypt access) for an artifact.
+// ---------------------------------------------------------------------------
+
+/** Minimal client bundle mintLicense needs (subset of lib/artifacts Clients). */
+export interface LicenseClients {
+  client: SuiClient;
+  signer: Signer;
+  address?: string;
+}
+
+export interface MintLicenseResult {
+  /** The artifact the license was acquired for (the license "subject"). */
+  artifactId: string;
+  /** Which path granted access. */
+  via: "buy_license" | "add_license_holder";
+  /** Transaction digest. */
+  digest: string;
+  /** Price paid in MIST (purchase path), or 0n for an owner grant. */
+  pricePaid: bigint;
+}
+
+export interface MintLicenseOpts {
+  /**
+   * PURCHASE path (default): the signer is the buyer and pays SUI. Provide the
+   * `price` in MIST explicitly — it MUST match the artifact's on-chain price or
+   * the Move `buy_license` aborts. There is no silent price default: if `price`
+   * is omitted we read the artifact's on-chain `price` and use it.
+   */
+  price?: bigint;
+  /**
+   * OWNER-GRANT path: when set, the artifact owner grants a free license to
+   * `grantTo` using their `capId`. Mutually exclusive with the purchase path.
+   */
+  grant?: { capId: string; grantTo: string };
 }
 
 /**
- * Mint a license token for `ipId` under `termsId`.
+ * Acquire a license for `artifactId`, granting the holder decrypt access for the
+ * gated-license / group tier (via on-chain `seal_approve`).
  *
- * `maxFeeCap` is a CAP, not an override: the caller declares the maximum fee
- * (in WIP wei) they are willing to pay. The SDK then auto-wraps EXACTLY the
- * on-chain `defaultMintingFee` from native IP → WIP and auto-approves the
- * royalty module in the same multicall (via WIP_OPTIONS), then mints. If the
- * on-chain fee exceeds `maxFeeCap`, the mint reverts loudly.
- *
- * REQUIRED — there is no silent default cap. Pass the explicit ceiling the
- * caller actually understands. A hidden cap could overcharge a user who saw
- * one fee in the UI but signed for a higher one.
- *
- * Returns the first minted licenseTokenId.
+ * Two paths (selected by `opts`):
+ *   - GRANT  (opts.grant set): owner adds `grantTo` to `license_holders` for free
+ *     using their ArtifactCap. Returns via "add_license_holder".
+ *   - BUY    (default): the signer pays SUI via `buy_license`. If `opts.price` is
+ *     omitted, the artifact's on-chain `price` is read and used (no fake default).
+ *     Returns via "buy_license".
  */
 export async function mintLicense(
-  story: any,
-  ipId: `0x${string}`,
-  termsId: string,
-  maxFeeCap: bigint,
-): Promise<bigint> {
-  if (typeof maxFeeCap !== "bigint") {
-    throw new Error("mintLicense: maxFeeCap (bigint) is required — no silent fee cap default");
+  clients: LicenseClients,
+  artifactId: string,
+  opts: MintLicenseOpts = {},
+): Promise<MintLicenseResult> {
+  const reg = new RegistryClient(clients.client);
+
+  // OWNER-GRANT path: free, cap-gated.
+  if (opts.grant) {
+    const digest = await reg.addLicenseHolder(
+      opts.grant.capId,
+      artifactId,
+      opts.grant.grantTo,
+      clients.signer,
+    );
+    return { artifactId, via: "add_license_holder", digest, pricePaid: 0n };
   }
-  const res = await story.license.mintLicenseTokens({
-    licensorIpId: ipId,
-    licenseTermsId: BigInt(termsId),
-    amount: 1,
-    maxMintingFee: maxFeeCap,
-    maxRevenueShare: 100,
-    ...WIP_OPTIONS,
-  });
-  return res.licenseTokenIds[0] as bigint;
+
+  // PURCHASE path: resolve the price (explicit, or the artifact's on-chain price).
+  let price = opts.price;
+  if (price === undefined) {
+    const state = await reg.getArtifact(artifactId);
+    price = state.price;
+  }
+  const digest = await reg.buyLicense(artifactId, price, clients.signer);
+  return { artifactId, via: "buy_license", digest, pricePaid: price };
 }

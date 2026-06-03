@@ -87,6 +87,9 @@ export interface ArtifactState {
   tier: ArtifactTier;
   /** Raw on-chain u8 tier value. */
   tierU8: number;
+  /** gated/group tier: SUI price (in MIST) for a permissionless `buy_license`.
+   *  0 means "not for sale via buy_license" (owner can still grant for free). */
+  price: bigint;
   /** Group id this artifact is bound to, or null (group tier). */
   groupId: string | null;
   /** Parent artifact id for derivatives, or null. */
@@ -186,7 +189,7 @@ export class RegistryClient {
    */
   async register(
     tier: ArtifactTier,
-    opts: { groupId?: string },
+    opts: { groupId?: string; price?: bigint },
     signer: Signer,
   ): Promise<RegisterResult> {
     const tx = new Transaction();
@@ -194,6 +197,7 @@ export class RegistryClient {
       target: this.target("register"),
       arguments: [
         tx.pure.u8(tierToU8(tier)),
+        tx.pure.u64(opts.price ?? 0n),
         tx.pure.option("id", opts.groupId ?? null),
       ],
     });
@@ -210,7 +214,7 @@ export class RegistryClient {
   async registerDerivative(
     tier: ArtifactTier,
     parentId: string,
-    opts: { groupId?: string },
+    opts: { groupId?: string; price?: bigint },
     signer: Signer,
   ): Promise<RegisterResult> {
     const tx = new Transaction();
@@ -218,6 +222,7 @@ export class RegistryClient {
       target: this.target("register_derivative"),
       arguments: [
         tx.pure.u8(tierToU8(tier)),
+        tx.pure.u64(opts.price ?? 0n),
         tx.pure.id(parentId),
         tx.pure.option("id", opts.groupId ?? null),
       ],
@@ -240,6 +245,24 @@ export class RegistryClient {
     signer: Signer,
   ): Promise<string> {
     return this.capCall("add_license_holder", capId, artifactId, who, signer);
+  }
+
+  /**
+   * Permissionless license purchase (gated/group tier only). The `signer` (buyer)
+   * pays exactly `price` MIST to the artifact owner and is added to
+   * `license_holders` — satisfying `seal_approve` for the gated branch. Splits the
+   * payment off the gas coin so any signer with enough SUI can buy. The on-chain
+   * `buy_license` aborts on a non-gated tier or a payment != the artifact's price.
+   * Returns the tx digest.
+   */
+  async buyLicense(artifactId: string, price: bigint, signer: Signer): Promise<string> {
+    const tx = new Transaction();
+    const [payment] = tx.splitCoins(tx.gas, [tx.pure.u64(price)]);
+    tx.moveCall({
+      target: this.target("buy_license"),
+      arguments: [tx.object(artifactId), payment],
+    });
+    return (await this.exec(tx, signer)).digest;
   }
 
   /** Forward-only revocation: blocks future key issuance for `who`. */
@@ -310,6 +333,7 @@ export class RegistryClient {
       owner: String(j.owner ?? ""),
       tier: u8ToTier(tierU8),
       tierU8,
+      price: BigInt(j.price ?? 0),
       groupId: parseOptionId(j.group_id),
       parent: parseOptionId(j.parent),
       licenseHolders: vecSetAddrs(j.license_holders),

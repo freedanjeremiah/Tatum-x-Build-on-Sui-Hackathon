@@ -23,8 +23,10 @@
 ///                       consumers are denied -> "computable, not downloadable".
 module tessera::registry;
 
+use sui::coin::{Self, Coin};
 use sui::event;
 use sui::hash;
+use sui::sui::SUI;
 use sui::vec_set::{Self, VecSet};
 
 // ---- tiers ----
@@ -44,6 +46,8 @@ const ENotWorker: u64 = 6; // compute tier: sender is not an allowlisted worker
 const EUnknownTier: u64 = 7; // tier field is not one of the five known tiers
 const EWrongCap: u64 = 8; // ArtifactCap does not match this artifact
 const EInvalidTier: u64 = 9; // register() called with a tier outside 0..=4
+const ENotForSale: u64 = 10; // buy_license() on a non-gated/non-group tier
+const EWrongPrice: u64 = 11; // buy_license() payment != the artifact's price
 
 // ---- objects ----
 
@@ -54,6 +58,10 @@ public struct ArtifactRegistry has key {
     id: UID,
     owner: address,
     tier: u8,
+    /// gated/group tier: SUI price (in MIST) for a permissionless `buy_license`.
+    /// 0 means "not for sale via buy_license" — the owner can still grant access
+    /// for free via `add_license_holder`.
+    price: u64,
     /// gated-license tier: addresses holding a valid license for this artifact.
     license_holders: VecSet<address>,
     /// group tier: the group this artifact belongs to (off-chain group registry id).
@@ -88,6 +96,12 @@ public struct AccessChanged has copy, drop {
     /// 0=license added, 1=revoked, 2=compute worker added
     kind: u8,
 }
+/// Emitted when a buyer permissionlessly purchases a license via `buy_license`.
+public struct LicensePurchased has copy, drop {
+    artifact: ID,
+    buyer: address,
+    price: u64,
+}
 
 // ---- registration / minting ----
 
@@ -96,27 +110,35 @@ public struct AccessChanged has copy, drop {
 /// "register -> get object id -> then encrypt+store" invariant: the caller reads
 /// the new object id from the tx effects, derives the sealId (A4), encrypts, and
 /// stores the blob off-chain.
-public entry fun register(tier: u8, group_id: Option<ID>, ctx: &mut TxContext) {
-    register_internal(tier, group_id, option::none<ID>(), ctx);
+public entry fun register(tier: u8, price: u64, group_id: Option<ID>, ctx: &mut TxContext) {
+    register_internal(tier, price, group_id, option::none<ID>(), ctx);
 }
 
 /// Register a derivative artifact whose lineage points at `parent` (royalties).
 public entry fun register_derivative(
     tier: u8,
+    price: u64,
     parent: ID,
     group_id: Option<ID>,
     ctx: &mut TxContext,
 ) {
-    register_internal(tier, group_id, option::some(parent), ctx);
+    register_internal(tier, price, group_id, option::some(parent), ctx);
 }
 
-fun register_internal(tier: u8, group_id: Option<ID>, parent: Option<ID>, ctx: &mut TxContext) {
+fun register_internal(
+    tier: u8,
+    price: u64,
+    group_id: Option<ID>,
+    parent: Option<ID>,
+    ctx: &mut TxContext,
+) {
     assert!(tier <= TIER_COMPUTE, EInvalidTier);
     let owner = ctx.sender();
     let artifact = ArtifactRegistry {
         id: object::new(ctx),
         owner,
         tier,
+        price,
         license_holders: vec_set::empty<address>(),
         group_id,
         compute_workers: vec_set::empty<address>(),
@@ -143,6 +165,32 @@ public entry fun add_license_holder(cap: &ArtifactCap, self: &mut ArtifactRegist
         self.license_holders.insert(who);
         if (self.revoked.contains(&who)) { self.revoked.remove(&who); };
         event::emit(AccessChanged { artifact: object::id(self), who, kind: 0 });
+    }
+}
+
+/// Permissionless license purchase. ANYONE may call this to buy a license for a
+/// gated-license / group tier artifact: the exact `price` (in MIST) is paid to
+/// the artifact owner, and the buyer (`ctx.sender()`) is added to
+/// `license_holders` — which is exactly what `seal_approve` checks for the gated
+/// branch. Aborts on a non-gated/non-group tier (ENotForSale) or a payment whose
+/// value is not equal to the artifact's `price` (EWrongPrice). A revoked buyer is
+/// un-revoked on purchase, mirroring `add_license_holder`.
+public entry fun buy_license(
+    self: &mut ArtifactRegistry,
+    payment: Coin<SUI>,
+    ctx: &mut TxContext,
+) {
+    assert!(self.tier == TIER_GATED || self.tier == TIER_GROUP, ENotForSale);
+    assert!(coin::value(&payment) == self.price, EWrongPrice);
+
+    let buyer = ctx.sender();
+    transfer::public_transfer(payment, self.owner);
+
+    event::emit(LicensePurchased { artifact: object::id(self), buyer, price: self.price });
+    if (!self.license_holders.contains(&buyer)) {
+        self.license_holders.insert(buyer);
+        if (self.revoked.contains(&buyer)) { self.revoked.remove(&buyer); };
+        event::emit(AccessChanged { artifact: object::id(self), who: buyer, kind: 0 });
     }
 }
 
@@ -254,6 +302,7 @@ entry fun seal_approve(id: vector<u8>, registry: &ArtifactRegistry, ctx: &TxCont
 // ---- read-only accessors (tests / off-chain mirrors) ----
 public fun owner(self: &ArtifactRegistry): address { self.owner }
 public fun tier(self: &ArtifactRegistry): u8 { self.tier }
+public fun price(self: &ArtifactRegistry): u64 { self.price }
 public fun group_id(self: &ArtifactRegistry): Option<ID> { self.group_id }
 public fun parent(self: &ArtifactRegistry): Option<ID> { self.parent }
 public fun is_license_holder(self: &ArtifactRegistry, who: address): bool {

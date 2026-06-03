@@ -1,150 +1,91 @@
-// On-chain read helper for a wallet's Story license tokens.
+// On-chain read helper for a wallet's Sui licenses.
 //
-// The LICENSE_TOKEN contract (0xFe3838BFb30B34170F00030B52eA4893d8aAC6bC) is an
-// ERC1967 proxy that delegates to Story's LicenseToken implementation, which is
-// ERC-721 *Enumerable* (verified against @story-protocol/core-sdk's
-// licenseTokenAbi: it exposes balanceOf, ownerOf, tokenOfOwnerByIndex,
-// tokenByIndex, totalSupply). So the cheapest correct path is:
-//   1. balanceOf(owner)            — how many tokens the wallet holds.
-//   2. tokenOfOwnerByIndex(owner,i) — the i-th token id, for i in [0, balance).
+// In the Sui model a "license token" is not an ERC-721 NFT — it is membership of
+// an artifact's on-chain `license_holders` set (tessera::registry). So the EVM
+// `balanceOf` + `tokenOfOwnerByIndex` enumeration is replaced by:
+//   for each KNOWN artifact id, read its ArtifactRegistry via
+//   RegistryClient.getArtifact and check whether `owner` is in `licenseHolders`.
 //
-// If the deployed proxy ever reverts on tokenOfOwnerByIndex (enumerable not
-// active), we fall back to a BOUNDED log scan of recent Transfer(_, owner, id)
-// events and confirm each with ownerOf — never the whole chain, never fabricated
-// ids. Any RPC failure throws so the page can render an honest fallback.
+// HONEST LIMITATION: Sui has no built-in "all objects of type T" index, and
+// `license_holders` is stored inside each per-artifact shared object — there is no
+// owner-side object to enumerate. A FULL "list every artifact this wallet holds a
+// license for" therefore requires an off-chain event indexer (subscribe to the
+// `AccessChanged` / `LicensePurchased` events emitted by the Move module). Until
+// that indexer exists, this helper checks a CALLER-SUPPLIED candidate list of
+// artifact ids and returns exactly the ones the wallet holds — never fabricated
+// ids. With no candidates supplied it returns an empty list and marks the result
+// `indexed: false` so the UI can render an honest "needs an indexer" state.
+//
+// Any RPC failure throws so callers can show an honest fallback.
 
-import { RPC_URL, LICENSE_TOKEN } from "./constants";
-import { aeneid } from "./chains";
+import { RegistryClient } from "./registry";
+import type { SuiClient } from "./clients";
 
-// How many recent blocks the fallback log scan covers. Bounded so it never
-// walks the whole chain; Aeneid ~2s blocks → ~50k blocks ≈ a day of history.
-const LOG_SCAN_BLOCKS = 50_000n;
-// Per-getLogs window. Many RPCs cap the block span of a single eth_getLogs call;
-// we page through LOG_SCAN_BLOCKS in chunks of this size.
-const LOG_SCAN_CHUNK = 10_000n;
-
-// Minimal inline ABI — only the functions/events we call. Matches the
-// LicenseToken implementation behind the proxy.
-const LICENSE_TOKEN_ABI = [
-  {
-    type: "function",
-    name: "balanceOf",
-    stateMutability: "view",
-    inputs: [{ name: "owner", type: "address" }],
-    outputs: [{ name: "", type: "uint256" }],
-  },
-  {
-    type: "function",
-    name: "ownerOf",
-    stateMutability: "view",
-    inputs: [{ name: "tokenId", type: "uint256" }],
-    outputs: [{ name: "", type: "address" }],
-  },
-  {
-    type: "function",
-    name: "tokenOfOwnerByIndex",
-    stateMutability: "view",
-    inputs: [
-      { name: "owner", type: "address" },
-      { name: "index", type: "uint256" },
-    ],
-    outputs: [{ name: "", type: "uint256" }],
-  },
-  {
-    type: "event",
-    name: "Transfer",
-    inputs: [
-      { name: "from", type: "address", indexed: true },
-      { name: "to", type: "address", indexed: true },
-      { name: "tokenId", type: "uint256", indexed: true },
-    ],
-  },
-] as const;
+export interface LicenseToken {
+  /** The artifact (ArtifactRegistry object id) the wallet holds a license for. */
+  artifactId: string;
+  /** Back-compat alias used by existing UI: the artifact id as the "token id". */
+  tokenId: string;
+}
 
 export interface LicenseTokenList {
-  tokens: Array<{ tokenId: string }>;
-  /** true if the enumerable path (tokenOfOwnerByIndex) was used. */
-  enumerable: boolean;
-  /** true if the bounded Transfer-log fallback was used. */
-  scanned: boolean;
+  tokens: LicenseToken[];
+  /**
+   * true if a complete on-chain enumeration was possible. On Sui this is only
+   * true once an event indexer feeds the full candidate set; with a caller-
+   * supplied candidate list it reflects "checked exactly these candidates".
+   */
+  indexed: boolean;
+  /** How many candidate artifact ids were checked. */
+  checked: number;
+}
+
+export interface ListLicenseOpts {
+  /**
+   * Candidate ArtifactRegistry object ids to check membership against. REQUIRED
+   * for any non-empty result until an event indexer exists (see file header).
+   * Typically sourced from the app's own catalog of gated artifacts.
+   */
+  candidateArtifactIds?: string[];
+  /** Optional explicit package id for the RegistryClient (defaults to env). */
+  packageId?: string;
 }
 
 /**
- * List the license token ids held by `owner`. Real on-chain reads only — never
- * fabricates ids. Throws on RPC failure so callers can show an honest fallback.
+ * List the licenses held by `owner` on Sui. Real on-chain reads only — never
+ * fabricates ids. For each candidate artifact id, reads the ArtifactRegistry and
+ * keeps it if `owner` is in `licenseHolders` (or is the owner — owners always have
+ * gated access via `seal_approve`). Throws on RPC failure.
+ *
+ * `indexed` is false when no candidate list is supplied (an honest signal that a
+ * full enumeration needs an off-chain `AccessChanged`/`LicensePurchased` indexer).
  */
 export async function listLicenseTokens(
-  owner: `0x${string}`,
+  client: SuiClient,
+  owner: string,
+  opts: ListLicenseOpts = {},
 ): Promise<LicenseTokenList> {
-  const { createPublicClient, http, getAddress } = await import("viem");
-  const client = createPublicClient({ chain: aeneid, transport: http(RPC_URL) });
+  const candidates = opts.candidateArtifactIds ?? [];
 
-  // 1) balanceOf — throws on RPC failure (propagated to caller).
-  const balance = (await client.readContract({
-    address: LICENSE_TOKEN,
-    abi: LICENSE_TOKEN_ABI,
-    functionName: "balanceOf",
-    args: [owner],
-  })) as bigint;
-
-  if (balance === 0n) {
-    return { tokens: [], enumerable: true, scanned: false };
+  // No candidates and no indexer: honest empty result, not fabricated data.
+  if (candidates.length === 0) {
+    // TODO(indexer): subscribe to tessera::registry `AccessChanged` (kind 0) and
+    // `LicensePurchased` events to build the full per-wallet candidate set. Until
+    // then a complete enumeration is not queryable on-chain.
+    return { tokens: [], indexed: false, checked: 0 };
   }
 
-  // 2) Try the enumerable path: tokenOfOwnerByIndex for each index.
-  try {
-    const ids: Array<{ tokenId: string }> = [];
-    for (let i = 0n; i < balance; i++) {
-      const id = (await client.readContract({
-        address: LICENSE_TOKEN,
-        abi: LICENSE_TOKEN_ABI,
-        functionName: "tokenOfOwnerByIndex",
-        args: [owner, i],
-      })) as bigint;
-      ids.push({ tokenId: id.toString() });
-    }
-    return { tokens: ids, enumerable: true, scanned: false };
-  } catch {
-    // Enumerable not active on this proxy — fall through to a bounded log scan.
+  const reg = new RegistryClient(client, opts.packageId);
+  const ownerNorm = owner.toLowerCase();
+  const held: LicenseToken[] = [];
+
+  for (const artifactId of candidates) {
+    const state = await reg.getArtifact(artifactId);
+    const holders = state.licenseHolders.map((h) => h.toLowerCase());
+    const isHolder = holders.includes(ownerNorm) || state.owner.toLowerCase() === ownerNorm;
+    if (isHolder) held.push({ artifactId, tokenId: artifactId });
   }
 
-  // 3) Bounded fallback: scan recent Transfer(_, owner, id) logs, then confirm
-  //    each id's current owner via ownerOf (a token may have moved on).
-  const latest = await client.getBlockNumber();
-  const fromFloor = latest > LOG_SCAN_BLOCKS ? latest - LOG_SCAN_BLOCKS : 0n;
-  const transferEvent = LICENSE_TOKEN_ABI[3];
-  const candidates = new Set<bigint>();
-
-  for (let from = fromFloor; from <= latest; from += LOG_SCAN_CHUNK) {
-    const to = from + LOG_SCAN_CHUNK - 1n > latest ? latest : from + LOG_SCAN_CHUNK - 1n;
-    const logs = await client.getLogs({
-      address: LICENSE_TOKEN,
-      event: transferEvent,
-      args: { to: owner },
-      fromBlock: from,
-      toBlock: to,
-    });
-    for (const log of logs) {
-      const id = (log.args as { tokenId?: bigint }).tokenId;
-      if (id !== undefined) candidates.add(id);
-    }
-  }
-
-  const ownerNorm = getAddress(owner);
-  const held: Array<{ tokenId: string }> = [];
-  for (const id of candidates) {
-    try {
-      const cur = (await client.readContract({
-        address: LICENSE_TOKEN,
-        abi: LICENSE_TOKEN_ABI,
-        functionName: "ownerOf",
-        args: [id],
-      })) as `0x${string}`;
-      if (getAddress(cur) === ownerNorm) held.push({ tokenId: id.toString() });
-    } catch {
-      // ownerOf reverts for burned tokens — skip, never fabricate.
-    }
-  }
-
-  return { tokens: held, enumerable: false, scanned: true };
+  // `indexed: true` here means "the supplied candidate set was fully checked".
+  return { tokens: held, indexed: true, checked: candidates.length };
 }
