@@ -1,0 +1,13 @@
+[package]
+name = "tessera"
+edition = "2024.beta"
+license = "MIT"
+
+[dependencies]
+# Sui framework is resolved implicitly from the installed CLI's bundled snapshot
+# (no git clone), matching sharegraph's Move.toml. If a toolchain needs it
+# explicit, add:
+# Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "framework/testnet" }
+
+[addresses]
+tessera = "0x0"
