@@ -15,11 +15,40 @@ It runs on the Story **Aeneid** testnet.
 
 ---
 
+## Built on CDR (Confidential Data Rails)
+
+Tessera is a flagship **CDR** application: it turns a private dataset into exactly what CDR promises —
+*a programmable, composable on-chain object* — and then ships a real product on top of it. Private data
+without giving up composability.
+
+**The composability lives in custom read-condition contracts.** A CDR validator `staticcall`s a vault's
+read condition to decide who may decrypt. Tessera writes **five**, against the live Aeneid interface it
+reverse-engineered (`IReadCondition`):
+
+- **`AnyOfReadCondition`** — composable **OR** over conditions. One vault gate becomes
+  *"license **OR** token-balance **OR** merkle-allowlist"* just by listing sub-conditions and their
+  data. Dynamic permissioning expressed as data, with no redeploys.
+- **`ComputeWorkerReadCondition`** — *computable, not downloadable*, enforced **at the CDR layer**: only
+  an allowlisted compute worker can decrypt, so a consumer's read simply reverts. This is a confidential
+  **query marketplace** — run an approved algorithm over data you are never allowed to see.
+- **`GroupLicenseReadCondition`** — subscribe to a lab, unlock its whole family of vaults. It *composes*
+  the already-deployed `LicenseReadCondition` rather than re-implementing license validation.
+- **`OwnerReadCondition`** — fills a real gap: Story's deployed owner condition is write-only, so
+  private-tier reads reverted at the precompile. This is the missing read-side counterpart.
+
+**Composability beyond the gate:** every artifact is a Story **IP Asset**, so a model trained on a
+private dataset is registered as that dataset's **derivative**, and a compute result is a derivative of
+the data it ran on — with **royalties flowing upstream along every edge**. Private data you cannot even
+download still earns its owner money, automatically. That is the CDR mission, shipped end-to-end:
+upload → encrypt → gate → license → compute → derive → pay.
+
+---
+
 ## Why this is different
 
 On a normal ML hub, a company server holds the files and decides — in its own code, behind its own
 login — who gets to download. You trust the platform. On Tessera the file is encrypted before it ever
-leaves the browser, the decryption key is delivered by a **CDR** (Confidential Data Retrieval) network
+leaves the browser, the decryption key is delivered by the **CDR** (Confidential Data Rails) network
 only when an **on-chain condition** says you qualify, and that condition is a smart contract anyone can
 read. The registry that lists artifacts is just a cache — delete it and the access rules are unchanged,
 because they live in the encryption + the chain.
@@ -170,6 +199,28 @@ module-init time. To re-seed the demo corpus, see `scripts/sample/` (Python gene
 - Every transaction and ipId is surfaced in the UI via `TxLink`.
 - No `localStorage`. Compute-tier artifacts have **no download path** at all.
 - `/api/index` POST accepts only public descriptors — it will not store keys or plaintext.
+
+---
+
+## What works today (live on Aeneid)
+
+A complete product, not slideware — every flow below executes against the live testnet:
+
+- **Upload wizard** — pick a tier, encrypt, register the IP, pin to IPFS, and self-index in one flow.
+- **Five access tiers** — public · private · gated · group · compute — each with its own CDR read
+  condition.
+- **Browse / search / tags / profiles / leaderboard** — a full Hugging-Face-style catalog.
+- **Gated download** — mint a license token → decrypt → retrieve plaintext, gated entirely on-chain.
+- **Confidential compute** — run an allowlisted algorithm over a compute-tier dataset; receive aggregate
+  metrics + a derivative IP; raw rows never leave the worker.
+- **Model inference** — a **Run** tab streams live output from a GPU backend (OpenAI-compatible).
+- **Royalties** — pay and claim revenue along the derivative graph.
+- **Disputes** — raise a report against an IP and counter it with on-chain evidence.
+- **Groups** — bundle artifacts so one license unlocks the whole family.
+
+**Both prize tracks:** the custom read-condition contracts target the **Technical Implementation**
+track (composable vaults, dynamic permissioning); this polished end-to-end surface targets the
+**Best CDR Application** track.
 
 ---
 
