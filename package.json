@@ -9,6 +9,7 @@
     "start": "next start",
     "lint": "eslint",
     "smoke": "tsx",
+    "publish:move": "tsx scripts/publish.ts",
     "indexer": "tsx indexer/listen.ts",
     "worker": "tsx worker/compute-worker.ts",
     "test": "vitest run",
