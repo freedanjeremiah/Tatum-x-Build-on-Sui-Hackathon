@@ -62,3 +62,6 @@ certificates
 our-landing.png
 /landing-with-model.png
 /landing-seeded.png
+
+# Generated browser Walrus WASM (copied from @mysten/walrus-wasm by scripts/copy-walrus-wasm.mjs)
+/public/walrus/walrus_wasm_bg.wasm

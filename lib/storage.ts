@@ -18,6 +18,7 @@ import { WalrusFile } from "@mysten/walrus";
 import type { Signer } from "@mysten/sui/cryptography";
 import type { SuiClient } from "./clients";
 import { getReadClient } from "./clients";
+import { browserWalrusWasmUrl } from "./walrus-wasm";
 import {
   WALRUS_AGGREGATOR,
   SUI_NETWORK,
@@ -300,11 +301,20 @@ export class Storage {
 let _storage: Storage | undefined;
 
 /**
- * Returns a shared read-configured Storage singleton (no signer — read paths only).
+ * Returns a shared Storage singleton. Reads work without a signer; the browser
+ * WRITE path (writeBlob/writeQuilt) needs the web Walrus WASM, so in the browser
+ * we default `wasmUrl` to the served wasm (lib/walrus-wasm.ts) — callers may
+ * still pass an explicit `wasmUrl` to override. On the server, WASM loads from
+ * node_modules and no URL is needed.
+ *
  * Config is sourced from lib/constants.ts. Fails loudly if WALRUS_AGGREGATOR is
  * missing or if SUI_NETWORK is not "testnet" or "mainnet".
  */
 export function getStorage(wasmUrl?: string): Storage {
+  // Resolve the browser wasm URL up front so the memoized browser singleton is
+  // write-capable even when the first caller (e.g. a read) passed nothing.
+  const resolvedWasmUrl = wasmUrl ?? browserWalrusWasmUrl();
+
   if (_storage) return _storage;
 
   if (!WALRUS_AGGREGATOR) {
@@ -323,7 +333,7 @@ export function getStorage(wasmUrl?: string): Storage {
     network,
     suiClient: getReadClient(),
     aggregatorUrl: WALRUS_AGGREGATOR,
-    ...(wasmUrl ? { wasmUrl } : {}),
+    ...(resolvedWasmUrl ? { wasmUrl: resolvedWasmUrl } : {}),
   });
   return _storage;
 }

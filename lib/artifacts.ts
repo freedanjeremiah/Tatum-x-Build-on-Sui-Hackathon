@@ -417,15 +417,19 @@ interface DownloadInput {
 }
 
 /**
- * Server-side SessionKey acquisition. Builds a Seal SessionKey signed by the
- * caller's Ed25519 keypair. Adapted from sharegraph (SessionKey.create with
- * { address, packageId, ttlMin, signer, suiClient }).
+ * SessionKey acquisition (server + browser).
  *
- * BROWSER PATH (TODO): in the browser the SessionKey must be signed by the user's
- * Privy/dapp-kit wallet via a personal-message signature. That requires the Privy
- * Sui signing callback to be wired through lib/walletBridge (see lib/useClients.ts
- * TODO(A2/signer)). Until that is done, a browser signer that cannot sign a
- * personal message will throw here — an HONEST failure, never a fake key.
+ * Builds a Seal SessionKey bound to (address, packageId) and signs its
+ * certificate via the caller's signer's PERSONAL-MESSAGE signature:
+ *   - Server: an Ed25519 keypair signs in-process.
+ *   - Browser: the connected Sui wallet (dapp-kit WalletStandardSigner) signs
+ *     the personal message — Seal calls signer.signPersonalMessage() lazily when
+ *     the certificate is first needed, prompting the user's wallet.
+ *
+ * Either way the signature is real. A signer that cannot sign a personal message
+ * throws here — an HONEST failure, never a fake key. SessionKey.create also
+ * asserts signer.getPublicKey().toSuiAddress() === address, so a mismatched
+ * wallet fails fast rather than producing an unusable key.
  */
 async function makeSessionKey(clients: Clients): Promise<SessionKey> {
   const crypto = getCrypto();
@@ -443,7 +447,7 @@ async function makeSessionKey(clients: Clients): Promise<SessionKey> {
  *
  *   1. resolve blobId + artifactId + tier.
  *   2. sealId = sealIdBytes(artifactId, coreTier(tier)); txBytes = seal_approve.
- *   3. obtain a SessionKey (server: keypair; browser: TODO honest throw).
+ *   3. obtain a SessionKey (server: keypair; browser: connected wallet signs).
  *   4. read ciphertext from the Walrus aggregator; Crypto.decrypt(...).
  *
  * Fail closed: a Seal NoAccessError is surfaced as a typed DownloadGateError with
@@ -486,7 +490,8 @@ export async function download(clients: Clients, input: DownloadInput): Promise<
   const sealId = sealIdBytes(artifactId, coreT);
   const txBytes = await reg.buildSealApproveTx(artifactId, sealId);
 
-  // (3) SessionKey for the caller (server keypair; browser path is a TODO throw).
+  // (3) SessionKey for the caller (server keypair; browser: connected wallet
+  // signs the certificate's personal message via dapp-kit).
   const sessionKey = await makeSessionKey(clients);
 
   // (4) Read ciphertext (gasless aggregator) + Seal-decrypt. Fail closed on NoAccess.
