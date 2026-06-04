@@ -237,6 +237,45 @@ export class RegistryClient {
     return { artifactId, capId, digest };
   }
 
+  /**
+   * Register a compute-result derivative gated on an enclave signature. Builds
+   * register_derivative_attested(tier, price, parent, group_id, enclave,
+   * timestamp_ms, algo_hash, metrics, signature) and executes it. The Move call
+   * aborts (and this rejects) if the enclave signature does not verify on-chain.
+   */
+  async registerDerivativeAttested(
+    args: {
+      tier: ArtifactTier;
+      parentId: string;
+      enclaveObjectId: string;
+      timestampMs: bigint;
+      algoHash: string;
+      metrics: Uint8Array;
+      signature: Uint8Array;
+      price?: bigint;
+      groupId?: string;
+    },
+    signer: Signer,
+  ): Promise<string> {
+    const tx = new Transaction();
+    tx.moveCall({
+      target: this.target("register_derivative_attested"),
+      arguments: [
+        tx.pure.u8(tierToU8(args.tier)),
+        tx.pure.u64(args.price ?? 0n),
+        tx.pure.id(args.parentId),
+        tx.pure.option("id", args.groupId ?? null),
+        tx.object(args.enclaveObjectId),
+        tx.pure.u64(args.timestampMs),
+        tx.pure.vector("u8", Array.from(new TextEncoder().encode(args.algoHash))),
+        tx.pure.vector("u8", Array.from(args.metrics)),
+        tx.pure.vector("u8", Array.from(args.signature)),
+      ],
+    });
+    const { digest } = await this.exec(tx, signer);
+    return digest;
+  }
+
   // -------------------------------------------------------------------------
   // Cap-gated mutating entry funs. Each takes the ArtifactCap and the shared
   // ArtifactRegistry by object ref, plus the target address.
