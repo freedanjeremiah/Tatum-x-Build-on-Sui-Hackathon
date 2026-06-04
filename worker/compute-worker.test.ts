@@ -1,4 +1,4 @@
-import { test, expect } from "vitest";
+import { test, it, expect, describe, beforeEach, afterEach } from "vitest";
 import { runComputeJob, parseRows } from "./compute-worker";
 import { RUN_INTEGRATION, realClients } from "../lib/itest";
 import type { Artifact } from "../types/artifact";
@@ -120,4 +120,20 @@ itInt("logistic-regression returns coefficients-only metrics (no rows)", async (
   expect(result.metrics).toBeTruthy();
   expect("rows" in (result.metrics ?? {})).toBe(false);
   expect("values" in (result.metrics ?? {})).toBe(false);
+});
+
+describe("enclave-nautilus mode", () => {
+  beforeEach(() => { process.env.WORKER_ISOLATION_MODE = "enclave-nautilus"; });
+  afterEach(() => { delete process.env.WORKER_ISOLATION_MODE; });
+
+  it("rejects an off-allowlist algo without generating a sim quote", async () => {
+    const r = await runComputeJob({
+      datasetIpId: "0xdead" as `0x${string}`,
+      algoHash: "sha256:dump-all-rows",
+      allowedAlgoHashes: ["sha256:mean-aggregate"],
+    });
+    expect(r.status).toBe("rejected");
+    expect(r.attestation?.simQuote).toBeUndefined();
+    expect(r.isolationMode).toContain("AWS Nitro enclave");
+  });
 });
