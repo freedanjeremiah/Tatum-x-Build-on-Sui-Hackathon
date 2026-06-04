@@ -24,7 +24,7 @@ Four pieces of the Sui stack, each doing what only it can:
 | **Storage** | **Walrus** (`@mysten/walrus`) | Encrypted dataset/model blobs; owner pays + owns the `Blob` object; gasless public reads via the aggregator; renewable + deletable for storage GC. |
 | **Confidentiality** | **Seal** (`@mysten/seal`) | Threshold IBE encryption. The decryption key is released by the key-server committee **only** when an on-chain `seal_approve` Move call succeeds. |
 | **Coordination** | **Sui Move** (`reef::registry`) | One shared `ArtifactRegistry` object per artifact: tier, owner, license holders, compute allowlist, group, revenue vault, derivative lineage — and the `seal_approve` gate itself. |
-| **Access (RPC)** | **Tatum** Sui gateway | All JSON-RPC routed through Tatum (`x-api-key`, 429 backoff), with the public fullnode as fallback. |
+| **Access (RPC + data)** | **Tatum** | Three Tatum capabilities: Sui JSON-RPC gateway (`x-api-key`, 429 backoff, public-fullnode fallback), Notification webhooks → push indexer, and a live network/gas status surface. See [Tatum integration](#tatum-integration). |
 
 **The composability lives in the on-chain `seal_approve` policy.** Seal calls
 `reef::registry::seal_approve(id, registry, ctx)` as a dry-run before releasing key shares; if the
@@ -37,6 +37,31 @@ each artifact's policy is isolated and forgery is impossible.
 of the data it ran on. Royalties accrue to each artifact's on-chain `Balance<SUI>` vault and flow
 upstream along the lineage. Private data you cannot even download still earns its owner SUI — upload →
 encrypt → gate → license → compute → derive → pay, end-to-end.
+
+---
+
+## Tatum integration
+
+Reef uses **three distinct Tatum capabilities**, not just RPC. Each degrades to an
+honest disabled state when `TATUM_API_KEY` is absent — never a fabricated value.
+
+| # | Tatum capability | Where | What it does |
+|---|------------------|-------|--------------|
+| 1 | **Sui RPC gateway** | `lib/clients.ts` | Every Sui JSON-RPC call is routed through the Tatum Sui gateway with the `x-api-key` header and a 429/5xx exponential backoff. The public fullnode is the automatic fallback when no key is set. |
+| 2 | **Notification webhooks → push indexer** | `lib/tatum.ts`, `app/api/tatum/webhook`, `indexer/listen.ts` | On startup the indexer registers a Tatum **v4 address subscription** (`/v4/subscription`, `ADDRESS_EVENT`) for the Reef publisher, so on-chain activity is **PUSHED** to `/api/tatum/webhook`. The webhook validates the payload (and an optional `x-reef-webhook-secret`), then triggers an incremental on-chain drain — the chain stays the source of truth; the push is just a low-latency trigger. The existing `queryEvents` **poll loop stays on as the reliable fallback** (belt-and-suspenders). If push is not configured the indexer logs "polling only". |
+| 3 | **Network / gas status** | `lib/tatum.ts`, `app/api/tatum/status`, `components/TatumStatus.tsx` | A header indicator shows the live Sui reference gas price + latest checkpoint/epoch, read server-side through the Tatum gateway (`suix_getReferenceGasPrice`, `sui_getLatestCheckpointSequenceNumber`, `suix_getLatestSuiSystemState`) and labeled "via Tatum". The key never reaches the browser; unavailable status renders "—". |
+
+**Env vars:** `TATUM_API_KEY` (RPC + notifications + status), `REEF_WEBHOOK_URL`
+(public HTTPS callback URL — set it to enable push; empty = poll only),
+`TATUM_WEBHOOK_SECRET` (optional shared secret for the webhook). The key and
+secret are server-only and are never logged.
+
+**Honest disabled behaviour:** no `TATUM_API_KEY` → RPC falls back to the public
+fullnode, the notification client throws a clear "TATUM_API_KEY is not set" error
+(no silent fallback), and the status indicator shows "—". The subscription type
+defaults to the documented `ADDRESS_EVENT` shape and is overridable
+(`OV_TATUM_SUB_TYPE` / `OV_TATUM_SUB_CHAIN`) if Tatum names the Sui-specific type
+differently.
 
 ---
 

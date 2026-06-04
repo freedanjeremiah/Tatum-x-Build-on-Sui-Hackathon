@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import VaultMark from "./ui/VaultMark";
 import WalletButton from "./WalletButton";
 import ProfileMenu from "./ProfileMenu";
+import TatumStatus from "./TatumStatus";
 
 const NAV = [
   { href: "/", label: "Browse" },
@@ -66,12 +67,7 @@ export default function Header() {
         </nav>
 
         <div style={{ flex: 1 }} />
-        <span
-          className="meta ov-network"
-          style={{ color: "var(--ov-text-faint)" }}
-        >
-          Sui testnet
-        </span>
+        <TatumStatus />
         <ProfileMenu />
         <WalletButton />
       </div>

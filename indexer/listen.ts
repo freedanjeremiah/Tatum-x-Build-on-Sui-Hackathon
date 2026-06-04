@@ -11,6 +11,14 @@
 // where it left off. Public RPC has no long-lived websocket subscription here, so
 // polling is the portable, Tatum-gateway-friendly path.
 //
+// PUSH path (Tatum Notification API): on startup, if TATUM_API_KEY and a public
+// REEF_WEBHOOK_URL are configured, we register a Tatum address subscription for
+// the Reef publisher so Tatum PUSHES activity to /api/tatum/webhook. That route
+// calls `drainOnce` to pull the new on-chain events immediately, so the read
+// model updates without waiting for the next poll tick. The poll loop stays on
+// as the reliable belt-and-suspenders fallback — the chain remains the only
+// source of truth; the webhook is just a low-latency trigger.
+//
 // Event → read-model mapping (events emitted by move/sources/reef.move):
 //   ArtifactRegistered{artifact, owner, tier, parent}
 //       → upsert a new artifact row (tier from u8, owner, parentIpId, createdTx).
@@ -42,6 +50,8 @@ import type { SuiEvent } from "@mysten/sui/jsonRpc";
 
 import { makeSuiClient, type SuiClient } from "../lib/clients";
 import { REEF_PACKAGE_ID } from "../lib/constants";
+import { REEF_WEBHOOK_URL } from "../lib/env";
+import { hasTatumKey, ensureAddressSubscription } from "../lib/tatum";
 import { u8ToTier } from "../lib/registry";
 import {
   openDb,
@@ -54,11 +64,11 @@ import {
 } from "./db";
 import type { Artifact, Tier } from "../types/artifact";
 
-const MODULE = "registry";
+export const MODULE = "registry";
 
 // Single logical stream — we query the whole registry module and route by the
 // event's `type` suffix, so one cursor covers every registry event in order.
-const STREAM = "reef::registry";
+export const STREAM = "reef::registry";
 
 const PAGE_LIMIT = 50;
 const POLL_INTERVAL_MS = Number(process.env.OV_INDEXER_POLL_MS ?? 4000);
@@ -237,7 +247,7 @@ function handleEvent(db: DB, ev: SuiEvent): void {
  * order, upserting each into the read model and advancing the persisted cursor
  * page by page. Returns the number of events consumed this drain.
  */
-async function drainOnce(client: SuiClient, db: DB): Promise<number> {
+export async function drainOnce(client: SuiClient, db: DB): Promise<number> {
   let cursor: EventCursor | null = getCursor(db, STREAM);
   let consumed = 0;
 
@@ -268,6 +278,41 @@ async function drainOnce(client: SuiClient, db: DB): Promise<number> {
   return consumed;
 }
 
+/**
+ * If Tatum push is configured (TATUM_API_KEY + a public REEF_WEBHOOK_URL),
+ * register a Tatum address subscription for the Reef publisher so Tatum PUSHES
+ * activity to /api/tatum/webhook. Idempotent (won't duplicate on restart). The
+ * poll loop runs regardless — this only adds a low-latency trigger. Honest log
+ * when push is not configured ("polling only"). Never throws fatally: a failed
+ * subscription must not take the indexer down (the poll is the reliable path).
+ */
+async function registerTatumPush(): Promise<void> {
+  const address = process.env.MASTER_SUI_ADDRESS ?? "";
+  if (!hasTatumKey() || REEF_WEBHOOK_URL.trim() === "") {
+    console.log(
+      "[indexer] Tatum push not configured (need TATUM_API_KEY + REEF_WEBHOOK_URL) — polling only.",
+    );
+    return;
+  }
+  if (address.trim() === "") {
+    console.log(
+      "[indexer] Tatum push: MASTER_SUI_ADDRESS unset — cannot pick a publisher address to watch; polling only.",
+    );
+    return;
+  }
+  try {
+    const { id, created } = await ensureAddressSubscription(address, REEF_WEBHOOK_URL);
+    console.log(
+      `[indexer] Tatum push ACTIVE — ${created ? "created" : "reusing"} subscription ${id} ` +
+        `for publisher ${address} → ${REEF_WEBHOOK_URL} (poll fallback still running).`,
+    );
+  } catch (e) {
+    console.warn(
+      `[indexer] Tatum push registration failed (${(e as Error).message}) — continuing with poll only.`,
+    );
+  }
+}
+
 async function runReal(): Promise<void> {
   if (!REEF_PACKAGE_ID || REEF_PACKAGE_ID.trim() === "") {
     throw new Error(
@@ -282,6 +327,8 @@ async function runReal(): Promise<void> {
   console.log(
     `[indexer] polling reef::registry events (package=${REEF_PACKAGE_ID}, interval=${POLL_INTERVAL_MS}ms)`,
   );
+
+  await registerTatumPush();
 
   // Poll forever. Each tick drains all new events; errors are logged and retried
   // on the next tick (the cursor only advances on a successful page).
