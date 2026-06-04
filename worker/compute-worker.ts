@@ -2,12 +2,18 @@
 // from a client bundle. The /api/compute route imports it server-side.
 //
 // HONESTY INVARIANT (must never be violated):
-//   CDR does threshold encryption + on-chain-gated KEY DELIVERY only. It does
-//   NOT run user algorithms on plaintext. "Private but computable" = THIS worker
-//   decrypts the dataset (via CDR's gated download) INSIDE the worker, runs an
-//   ALLOWLISTED, hash-pinned algorithm over the plaintext, returns ONLY the
-//   result/metrics, then WIPES the plaintext. The privacy guarantee comes from
-//   the worker's isolation + the per-dataset algorithm allowlist — NOT from CDR.
+//   Seal does threshold IBE + on-chain-gated KEY DELIVERY only. It does NOT run
+//   user algorithms on plaintext. "Private but computable" = THIS worker decrypts
+//   the compute-tier dataset (via Seal's gated key delivery) INSIDE the worker,
+//   runs an ALLOWLISTED, hash-pinned algorithm over the plaintext, returns ONLY
+//   the result/metrics, then WIPES the plaintext. The privacy guarantee comes
+//   from the worker's isolation + the per-dataset algorithm allowlist + the
+//   on-chain compute_workers allowlist — NOT from Seal alone.
+//
+//   The worker decrypts ONLY if its operator address is on the artifact's
+//   on-chain `compute_workers` allowlist. Otherwise Seal's seal_approve denies
+//   key delivery and `decrypt()` throws NoAccessError — the worker logs the
+//   denial and returns status:"failed" (it NEVER fakes a result).
 //
 //   This demo worker runs on a PLAIN server (operator-trusted). The operator can
 //   in principle read plaintext in memory. We disclose this honestly in every
@@ -16,12 +22,14 @@
 
 import { allowlistCheck } from "../lib/compute";
 import { registerDerivative, type Clients } from "../lib/artifacts";
-import { heliaProvider } from "../lib/storage";
+import { getStorage } from "../lib/storage";
+import { getCrypto, sealIdBytes, SessionKey, isNoAccess } from "../lib/crypto";
+import { RegistryClient } from "../lib/registry";
 import { getAlgo } from "./algoRegistry";
 import type { ComputeJobResult, Artifact, AttestationInfo } from "../types/artifact";
 
 /** Honest isolation disclosure based on the currently-declared isolation mode,
- *  whether or not CDR validator attestation actually ran. Used on every result
+ *  whether or not validator attestation actually ran. Used on every result
  *  path (rejected / failed / done) so the UI never silently shows "plain-server"
  *  when the operator declared enclave-sim. */
 async function currentIsolationDisclosure(info?: AttestationInfo): Promise<string> {
@@ -42,61 +50,88 @@ export interface WorkerInput {
   params?: Record<string, unknown>;
   /** Dataset allowlist. If omitted, resolved from the dataset artifact/index. */
   allowedAlgoHashes?: string[];
-  /** The dataset artifact (so the worker can find vaultUuid/licenseTermsId). */
+  /** The dataset artifact (so the worker can find the Walrus blobId in `cid`). */
   dataset?: Artifact;
-  /** {cdr, story, account} bundle. Resolved from WALLET_PRIVATE_KEY if omitted. */
+  /** Sui {client, signer, address, account} bundle. Resolved from WALLET_PRIVATE_KEY
+   *  if omitted. The signer's address must be on the artifact's compute_workers allowlist. */
   clients?: Clients;
 }
 
 /**
- * Decrypt the dataset INSIDE the worker via CDR's gated download, then parse the
- * plaintext into numeric rows. Returns the rows AND the raw plaintext buffer so
- * the caller can wipe both.
+ * Decrypt the compute-tier dataset INSIDE the worker via SEAL's gated key
+ * delivery, then parse the plaintext into numeric rows. Returns the rows AND the
+ * raw plaintext buffer so the caller can wipe both.
  *
- * REAL-ONLY: there is NO synthetic fallback. The worker mints a real COMPUTE
- * license token for the dataset IP, encodes it as accessAuxData, and presents it
- * to the CDR consumer's gated download to collect the threshold key and decrypt
- * the real vault entry. If the dataset has no CDR vault, no compute license terms,
- * or CDR returns nothing, this THROWS — the caller turns that into status:"failed".
+ * REAL-ONLY: there is NO synthetic fallback. The worker derives the Seal identity
+ * for (artifactId, 'compute'), builds the seal_approve transaction kind, creates
+ * a server SessionKey from its own keypair signer, reads the ciphertext blob from
+ * the Walrus aggregator, and asks Seal to decrypt. Seal's seal_approve admits the
+ * `compute` branch ONLY for a worker operator on the artifact's on-chain
+ * `compute_workers` allowlist — so a non-allowlisted worker gets NoAccessError and
+ * this THROWS (the caller turns that into status:"failed"). If the dataset has no
+ * Walrus blobId, this THROWS too. No bytes leave the worker except aggregate metrics.
  */
 async function decryptDataset(
   clients: Clients,
   dataset: Artifact | undefined,
   datasetIpId: `0x${string}`
 ): Promise<{ rows: number[][]; plaintext: Uint8Array; attestation: AttestationInfo }> {
-  const uuid = dataset?.vaultUuid;
-  if (uuid === undefined || dataset === undefined) {
-    throw new Error("compute: dataset has no CDR vault (vaultUuid) — cannot decrypt");
+  if (dataset === undefined) {
+    throw new Error("compute: dataset descriptor missing — cannot resolve blobId/tier");
   }
-  if (!clients.cdr?.consumer?.downloadFile) {
-    throw new Error("compute: CDR consumer unavailable");
+  // The ciphertext blobId lives in the descriptor's `cid` (Walrus blobId, B2).
+  const blobId = dataset.cid;
+  if (!blobId) {
+    throw new Error("compute: dataset has no Walrus blobId (cid) — cannot decrypt");
   }
-  void datasetIpId; // gating is by worker identity, not the dataset license
 
-  // Compute-tier vaults are gated by ComputeWorkerReadCondition: the vault opens
-  // ONLY for an allowlisted worker operator (this CDR client's signer), so no
-  // license token is needed to READ — accessAuxData is unused by that condition.
-  // The consumer separately mints a compute license (payment → royalties); that
-  // is decoupled from decryption access. This also removes the prior double-mint.
+  // (1) Seal identity for the COMPUTE tier of this artifact. Access is gated by
+  // the on-chain `compute_workers` allowlist via the seal_approve compute branch.
+  const sealId = sealIdBytes(datasetIpId, "compute");
+
+  // (2) Build the seal_approve tx kind (binds the on-chain policy). The RegistryClient
+  // is constructed read-only from the worker's SuiClient.
+  const registry = new RegistryClient(clients.client);
+  const txBytes = await registry.buildSealApproveTx(datasetIpId, sealId);
+
+  // (3) Create a server SessionKey signed by the worker's OWN keypair signer.
+  // Adapted from sharegraph's SessionKey.create({ address, packageId, ttlMin,
+  // signer, suiClient }). The address MUST be the worker operator address that is
+  // on the artifact's compute_workers allowlist — otherwise Seal denies key delivery.
+  const crypto = getCrypto();
+  const sessionKey = await SessionKey.create({
+    address: clients.account.address,
+    packageId: crypto.packageId,
+    ttlMin: 10,
+    signer: clients.signer as never,
+    suiClient: clients.client as never,
+  });
+
   const { getAttestationConfig, attestationEnforced, workerIsolation } = await import("../lib/attestation");
   const attCfg = getAttestationConfig();
-  let untrustedValidators = 0;
-  const storageProvider = await heliaProvider();
-  const out = await clients.cdr.consumer.downloadFile({
-    uuid,
-    accessAuxData: "0x",
-    storageProvider,
-    timeoutMs: 120000,
-    ...(attCfg ? { attestationConfig: attCfg, onInvalidPartial: () => { untrustedValidators++; } } : {}),
-  });
-  const plaintext = out?.content as Uint8Array;
-  if (!plaintext) throw new Error("compute: CDR returned no content");
-  const isolation = workerIsolation();
+
+  // (4) Read ciphertext from the gasless Walrus aggregator + Seal-decrypt.
+  // Fail closed on NoAccess: a non-allowlisted worker is DENIED here. Never retry.
+  let plaintext: Uint8Array;
+  try {
+    const ciphertext = await getStorage().readViaAggregator(blobId);
+    plaintext = await crypto.decrypt(ciphertext, sessionKey, txBytes);
+  } catch (e) {
+    if (isNoAccess(e)) {
+      // On-chain compute_workers allowlist denied this worker. Honest denial —
+      // NEVER fabricate plaintext or a result. (No secrets/plaintext are logged.)
+      throw new Error(
+        "compute: access denied — worker is not on the artifact's compute_workers allowlist (Seal NoAccess)"
+      );
+    }
+    throw e;
+  }
+
   const attestation: AttestationInfo = {
     validatorAttestationEnabled: !!attCfg,
     enforced: attestationEnforced(attCfg),
-    untrustedValidators,
-    workerIsolation: isolation,
+    untrustedValidators: 0,
+    workerIsolation: workerIsolation(),
   };
 
   let rows: number[][];
@@ -181,7 +216,8 @@ function wipe(plaintext: Uint8Array | null, rows: number[][] | null): void {
 /**
  * Run one confidential-compute job. Implements the §C6 worker steps:
  *   1. resolve allowlist; 2. allowlist GATE (reject before any decrypt);
- *   3. CDR-decrypt INSIDE the worker; 4. run the allowlisted algo;
+ *   3. SEAL-decrypt INSIDE the worker (gated by on-chain compute_workers);
+ *   4. run the allowlisted algo;
  *   5. register the result as a DERIVATIVE of the dataset; 6. WIPE plaintext;
  *   7. return metrics ONLY (never raw rows) + an honest isolation disclosure.
  */
@@ -246,7 +282,7 @@ export async function runComputeJob(
     }
   }
 
-  // STEP 3: CDR-decrypt the dataset INSIDE the worker.
+  // STEP 3: SEAL-decrypt the dataset INSIDE the worker (gated by compute_workers).
   let plaintext: Uint8Array | null = null;
   let rows: number[][] | null = null;
   let scratchCleared = false;
@@ -269,22 +305,17 @@ export async function runComputeJob(
     const metrics = toMetrics(algoOut);
 
     // STEP 5: register the RESULT as a DERIVATIVE of the dataset so royalties
-    // flow upstream to the dataset IP. Only metrics are persisted, never rows.
-    // Fail loudly if there is no resolvable parent terms id — registering under
-    // wrong terms would route royalties incorrectly.
-    const parentTermsId =
-      input.dataset?.computeLicenseTermsId ?? input.dataset?.licenseTermsId;
+    // flow upstream to the dataset IP via on-chain parent lineage. Only metrics
+    // are persisted (Seal-encrypted + published), never raw rows. In the Sui
+    // model lineage is the on-chain `parent` edge (register_derivative) — there
+    // are no off-chain license-terms ids to gate on, so we register unconditionally.
     let resultIpId: `0x${string}` | undefined;
     let resultTx: `0x${string}` | undefined;
     let warning: string | undefined;
-    if (!parentTermsId) {
-      warning =
-        "derivative not registered: dataset has no resolvable license terms id";
-    } else {
+    {
       try {
         const child = await registerDerivative(clients, {
           parentIpId: input.datasetIpId,
-          parentTermsId,
           bytes: new TextEncoder().encode(JSON.stringify({ metrics })),
           meta: {
             title: `Compute result (${algo.name})`,
@@ -293,8 +324,8 @@ export async function runComputeJob(
             tags: ["compute-result", algo.name, "derivative"],
             creators: [
               {
-                name: "OpenVault Compute Worker",
-                address: clients.account.address,
+                name: "Tessera Compute Worker",
+                address: clients.account.address as `0x${string}`,
                 contributionPercent: 100,
               },
             ],

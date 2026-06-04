@@ -29,7 +29,9 @@
 //   WalletNotConnectedError("Sui signer not available") on any write path.
 //   Read paths (client.core.getObject etc.) do not require a signer and work now.
 
-import type { Signer } from "@mysten/sui/cryptography";
+import { Signer, SIGNATURE_FLAG_TO_SCHEME } from "@mysten/sui/cryptography";
+import type { PublicKey } from "@mysten/sui/cryptography";
+import type { SignatureScheme } from "@mysten/sui/cryptography";
 
 // ---------------------------------------------------------------------------
 // ActiveWallet — the shape stashed by WalletBridge.tsx.
@@ -61,42 +63,55 @@ export function getActiveWallet(): ActiveWallet | null {
 // ---------------------------------------------------------------------------
 
 /**
- * Minimal shim that wraps an external async signing callback.
+ * Minimal shim that adapts an external (Privy) Sui wallet to the @mysten/sui
+ * `Signer` abstract class. Only the abstract members are implemented here
+ * (`sign`, `getPublicKey`, `getKeyScheme`); the base `Signer` provides the
+ * concrete `signTransaction` / `signPersonalMessage` / `signAndExecuteTransaction`
+ * helpers, which delegate to `sign()` via `signWithIntent`.
+ *
+ * The constructor takes the resolved Ed25519 `PublicKey` (so `getPublicKey()`
+ * stays synchronous, as the base class requires) and a raw signing callback that
+ * signs intent-prefixed message bytes and returns the 64-byte Ed25519 signature.
  *
  * Usage once the Privy Sui provider API is known:
  *   const shim = new SuiSignerShim(
  *     address,
- *     async (txBytes) => privyWallet.signTransaction(txBytes),
- *     async () => privyWallet.getPublicKey(),
+ *     publicKey,                                  // Ed25519PublicKey from Privy
+ *     async (bytes) => privyWallet.sign(bytes),   // raw bytes → signature bytes
  *   );
  *   setActiveWallet({ signer: shim, address });
  */
-export class SuiSignerShim implements Signer {
+export class SuiSignerShim extends Signer {
   constructor(
     private readonly _address: string,
-    private readonly _signTransaction: (
-      txBytes: Uint8Array
-    ) => Promise<{ signature: string; bytes: string }>,
-    private readonly _getPublicKey: () => Promise<import("@mysten/sui/cryptography").PublicKey>
-  ) {}
-
-  // TODO(A2/signer): Remove the throw once the real Privy callback is wired in.
-  async signTransaction(
-    bytes: Uint8Array
-  ): Promise<{ signature: string; bytes: string }> {
-    return this._signTransaction(bytes);
+    private readonly _publicKey: PublicKey,
+    private readonly _sign: (bytes: Uint8Array) => Promise<Uint8Array>
+  ) {
+    super();
   }
 
-  async getPublicKey(): Promise<import("@mysten/sui/cryptography").PublicKey> {
-    return this._getPublicKey();
+  // The single abstract signing primitive. The base Signer's signTransaction /
+  // signPersonalMessage call this with intent-prefixed bytes. Delegates to the
+  // external (Privy) signing callback.
+  //
+  // TODO(A2/signer): wire `_sign` to Privy's Sui provider in WalletBridge.tsx.
+  // Until then this throws honestly (never returns a fake signature).
+  async sign(bytes: Uint8Array): Promise<Uint8Array<ArrayBuffer>> {
+    const sig = await this._sign(bytes);
+    // Normalize to a Uint8Array backed by a plain ArrayBuffer (the Signer
+    // contract's element type), copying off any SharedArrayBuffer-backed view.
+    return Uint8Array.from(sig);
   }
 
-  // Required by the Signer interface — delegates to signTransaction.
-  async sign(bytes: Uint8Array): Promise<Uint8Array> {
-    const result = await this._signTransaction(bytes);
-    // Decode the base64 signature bytes.
-    const sig = result.signature;
-    return Uint8Array.from(atob(sig), (c) => c.charCodeAt(0));
+  getPublicKey(): PublicKey {
+    return this._publicKey;
+  }
+
+  getKeyScheme(): SignatureScheme {
+    const flag = this._publicKey.flag() as keyof typeof SIGNATURE_FLAG_TO_SCHEME;
+    const scheme = SIGNATURE_FLAG_TO_SCHEME[flag];
+    if (!scheme) throw new Error(`SuiSignerShim: unknown signature scheme flag ${flag}`);
+    return scheme;
   }
 
   toSuiAddress(): string {
