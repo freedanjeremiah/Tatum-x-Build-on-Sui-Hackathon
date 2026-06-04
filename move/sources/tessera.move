@@ -23,6 +23,7 @@
 ///                       consumers are denied -> "computable, not downloadable".
 module tessera::registry;
 
+use sui::balance::{Self, Balance};
 use sui::coin::{Self, Coin};
 use sui::event;
 use sui::hash;
@@ -48,6 +49,8 @@ const EWrongCap: u64 = 8; // ArtifactCap does not match this artifact
 const EInvalidTier: u64 = 9; // register() called with a tier outside 0..=4
 const ENotForSale: u64 = 10; // buy_license() on a non-gated/non-group tier
 const EWrongPrice: u64 = 11; // buy_license() payment != the artifact's price
+const EEmptyRevenue: u64 = 12; // claim_revenue() with nothing accrued (no royalty path)
+const EZeroPayment: u64 = 13; // pay_royalty() with a zero-value coin
 
 // ---- objects ----
 
@@ -74,12 +77,38 @@ public struct ArtifactRegistry has key {
     revoked: VecSet<address>,
     /// derivative lineage (royalties): the parent artifact this was derived from.
     parent: Option<ID>,
+    /// accrued royalty revenue (SUI/MIST), paid in via `pay_royalty` and withdrawn
+    /// by the owner via `claim_revenue`. The on-chain "royalty vault" for this
+    /// artifact — empty until the first `pay_royalty`.
+    revenue: Balance<SUI>,
+    /// arbitration: forward-only dispute counter. Incremented by `raise_dispute`.
+    /// `disputed == (dispute_count > 0)` after at least one report is filed.
+    dispute_count: u64,
+    /// true once any dispute has been raised against this artifact (sticky flag).
+    disputed: bool,
 }
 
 /// Owner capability — gates every mutating entry fun. Held by the registrant.
 public struct ArtifactCap has key, store {
     id: UID,
     artifact: ID,
+}
+
+/// A shared group object: bundles a set of member artifact ids under one id.
+/// Membership here is the on-chain source of truth for `distribute` (the
+/// off-chain index mirrors it). Artifacts independently carry `group_id` so the
+/// Seal `group` tier keeps working via each member's own `license_holders`.
+public struct Group has key {
+    id: UID,
+    owner: address,
+    /// member artifact ids bound to this group (insertion order preserved).
+    members: VecSet<ID>,
+}
+
+/// Owner capability for a Group — gates `add_member`. Held by the group creator.
+public struct GroupCap has key, store {
+    id: UID,
+    group: ID,
 }
 
 // ---- events ----
@@ -101,6 +130,45 @@ public struct LicensePurchased has copy, drop {
     artifact: ID,
     buyer: address,
     price: u64,
+}
+/// Emitted when royalty revenue is paid into an artifact's on-chain vault.
+public struct RoyaltyPaid has copy, drop {
+    artifact: ID,
+    payer: address,
+    amount: u64,
+    /// total accrued revenue after this payment.
+    accrued: u64,
+}
+/// Emitted when the owner withdraws the accrued revenue.
+public struct RevenueClaimed has copy, drop {
+    artifact: ID,
+    owner: address,
+    amount: u64,
+}
+/// Emitted when a Group is created (shared) by `create_group`.
+public struct GroupCreated has copy, drop {
+    group: ID,
+    owner: address,
+}
+/// Emitted when a member artifact is added to a Group.
+public struct GroupMemberAdded has copy, drop {
+    group: ID,
+    member: ID,
+}
+/// Emitted when a dispute (report) is raised against an artifact.
+public struct Disputed has copy, drop {
+    artifact: ID,
+    reporter: address,
+    /// IPFS/Walrus CID (or any opaque evidence pointer) as UTF-8 bytes.
+    evidence: vector<u8>,
+    /// running dispute count after this report.
+    count: u64,
+}
+/// Emitted when counter-evidence is submitted against a raised dispute.
+public struct CounterEvidence has copy, drop {
+    artifact: ID,
+    responder: address,
+    evidence: vector<u8>,
 }
 
 // ---- registration / minting ----
@@ -144,6 +212,9 @@ fun register_internal(
         compute_workers: vec_set::empty<address>(),
         revoked: vec_set::empty<address>(),
         parent,
+        revenue: balance::zero<SUI>(),
+        dispute_count: 0,
+        disputed: false,
     };
     let aid = object::id(&artifact);
     let cap = ArtifactCap { id: object::new(ctx), artifact: aid };
@@ -220,6 +291,106 @@ public entry fun add_compute_worker(cap: &ArtifactCap, self: &mut ArtifactRegist
 public entry fun set_group(cap: &ArtifactCap, self: &mut ArtifactRegistry, group_id: ID) {
     assert_cap(cap, self);
     self.group_id = option::some(group_id);
+}
+
+// ---- royalties (on-chain revenue vault) ----
+
+/// Pay royalty revenue into this artifact's on-chain vault. Permissionless:
+/// ANYONE may pay (a derivative's licensee tipping upstream, a marketplace
+/// forwarding a cut, etc.). The whole `payment` coin is accrued to
+/// `self.revenue`; the owner later withdraws it via `claim_revenue`. Aborts on a
+/// zero-value payment (EZeroPayment) so callers cannot emit a no-op RoyaltyPaid.
+public entry fun pay_royalty(
+    self: &mut ArtifactRegistry,
+    payment: Coin<SUI>,
+    ctx: &mut TxContext,
+) {
+    let amount = coin::value(&payment);
+    assert!(amount > 0, EZeroPayment);
+    self.revenue.join(payment.into_balance());
+    let accrued = self.revenue.value();
+    event::emit(RoyaltyPaid {
+        artifact: object::id(self),
+        payer: ctx.sender(),
+        amount,
+        accrued,
+    });
+}
+
+/// Owner-only: withdraw ALL accrued royalty revenue to the owner. Cap-gated
+/// (the ArtifactCap proves ownership). Aborts if nothing has accrued
+/// (EEmptyRevenue) — the honest "no royalty path / NoRoyaltyVault" signal.
+public entry fun claim_revenue(
+    cap: &ArtifactCap,
+    self: &mut ArtifactRegistry,
+    ctx: &mut TxContext,
+) {
+    assert_cap(cap, self);
+    let amount = self.revenue.value();
+    assert!(amount > 0, EEmptyRevenue);
+    let withdrawn = self.revenue.withdraw_all();
+    let payout = coin::from_balance(withdrawn, ctx);
+    transfer::public_transfer(payout, self.owner);
+    event::emit(RevenueClaimed { artifact: object::id(self), owner: self.owner, amount });
+}
+
+// ---- groups (shared bundle object) ----
+
+/// Create + SHARE a new `Group`, transferring the owning `GroupCap` to the
+/// sender. The caller reads the new Group object id from the tx effects and
+/// binds member artifacts to it (via `set_group` / `add_member`).
+public entry fun create_group(ctx: &mut TxContext) {
+    let owner = ctx.sender();
+    let group = Group { id: object::new(ctx), owner, members: vec_set::empty<ID>() };
+    let gid = object::id(&group);
+    let cap = GroupCap { id: object::new(ctx), group: gid };
+    event::emit(GroupCreated { group: gid, owner });
+    transfer::transfer(cap, owner);
+    transfer::share_object(group);
+}
+
+/// Record a member artifact id in a Group. Cap-gated by the GroupCap. Idempotent.
+public entry fun add_member(cap: &GroupCap, group: &mut Group, member: ID) {
+    assert!(cap.group == object::id(group), EWrongCap);
+    if (!group.members.contains(&member)) {
+        group.members.insert(member);
+        event::emit(GroupMemberAdded { group: object::id(group), member });
+    }
+}
+
+// ---- disputes / arbitration ----
+
+/// Raise a dispute (report) against this artifact. Permissionless: anyone may
+/// file evidence. Sets the sticky `disputed` flag, bumps `dispute_count`, and
+/// emits a `Disputed` event carrying the opaque evidence pointer (CID bytes).
+public entry fun raise_dispute(
+    self: &mut ArtifactRegistry,
+    evidence: vector<u8>,
+    ctx: &mut TxContext,
+) {
+    self.dispute_count = self.dispute_count + 1;
+    self.disputed = true;
+    event::emit(Disputed {
+        artifact: object::id(self),
+        reporter: ctx.sender(),
+        evidence,
+        count: self.dispute_count,
+    });
+}
+
+/// Submit counter-evidence against a raised dispute. Permissionless (typically
+/// the owner). Emits a `CounterEvidence` event; does not clear `disputed`
+/// (resolution is an off-chain arbitration decision, intentionally not modeled).
+public entry fun counter_dispute(
+    self: &ArtifactRegistry,
+    evidence: vector<u8>,
+    ctx: &TxContext,
+) {
+    event::emit(CounterEvidence {
+        artifact: object::id(self),
+        responder: ctx.sender(),
+        evidence,
+    });
 }
 
 // ---- the Seal gate ----
@@ -314,6 +485,20 @@ public fun is_compute_worker(self: &ArtifactRegistry, who: address): bool {
 public fun is_revoked(self: &ArtifactRegistry, who: address): bool {
     self.revoked.contains(&who)
 }
+/// Accrued royalty revenue (MIST) currently held in this artifact's vault.
+public fun revenue(self: &ArtifactRegistry): u64 { self.revenue.value() }
+/// True once any dispute has been raised against this artifact.
+public fun is_disputed(self: &ArtifactRegistry): bool { self.disputed }
+/// Number of disputes raised against this artifact.
+public fun dispute_count(self: &ArtifactRegistry): u64 { self.dispute_count }
+/// Group owner address.
+public fun group_owner(group: &Group): address { group.owner }
+/// True iff `member` is recorded in this Group.
+public fun group_has_member(group: &Group, member: ID): bool {
+    group.members.contains(&member)
+}
+/// Number of members recorded in this Group.
+public fun group_size(group: &Group): u64 { group.members.length() }
 
 // ---- test-only helpers ----
 #[test_only]

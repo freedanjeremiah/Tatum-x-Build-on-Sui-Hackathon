@@ -1,77 +1,171 @@
-// Group helpers: register a group with even-split rewards + an attached license,
-// add member IPs, and collect + distribute group royalties.
+// Group helpers — Sui-native (replaces the Story Group module / even-split pool).
 //
-// OPEN ITEM (SPEC §8.7): the group-license -> member vault read-condition path is
-// unconfirmed. Until confirmed, gating falls back to per-IP gating (each member
-// IP keeps its own LicenseReadCondition); the group only governs reward splits.
+// On Sui a group is a shared `Group` object (tessera::registry) that records its
+// member artifact ids. Each member artifact also carries `group_id` (so the Seal
+// `group` tier keeps gating via the member's own `license_holders`). There is no
+// EVM read-condition encoding and no on-chain even-split pool — group revenue is
+// realized by claiming each member artifact's own on-chain royalty vault.
+//
+// No viem, no @story-protocol, no removed EVM constants. Never logs secrets.
+// Fails closed: a failed/aborted tx throws (no silent fallback).
 
-import { encodeAbiParameters } from "viem";
-import {
-  EVEN_SPLIT_GROUP_POOL,
-  GROUP_LICENSE_READ_CONDITION,
-  LICENSE_READ_CONDITION,
-  LICENSE_TOKEN,
-} from "./constants";
-import { WIP_TOKEN } from "./licensing";
+import { RegistryClient } from "./registry";
+import { claimRevenue, getClaimable, NoRoyaltyVaultError } from "./royalty";
+import type { SuiClient, Signer } from "./clients";
+
+/** Minimal write-capable client bundle (subset of Server/Browser Clients). */
+export interface GroupClients {
+  client: SuiClient;
+  signer: Signer;
+}
+
+// ---------------------------------------------------------------------------
+// createGroup — create the shared Group object and bind initial members.
+// ---------------------------------------------------------------------------
+
+export interface CreateGroupResult {
+  /** The shared `Group` object id. */
+  groupId: string;
+  /** Owning `GroupCap` id (held by the creator; gates `add_member`). */
+  capId: string;
+  /** Tx digest of the create_group call. */
+  txHash: string;
+  /** Per-member { artifactId, txHash } of the add_member binds (in order). */
+  members: Array<{ artifactId: string; txHash: string }>;
+}
 
 /**
- * Build the CDR read-condition for a GROUP-GATED vault: a reader who holds a
- * valid license for ANY member IP can decrypt. Uses our deployed
- * GroupLicenseReadCondition, which composes the audited LicenseReadCondition over
- * every member (resolves SPEC §8.7 — one subscription unlocks the family).
- *
- * Pass the result as `readConditionAddr` + `readConditionData` to
- * `cdr.uploader.uploadFile`. The reader supplies `accessAuxData =
- * encodeAccessAuxData([licenseTokenId])` for a license they hold on any member.
+ * Create a shared `Group` and record `memberArtifactIds` in it (via `add_member`,
+ * cap-gated by the new GroupCap). NOTE: binding a member artifact's own
+ * `group_id` field requires that member's ArtifactCap — do that separately with
+ * `RegistryClient.setGroup` (or pass the caps to `bindGroupId` below). This
+ * records membership in the Group object, which is the source of truth for
+ * `distribute`.
  */
-export function groupReadCondition(memberIpIds: `0x${string}`[]): {
-  readConditionAddr: `0x${string}`;
-  readConditionData: `0x${string}`;
-} {
-  return {
-    readConditionAddr: GROUP_LICENSE_READ_CONDITION,
-    readConditionData: encodeAbiParameters(
-      [{ type: "address" }, { type: "address" }, { type: "address[]" }],
-      [LICENSE_READ_CONDITION, LICENSE_TOKEN, memberIpIds]
-    ),
-  };
-}
-
-/** Register a group, attach a license, and add initial member IPs.
- *  maxAllowedRewardShare = 100 lets any member's commercial-remix terms (which
- *  set commercialRevShare up to 100) be added without revert. With 5, the
- *  Group contract reverts with selector 0xc0ea74bc when adding members that
- *  exceed the cap, even if no royalty is being collected yet. */
 export async function createGroup(
-  story: any,
-  { ipIds, termsId }: { ipIds: `0x${string}`[]; termsId: string }
-): Promise<{ groupIpId: `0x${string}`; txHash: `0x${string}` }> {
-  const grp = await story.groupClient.registerGroupAndAttachLicenseAndAddIps({
-    groupPool: EVEN_SPLIT_GROUP_POOL,
-    maxAllowedRewardShare: 100,
-    ipIds,
-    licenseData: { licenseTermsId: termsId },
-  });
-  const groupIpId = (grp.groupId ?? grp.groupIpId) as `0x${string}`;
-  return { groupIpId, txHash: grp.txHash };
+  clients: GroupClients,
+  memberArtifactIds: string[],
+): Promise<CreateGroupResult> {
+  const reg = new RegistryClient(clients.client);
+  const { groupId, capId, digest } = await reg.createGroup(clients.signer);
+
+  const members: Array<{ artifactId: string; txHash: string }> = [];
+  for (const artifactId of memberArtifactIds) {
+    const txHash = await reg.addMember(capId, groupId, artifactId, clients.signer);
+    members.push({ artifactId, txHash });
+  }
+
+  return { groupId, capId, txHash: digest, members };
 }
 
-/** Add more member IPs to an existing group. */
+// ---------------------------------------------------------------------------
+// addToGroup — record more member artifacts in an existing Group.
+// ---------------------------------------------------------------------------
+
+export interface AddToGroupResult {
+  txHash: string;
+  members: Array<{ artifactId: string; txHash: string }>;
+}
+
+/**
+ * Record additional member artifacts in an existing `Group` using its `groupCapId`.
+ * Returns the digest of the LAST add_member (or "" if none) plus the per-member
+ * list. Throws if `memberArtifactIds` is empty (no silent no-op).
+ */
 export async function addToGroup(
-  story: any,
-  { groupIpId, ipIds }: { groupIpId: `0x${string}`; ipIds: `0x${string}`[] }
-): Promise<{ txHash: `0x${string}` }> {
-  return story.groupClient.addIpsToGroup({ groupIpId, ipIds });
+  clients: GroupClients,
+  groupCapId: string,
+  groupId: string,
+  memberArtifactIds: string[],
+): Promise<AddToGroupResult> {
+  if (memberArtifactIds.length === 0) {
+    throw new Error("addToGroup: no member artifact ids provided");
+  }
+  const reg = new RegistryClient(clients.client);
+  const members: Array<{ artifactId: string; txHash: string }> = [];
+  for (const artifactId of memberArtifactIds) {
+    const txHash = await reg.addMember(groupCapId, groupId, artifactId, clients.signer);
+    members.push({ artifactId, txHash });
+  }
+  return { txHash: members[members.length - 1].txHash, members };
 }
 
-/** Collect + distribute group royalties to the named member IPs. */
+/**
+ * Bind a member artifact's own on-chain `group_id` to `groupId`, using that
+ * artifact's ArtifactCap (so the Seal `group` tier resolves to the group). This
+ * is the per-artifact, owner-gated counterpart to recording membership in the
+ * Group object. Returns the tx digest.
+ */
+export async function bindGroupId(
+  clients: GroupClients,
+  artifactCapId: string,
+  artifactId: string,
+  groupId: string,
+): Promise<string> {
+  const reg = new RegistryClient(clients.client);
+  return reg.setGroup(artifactCapId, artifactId, groupId, clients.signer);
+}
+
+// ---------------------------------------------------------------------------
+// distribute — realize group revenue by claiming each member's royalty vault.
+// ---------------------------------------------------------------------------
+
+export interface DistributeMemberResult {
+  artifactId: string;
+  /** MIST claimed for this member, or 0n if its vault was empty (skipped). */
+  claimed: bigint;
+  /** Tx digest of the claim, or null if skipped (empty vault). */
+  txHash: string | null;
+  /** Present when the claim was skipped or failed, with the reason. */
+  skipped?: string;
+}
+
+export interface DistributeResult {
+  /** Per-member claim outcome. */
+  results: DistributeMemberResult[];
+  /** Total MIST claimed across all members. */
+  totalClaimed: bigint;
+}
+
+/**
+ * Realize group revenue: for each member, claim its OWN on-chain royalty vault to
+ * that member's owner. Each member needs its ArtifactCap (claim_revenue is
+ * owner-gated) — so callers pass `{ artifactId, capId }` pairs. Members with an
+ * empty vault are skipped (not an error). The per-member outcome is returned.
+ *
+ * HONEST SCOPE: this is NOT an even-split pool. Sui has no shared group revenue
+ * pool in this model — each member artifact accrues its own royalties via
+ * `payRoyalty`, and `distribute` simply triggers each member's owner-claim. A
+ * true pro-rata split pool (one vault, split N ways) is intentionally out of
+ * scope (TODO: add a `GroupRevenue` shared balance + `split_distribute` entry if
+ * the product needs a single group pool).
+ */
 export async function distribute(
-  story: any,
-  { groupIpId, memberIpIds }: { groupIpId: `0x${string}`; memberIpIds: `0x${string}`[] }
-): Promise<{ txHash: `0x${string}` }> {
-  return story.groupClient.collectAndDistributeGroupRoyalties({
-    groupIpId,
-    currencyTokens: [WIP_TOKEN],
-    memberIpIds,
-  });
+  clients: GroupClients,
+  members: Array<{ artifactId: string; capId: string }>,
+): Promise<DistributeResult> {
+  const results: DistributeMemberResult[] = [];
+  let totalClaimed = 0n;
+
+  for (const { artifactId, capId } of members) {
+    // Read first so an empty vault is a skip, not a thrown abort.
+    const claimable = await getClaimable(clients, artifactId);
+    if (claimable <= 0n) {
+      results.push({ artifactId, claimed: 0n, txHash: null, skipped: "empty vault" });
+      continue;
+    }
+    try {
+      const { txHash, claimed } = await claimRevenue(clients, artifactId, capId);
+      results.push({ artifactId, claimed, txHash });
+      totalClaimed += claimed;
+    } catch (e) {
+      if (e instanceof NoRoyaltyVaultError) {
+        results.push({ artifactId, claimed: 0n, txHash: null, skipped: "empty vault" });
+        continue;
+      }
+      throw e;
+    }
+  }
+
+  return { results, totalClaimed };
 }

@@ -1,6 +1,4 @@
 import { test, expect, vi } from "vitest";
-import { zeroAddress } from "viem";
-import { RUN_INTEGRATION, realClients } from "./itest";
 import {
   payRoyalty,
   claimRevenue,
@@ -8,65 +6,87 @@ import {
   NoRoyaltyVaultError,
 } from "./royalty";
 
-const itInt = test.skipIf(!RUN_INTEGRATION);
+const ART = "0xart";
+const PARENT = "0xparent";
 
-const IP = "0xf79a6ac7b6d6461f50c3844d82059e8654c89aaa" as `0x${string}`;
-
-test("payRoyalty refuses (no on-chain send) when the receiver has no royalty vault", async () => {
-  // ipRoyaltyVaults(receiver) == zeroAddress → RoyaltyModule__ZeroReceiverVault
-  // would revert the multicall after the user already paid gas. Catch it first.
-  const publicClient = { readContract: vi.fn().mockResolvedValue(zeroAddress) };
-  const story = { royalty: { payRoyaltyOnBehalf: vi.fn() } };
-
-  await expect(
-    payRoyalty(story as any, {
-      childIpId: IP,
-      amount: 1n,
-      publicClient: publicClient as any,
-    }),
-  ).rejects.toBeInstanceOf(NoRoyaltyVaultError);
-
-  expect(story.royalty.payRoyaltyOnBehalf).not.toHaveBeenCalled();
-});
-
-test("payRoyalty proceeds to pay when the receiver has a royalty vault", async () => {
-  const publicClient = {
-    readContract: vi
-      .fn()
-      .mockResolvedValue("0x00000000000000000000000000000000000000Va"),
+// A fake SuiClient core whose getObject returns a controllable ArtifactRegistry
+// JSON view, and whose signAndExecuteTransaction returns a successful tx.
+function fakeClient(opts: { revenue?: bigint; parent?: string | null } = {}) {
+  const json = {
+    owner: "0xowner",
+    tier: 2,
+    price: "0",
+    group_id: null,
+    parent: opts.parent ?? null,
+    license_holders: { fields: { contents: [] } },
+    compute_workers: { fields: { contents: [] } },
+    revoked: { fields: { contents: [] } },
+    revenue: (opts.revenue ?? 0n).toString(),
+    dispute_count: "0",
+    disputed: false,
   };
-  const story = {
-    royalty: {
-      payRoyaltyOnBehalf: vi.fn().mockResolvedValue({ txHash: "0xabc" }),
-    },
+  let n = 0;
+  const core = {
+    getObject: vi.fn(async () => ({ object: { json } })),
+    signAndExecuteTransaction: vi.fn(async () => ({
+      $kind: "Transaction",
+      Transaction: {
+        digest: `0xdig${n++}`,
+        effects: { status: { success: true }, changedObjects: [] },
+        objectTypes: {},
+      },
+    })),
+    waitForTransaction: vi.fn(async () => ({})),
   };
+  return { core } as any;
+}
 
-  const out = await payRoyalty(story as any, {
-    childIpId: IP,
-    amount: 1n,
-    publicClient: publicClient as any,
-  });
+const signer = {} as any;
 
-  expect(out.txHash).toBe("0xabc");
-  expect(story.royalty.payRoyaltyOnBehalf).toHaveBeenCalledOnce();
-});
-
-itInt("getClaimable returns a bigint", async () => {
-  const { story } = await realClients();
-  const c = await getClaimable(story as any, { ipId: "0xparent" as `0x${string}` });
+test("getClaimable reads the on-chain revenue balance as a bigint", async () => {
+  const client = fakeClient({ revenue: 500n });
+  const c = await getClaimable({ client }, ART);
   expect(typeof c).toBe("bigint");
+  expect(c).toBe(500n);
 });
 
-itInt("payRoyalty and claimRevenue return tx hashes", async () => {
-  const { story } = await realClients();
-  const pay = await payRoyalty(story as any, {
-    childIpId: "0xchild" as `0x${string}`,
-    amount: 2n,
-  });
-  expect(pay.txHash).toBeTruthy();
-  const claim = await claimRevenue(story as any, {
-    parentIpId: "0xparent" as `0x${string}`,
-    childIpIds: ["0xchild" as `0x${string}`],
-  });
-  expect(claim.txHash).toBeTruthy();
+test("payRoyalty rejects a non-positive amount before signing", async () => {
+  const client = fakeClient();
+  await expect(payRoyalty({ client, signer }, ART, 0n)).rejects.toThrow();
+  expect(client.core.signAndExecuteTransaction).not.toHaveBeenCalled();
+});
+
+test("payRoyalty pays the full amount to the artifact when no split requested", async () => {
+  const client = fakeClient({ parent: PARENT });
+  const out = await payRoyalty({ client, signer }, ART, 100n);
+  expect(out.amountToArtifact).toBe(100n);
+  expect(out.amountToParent).toBe(0n);
+  expect(out.txHash).toBeTruthy();
+  expect(client.core.signAndExecuteTransaction).toHaveBeenCalledOnce();
+});
+
+test("payRoyalty splits a share up to the parent vault", async () => {
+  const client = fakeClient({ parent: PARENT });
+  const out = await payRoyalty({ client, signer }, ART, 100n, { parentSharePct: 30 });
+  expect(out.amountToParent).toBe(30n);
+  expect(out.amountToArtifact).toBe(70n);
+  expect(out.parentTxHash).toBeTruthy();
+  // two pay_royalty txs: parent + artifact
+  expect(client.core.signAndExecuteTransaction).toHaveBeenCalledTimes(2);
+});
+
+test("claimRevenue throws NoRoyaltyVaultError when the vault is empty", async () => {
+  const client = fakeClient({ revenue: 0n });
+  await expect(claimRevenue({ client, signer }, ART, "0xcap")).rejects.toBeInstanceOf(
+    NoRoyaltyVaultError,
+  );
+  expect(client.core.signAndExecuteTransaction).not.toHaveBeenCalled();
+});
+
+test("claimRevenue withdraws when the vault has a balance", async () => {
+  const client = fakeClient({ revenue: 777n });
+  const out = await claimRevenue({ client, signer }, ART, "0xcap");
+  expect(out.claimed).toBe(777n);
+  expect(out.txHash).toBeTruthy();
+  expect(client.core.signAndExecuteTransaction).toHaveBeenCalledOnce();
 });

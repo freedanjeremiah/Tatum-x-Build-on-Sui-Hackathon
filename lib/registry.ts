@@ -100,6 +100,12 @@ export interface ArtifactState {
   computeWorkers: string[];
   /** Forward-only revocation list — always denied. */
   revoked: string[];
+  /** Accrued royalty revenue (MIST) in this artifact's on-chain vault. */
+  revenue: bigint;
+  /** True once any dispute has been raised against this artifact. */
+  disputed: boolean;
+  /** Number of disputes raised against this artifact. */
+  disputeCount: bigint;
 }
 
 // ---------------------------------------------------------------------------
@@ -339,7 +345,123 @@ export class RegistryClient {
       licenseHolders: vecSetAddrs(j.license_holders),
       computeWorkers: vecSetAddrs(j.compute_workers),
       revoked: vecSetAddrs(j.revoked),
+      revenue: parseBalance(j.revenue),
+      disputed: Boolean(j.disputed ?? false),
+      disputeCount: BigInt(j.dispute_count ?? 0),
     };
+  }
+
+  // -------------------------------------------------------------------------
+  // Royalties — on-chain revenue vault (tessera::registry pay/claim).
+  // -------------------------------------------------------------------------
+
+  /**
+   * Pay royalty revenue into an artifact's on-chain vault. Permissionless: the
+   * `signer` pays `amount` MIST (split off the gas coin) into `self.revenue` via
+   * the Move `pay_royalty` entry fun. Throws on a zero amount before signing.
+   * Returns the tx digest.
+   */
+  async payRoyalty(artifactId: string, amount: bigint, signer: Signer): Promise<string> {
+    if (amount <= 0n) throw new Error("payRoyalty: amount must be > 0");
+    const tx = new Transaction();
+    const [payment] = tx.splitCoins(tx.gas, [tx.pure.u64(amount)]);
+    tx.moveCall({
+      target: this.target("pay_royalty"),
+      arguments: [tx.object(artifactId), payment],
+    });
+    return (await this.exec(tx, signer)).digest;
+  }
+
+  /** Read an artifact's accrued (claimable) royalty revenue, in MIST. */
+  async getRevenue(artifactId: string): Promise<bigint> {
+    return (await this.getArtifact(artifactId)).revenue;
+  }
+
+  /**
+   * Owner-only: withdraw ALL accrued royalty revenue to the owner. Cap-gated by
+   * the ArtifactCap. The Move `claim_revenue` aborts (EEmptyRevenue) if nothing
+   * has accrued. Returns the tx digest.
+   */
+  async claimRevenue(capId: string, artifactId: string, signer: Signer): Promise<string> {
+    const tx = new Transaction();
+    tx.moveCall({
+      target: this.target("claim_revenue"),
+      arguments: [tx.object(capId), tx.object(artifactId)],
+    });
+    return (await this.exec(tx, signer)).digest;
+  }
+
+  // -------------------------------------------------------------------------
+  // Groups — shared Group bundle object (tessera::registry create_group/add_member).
+  // -------------------------------------------------------------------------
+
+  /**
+   * Create + share a new `Group`, returning its object id and the owning
+   * `GroupCap` id. Locates both from the tx effects by Move type suffix.
+   */
+  async createGroup(signer: Signer): Promise<{ groupId: string; capId: string; digest: string }> {
+    const tx = new Transaction();
+    tx.moveCall({ target: this.target("create_group"), arguments: [] });
+    const { digest, effects, objectTypes } = await this.exec(tx, signer);
+    let groupId: string | undefined;
+    let capId: string | undefined;
+    for (const o of effects?.changedObjects ?? []) {
+      if (o.idOperation !== "Created") continue;
+      const ty = objectTypes[o.objectId] ?? "";
+      if (ty.endsWith("::registry::Group")) groupId = o.objectId;
+      else if (ty.endsWith("::registry::GroupCap")) capId = o.objectId;
+    }
+    if (!groupId || !capId) {
+      throw new Error("registry: could not locate created Group/GroupCap in tx effects");
+    }
+    return { groupId, capId, digest };
+  }
+
+  /** Record `memberArtifactId` in a Group. Cap-gated by the GroupCap. */
+  async addMember(
+    groupCapId: string,
+    groupId: string,
+    memberArtifactId: string,
+    signer: Signer,
+  ): Promise<string> {
+    const tx = new Transaction();
+    tx.moveCall({
+      target: this.target("add_member"),
+      arguments: [tx.object(groupCapId), tx.object(groupId), tx.pure.id(memberArtifactId)],
+    });
+    return (await this.exec(tx, signer)).digest;
+  }
+
+  // -------------------------------------------------------------------------
+  // Disputes — on-chain flag + events (tessera::registry raise/counter_dispute).
+  // -------------------------------------------------------------------------
+
+  /**
+   * Raise a dispute (report) against an artifact with opaque `evidence` (a CID,
+   * UTF-8 encoded). Permissionless. Sets the sticky on-chain `disputed` flag and
+   * emits a `Disputed` event. Returns the tx digest.
+   */
+  async raiseDispute(artifactId: string, evidence: Uint8Array, signer: Signer): Promise<string> {
+    const tx = new Transaction();
+    tx.moveCall({
+      target: this.target("raise_dispute"),
+      arguments: [tx.object(artifactId), tx.pure.vector("u8", Array.from(evidence))],
+    });
+    return (await this.exec(tx, signer)).digest;
+  }
+
+  /**
+   * Submit counter-evidence against a raised dispute. Permissionless (typically
+   * the owner). Emits a `CounterEvidence` event; does not clear `disputed`.
+   * Returns the tx digest.
+   */
+  async counterDispute(artifactId: string, evidence: Uint8Array, signer: Signer): Promise<string> {
+    const tx = new Transaction();
+    tx.moveCall({
+      target: this.target("counter_dispute"),
+      arguments: [tx.object(artifactId), tx.pure.vector("u8", Array.from(evidence))],
+    });
+    return (await this.exec(tx, signer)).digest;
   }
 
   // -------------------------------------------------------------------------
@@ -399,4 +521,19 @@ function parseOptionId(v: any): string | null {
 function vecSetAddrs(v: any): string[] {
   const contents: any[] = v?.fields?.contents ?? v?.contents ?? (Array.isArray(v) ? v : []);
   return contents.map((x: any) => (typeof x === "string" ? x : x?.fields?.key ?? String(x)));
+}
+
+/**
+ * A Move `Balance<SUI>` renders over the JSON view as either the bare u64 value
+ * (string/number), or `{ value: "..." }`, or `{ fields: { value: "..." } }`.
+ * Normalize all of these to a bigint MIST amount (0n on absence).
+ */
+function parseBalance(v: any): bigint {
+  if (v === null || v === undefined) return 0n;
+  if (typeof v === "string" || typeof v === "number" || typeof v === "bigint") {
+    return BigInt(v);
+  }
+  const inner = v?.value ?? v?.fields?.value;
+  if (inner === undefined || inner === null) return 0n;
+  return BigInt(inner);
 }

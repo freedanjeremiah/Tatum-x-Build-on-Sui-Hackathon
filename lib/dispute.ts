@@ -1,28 +1,43 @@
-// Dispute helpers: raise a report against a target IP with fresh evidence, and
-// counter an assertion. A fresh evidence CID is generated every call — a real
-// dispute must never reuse stale evidence.
+// Dispute helpers — Sui-native (replaces the Story DisputeModule / arbitration
+// oracle). On Sui a dispute is an on-chain flag + event in tessera::registry:
+//
+//   - `raiseReport` files evidence against a target artifact (Move `raise_dispute`):
+//     sets the sticky `disputed` flag, bumps `dispute_count`, emits `Disputed`.
+//   - `counterDispute` submits counter-evidence (Move `counter_dispute`), emitting
+//     a `CounterEvidence` event. Resolution is an off-chain arbitration decision
+//     (intentionally NOT modeled on-chain — the flag is forward-only).
+//
+// A fresh evidence CID is generated every call — a real dispute must never reuse
+// stale evidence. `freshEvidenceCid` is chain-agnostic (node:crypto only).
+//
+// BONDS: the EVM path required a WIP bond posted to an optimistic oracle. This
+// Sui model has NO on-chain bond — disputes are permissionless flags/events, and
+// arbitration (slashing, refunds) is handled off-chain by a reviewer. Dropping
+// the bond is documented here rather than faked with a magic SUI number.
+//
+// No viem, no @story-protocol, no removed EVM constants. Never logs secrets.
 
 import { randomUUID } from "node:crypto";
-import { parseEther } from "viem";
 
-/** Conservative bond fallback used when the caller doesn't pass one. The Story
- *  SDK (core-sdk 1.4.4) no longer auto-reads the on-chain minimum bond inside
- *  raiseDispute — it crashes with "Cannot convert undefined to a BigInt" if
- *  `bond` is omitted. 0.1 WIP is the documented Aeneid arbitration-policy
- *  minimum for IMPROPER_REGISTRATION; caller can still override. */
-const DEFAULT_BOND_WEI = parseEther("0.1");
+import { RegistryClient } from "./registry";
+import type { SuiClient, Signer } from "./clients";
 
-/** Story arbitration policy default liveness window — 30 days, in seconds.
- *  This is the time during which the target can post counter-evidence. */
-const DEFAULT_LIVENESS_SECONDS = 30 * 24 * 3600;
+/** Minimal write-capable client bundle (subset of Server/Browser Clients). */
+export interface DisputeClients {
+  client: SuiClient;
+  signer: Signer;
+}
 
-/** Build a proper CIDv0 (dag-pb codec, sha256 multihash) from a 32-byte hash.
- *  The Story SDK calls .toV0() on the CID internally, which requires dag-pb
- *  codec — any non-dag-pb codec rejects with "Cannot convert a non dag-pb CID
- *  to CIDv0". CIDv0 = base58btc-encode([0x12, 0x20, ...32 hash bytes]).
- *  The leading bytes 0x12, 0x20 happen to encode to the "Qm" prefix. */
+// ---------------------------------------------------------------------------
+// freshEvidenceCid — a unique CIDv0 (dag-pb + sha2-256) every call.
+// Chain-agnostic: kept identical to the EVM path so existing UI / index shapes
+// (which display a "Qm…" CID) are unchanged. The CID is an opaque pointer; on
+// Sui it is stored as the UTF-8 bytes of the `Disputed`/`CounterEvidence` event.
+// ---------------------------------------------------------------------------
+
 const BASE58_ALPHABET =
   "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+
 function base58Encode(bytes: Uint8Array): string {
   let value = 0n;
   for (const b of bytes) value = (value << 8n) | BigInt(b);
@@ -38,6 +53,7 @@ function base58Encode(bytes: Uint8Array): string {
   }
   return out;
 }
+
 function buildCidV0Sha256(hash: Uint8Array): string {
   if (hash.length !== 32) throw new Error("buildCidV0Sha256: expected 32 bytes");
   const bytes = new Uint8Array(34);
@@ -47,8 +63,8 @@ function buildCidV0Sha256(hash: Uint8Array): string {
   return base58Encode(bytes);
 }
 
-/** A unique evidence CID each call (never reuse stale evidence). Real CIDv0
- *  the Story SDK accepts; uniqueness comes from hashing prefix + uuid + nanos. */
+/** A unique evidence CID each call (never reuse stale evidence). Real CIDv0,
+ *  "Qm…" prefixed; uniqueness comes from hashing prefix + uuid + nanos. */
 export function freshEvidenceCid(prefix = "Evidence"): string {
   const { createHash } = require("node:crypto") as typeof import("node:crypto");
   const seed = prefix + ":" + randomUUID() + ":" + process.hrtime.bigint().toString();
@@ -56,66 +72,80 @@ export function freshEvidenceCid(prefix = "Evidence"): string {
   return buildCidV0Sha256(new Uint8Array(hash));
 }
 
-/**
- * Raise a dispute report against a target IP. If `bond` is omitted, the SDK
- * reads OptimisticOracleV3.getMinimumBond(WIP) on-chain and uses that — the
- * source of truth, never a hardcoded magic number. `liveness` defaults to the
- * arbitration policy's minimum if omitted (handled by the SDK).
- *
- * WIP_OPTIONS is spread so the SDK auto-wraps the bond from native IP and
- * auto-approves the dispute module in the same multicall — caller never has to
- * pre-wrap WIP.
- */
-export async function raiseReport(
-  story: any,
-  {
-    targetIpId,
-    cid,
-    tag,
-    bond,
-    liveness,
-  }: {
-    targetIpId: `0x${string}`;
-    cid: string;
-    tag: string;
-    /** Omit to use the on-chain minimum bond. */
-    bond?: bigint;
-    /** Omit to use the arbitration policy's min liveness. */
-    liveness?: number;
-  }
-): Promise<{ disputeId: any; txHash: `0x${string}` }> {
-  // SDK shape (core-sdk 1.4.4): `liveness` is REQUIRED; `bond` defaults to the
-  // on-chain minimum if omitted; `wipOptions` is a top-level key for the
-  // dispute module (not nested under `options` like other modules — the SDK
-  // omits `useMulticallWhenPossible` here due to the dispute-initiator quirk).
-  const req: Record<string, unknown> = {
-    targetIpId,
-    cid,
-    targetTag: tag,
-    liveness: liveness ?? DEFAULT_LIVENESS_SECONDS,
-    bond: bond ?? DEFAULT_BOND_WEI,
-    wipOptions: { enableAutoWrapIp: true, enableAutoApprove: true },
-  };
-  const raised = await story.dispute.raiseDispute(req);
-  return { disputeId: raised.disputeId, txHash: raised.txHash };
+// ---------------------------------------------------------------------------
+// raiseReport — file a dispute against a target artifact.
+// ---------------------------------------------------------------------------
+
+export interface RaiseReportResult {
+  /** Tx digest of the raise_dispute call (also the dispute reference). */
+  txHash: string;
+  /** The on-chain dispute count after this report (>= 1). */
+  disputeCount: bigint;
+  /** The evidence CID that was filed. */
+  cid: string;
+  /**
+   * Back-compat dispute identifier for callers/UI that key off `disputeId`.
+   * On Sui there is no numeric dispute id — the (artifactId, txHash) pair
+   * identifies the report — so this is the tx digest.
+   */
+  disputeId: string;
 }
 
-/** Counter a dispute assertion with fresh counter-evidence. */
+/**
+ * Raise a dispute (report) against `targetArtifactId` with `evidenceCid` and a
+ * human `reason` (recorded by encoding "reason\ncid" into the on-chain evidence
+ * bytes, so the `Disputed` event carries both). Permissionless. Returns the tx
+ * digest + the new on-chain dispute count.
+ */
+export async function raiseReport(
+  clients: DisputeClients,
+  targetArtifactId: string,
+  evidenceCid: string,
+  reason: string,
+): Promise<RaiseReportResult> {
+  if (!evidenceCid || evidenceCid.trim() === "") {
+    throw new Error("raiseReport: evidenceCid is required");
+  }
+  const reg = new RegistryClient(clients.client);
+  const evidence = encodeEvidence(reason, evidenceCid);
+  const txHash = await reg.raiseDispute(targetArtifactId, evidence, clients.signer);
+  // Read back the authoritative count from chain (no optimistic local guess).
+  const disputeCount = (await reg.getArtifact(targetArtifactId)).disputeCount;
+  return { txHash, disputeCount, cid: evidenceCid, disputeId: txHash };
+}
+
+// ---------------------------------------------------------------------------
+// counterDispute — submit counter-evidence against a raised dispute.
+// ---------------------------------------------------------------------------
+
+export interface CounterDisputeResult {
+  txHash: string;
+  /** The counter-evidence CID that was filed. */
+  cid: string;
+}
+
+/**
+ * Submit counter-evidence (`counterEvidenceCid`) against a dispute on
+ * `artifactId`. Permissionless (typically the owner). Emits a `CounterEvidence`
+ * event; does not clear the `disputed` flag (off-chain resolution). Returns the
+ * tx digest.
+ */
 export async function counterDispute(
-  story: any,
-  {
-    ipId,
-    disputeId,
-    counterEvidenceCID,
-  }: { ipId: `0x${string}`; disputeId: any; counterEvidenceCID: string }
-): Promise<{ assertionId: `0x${string}`; txHash: `0x${string}` }> {
-  const assertionId = (await story.dispute.disputeIdToAssertionId(
-    Number(disputeId)
-  )) as `0x${string}`;
-  const counter = await story.dispute.disputeAssertion({
-    ipId,
-    assertionId,
-    counterEvidenceCID,
-  });
-  return { assertionId, txHash: counter.txHash };
+  clients: DisputeClients,
+  artifactId: string,
+  counterEvidenceCid: string,
+): Promise<CounterDisputeResult> {
+  if (!counterEvidenceCid || counterEvidenceCid.trim() === "") {
+    throw new Error("counterDispute: counterEvidenceCid is required");
+  }
+  const reg = new RegistryClient(clients.client);
+  const evidence = encodeEvidence("Counter", counterEvidenceCid);
+  const txHash = await reg.counterDispute(artifactId, evidence, clients.signer);
+  return { txHash, cid: counterEvidenceCid };
+}
+
+/** Encode "reason\ncid" into UTF-8 bytes for the on-chain evidence pointer. */
+function encodeEvidence(reason: string, cid: string): Uint8Array {
+  const text = reason && reason.trim() !== "" ? `${reason}\n${cid}` : cid;
+  return new TextEncoder().encode(text);
 }
