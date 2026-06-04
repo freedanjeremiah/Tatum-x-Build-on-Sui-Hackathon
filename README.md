@@ -95,12 +95,22 @@ run user algorithms on plaintext. "Private but computable" is **Reef's own** com
 uses Seal only to decrypt. So the compute-privacy guarantee comes from **the worker's isolation + the
 algorithm allowlist**, not from Seal.
 
-The demo worker runs on an ordinary server (operator-trusted). A production deployment would run it
-inside an attested **SGX/TDX enclave** (`WORKER_ISOLATION_MODE=enclave`); a deterministic
-**enclave-sim** mode is provided for CI and is **honestly disclosed as not hardware-attested**. No
-silent fallbacks — the worker refuses any algorithm not on the dataset's allowlist **before decrypting
-a single byte** (`decryptCalled: false`), and on a Seal `NoAccessError` it reports denial rather than
-faking a result.
+The confidential-compute worker now runs inside an **AWS Nitro Enclave wrapped by Nautilus** — Sui's
+verifiable-offchain-compute framework. The worker decrypts (Seal-gated key delivery) and runs the
+allowlisted algorithm **inside the enclave**. The enclave's ephemeral key signs the result;
+`reef::registry::register_derivative_attested` **verifies that signature on-chain** against the
+registered enclave object (PCRs + public key) before a compute derivative is accepted. The guarantee
+is **"Sui Move verified the enclave"**, not "trust the operator."
+
+The **TEE simulator (`enclave-sim`) remains as an honestly-disclosed CI/dev fallback.** There is
+**no silent fallback** — if `WORKER_ISOLATION_MODE=enclave-nautilus` is set but the enclave is
+unconfigured or unreachable, the compute path **fails closed** with a clear error. The worker refuses
+any algorithm not on the dataset's allowlist **before decrypting a single byte** (`decryptCalled:
+false`), and on a Seal `NoAccessError` it reports denial rather than faking a result.
+
+**Scope and known limits (testnet):** this targets Sui testnet; metadata (object ids, blob ids)
+remains public by design. Seal still does only threshold key-delivery; the enclave is the compute
+isolation boundary. Do not assume mainnet-grade confidentiality.
 
 **One known gap, disclosed:** the **browser** write-signer (signing Sui transactions through the
 Privy-embedded wallet) is stubbed with an honest throw — server-side flows (scripts, worker, the
@@ -131,6 +141,12 @@ See `.env.local.example` for the full annotated list. The ones you must set to r
 `NEXT_PUBLIC_PRIVY_APP_ID`, `TATUM_API_KEY`, `MASTER_SUI_PRIVKEY` (+ `MASTER_SUI_ADDRESS`),
 `REEF_PACKAGE_ID`, and `SEAL_KEY_SERVER_IDS`. Walrus/Sui/Tatum endpoints default to testnet.
 Optional `INFERENCE_*` powers the model **Run** tab (omit → honest 503).
+
+For the Nautilus attested-compute path:
+`WORKER_ISOLATION_MODE=enclave-nautilus` activates real enclave routing (omit or set to `enclave-sim`
+for the CI simulator); `ENCLAVE_PROCESS_URL` is the HTTP base URL of the running Nitro enclave host
+(required — the worker fails closed if unset); `REEF_ENCLAVE_OBJECT_ID` is the on-chain Sui object id
+of the registered Nautilus enclave (required for `register_derivative_attested` on-chain verification).
 
 ---
 
@@ -195,8 +211,7 @@ The `real` family preloads `.env.local` via `node --env-file`.
 
 Mainnet-grade confidentiality · hiding metadata (object ids and blob ids are public by design) ·
 decryption revocation beyond forward-only (rotate by re-encrypting) · a production event indexer for
-full per-wallet license enumeration · the attested-enclave compute deployment (designed for, simulated
-here) · the Privy→Sui browser write-signer (server signing works today).
+full per-wallet license enumeration · the Privy→Sui browser write-signer (server signing works today).
 
 Reef is built natively on Sui, Walrus, Seal, and Tatum — every layer chosen for the job it
 alone can do.
