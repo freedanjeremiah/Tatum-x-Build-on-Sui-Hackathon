@@ -33,12 +33,14 @@ export function getAttestationConfig(): AttestationConfig | undefined {
 }
 
 /** Compute-worker isolation mode.
- *  - "enclave"     — operator declares this process runs in an attested SGX/TDX enclave.
- *  - "enclave-sim" — TEE simulator (lib/tee-sim) is active; HONESTLY disclosed as
- *                    NOT hardware-attested. Operator can still see plaintext.
- *  - "plain-server" — default; plain Node process. */
-export function workerIsolation(): "enclave" | "enclave-sim" | "plain-server" {
+ *  - "enclave-nautilus" — real AWS Nitro enclave; attestation verified on-chain.
+ *  - "enclave"          — operator declares this process runs in an attested SGX/TDX enclave.
+ *  - "enclave-sim"      — TEE simulator (lib/tee-sim) is active; HONESTLY disclosed as
+ *                         NOT hardware-attested. Operator can still see plaintext.
+ *  - "plain-server"     — default; plain Node process. */
+export function workerIsolation(): "enclave" | "enclave-nautilus" | "enclave-sim" | "plain-server" {
   const mode = process.env.WORKER_ISOLATION_MODE;
+  if (mode === "enclave-nautilus" || mode === "nautilus") return "enclave-nautilus";
   if (mode === "enclave") return "enclave";
   if (mode === "enclave-sim" || mode === "sim") return "enclave-sim";
   return "plain-server";
@@ -55,7 +57,9 @@ export function isolationDisclosure(info: AttestationInfo): string {
     ? info.enforced ? "Seal key-server TEEs attested (enforced)" : "Seal key-server TEEs attested (report-only)"
     : "Seal key-server TEEs not attested";
   const worker =
-    info.workerIsolation === "enclave"
+    info.workerIsolation === "enclave-nautilus"
+      ? `compute worker in AWS Nitro enclave — attestation verified on-chain${info.attestationTx ? ` (tx ${info.attestationTx})` : ""}`
+      : info.workerIsolation === "enclave"
       ? "compute worker in attested enclave"
       : info.workerIsolation === "enclave-sim"
         ? info.simVerified === true
