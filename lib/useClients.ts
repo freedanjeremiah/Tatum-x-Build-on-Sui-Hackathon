@@ -1,27 +1,22 @@
 "use client";
 
-// Browser-side client acquisition for Sui + Privy.
+// Browser-side client acquisition for Sui.
 //
 // getClients() is the main entry point. It acquires a SuiClient (read path)
-// and a signer (write path) from the active Privy wallet via lib/walletBridge.
+// and a real Signer (write path) from the connected Sui wallet via
+// lib/walletBridge.
 //
-// IMPORTANT: The browser write-signer depends on how @privy-io/react-auth exposes
-// a Sui transaction-signing callback. Privy v3 (installed: ^3.28.0) embeds a
-// Sui wallet in `useWallets()` with a `signTransaction` method, but that method
-// must be called from within a React context (hook). getClients() is a plain
-// async function, so it cannot call hooks directly.
-//
-// The approach used here:
-//   - WalletBridge.tsx (already mounted inside PrivyProvider) calls setActiveWallet()
-//     each time the wallet changes. lib/walletBridge.ts stashes the signer shim.
+// SIGNING: Privy v3.28 has NO Sui support, so Sui signing comes from
+// @mysten/dapp-kit (the Sui wallet-standard), while Privy keeps auth/login.
+// getClients() is a plain async function and cannot call React hooks, so:
+//   - components/WalletBridge.tsx (mounted inside SuiDappProvider) reads the
+//     dapp-kit hooks and calls setActiveWallet() with a WalletStandardSigner
+//     whenever the connected account changes.
 //   - getClients() picks up the stashed signer via getActiveWallet().
-//   - The signer shim exposes a Sui-compatible Signer-like interface.
 //
-// TODO(A2/signer): Full Privy-Sui signing requires the Privy wallet's
-//   `signTransaction(txBytes: Uint8Array) → Uint8Array` to be wired through
-//   walletBridge. That wiring is in lib/walletBridge.ts (see the TODO there).
-//   Until completed, any call that requires a write transaction will throw an
-//   explicit "WalletNotConnectedError: Sui signer not available" error.
+// If no Sui wallet is connected, getActiveWallet() is null (or its signer is
+// null) and getClients() throws WalletNotConnectedError — an honest failure,
+// never a fake signature. Read paths use a live SuiClient and work regardless.
 
 import type { BrowserClients } from "./clients";
 
@@ -50,17 +45,17 @@ export async function getClients(): Promise<BrowserClients> {
   const wallet = getActiveWallet();
   if (!wallet) {
     throw new WalletNotConnectedError(
-      "Connect a wallet first (use the Connect button in the header)."
+      "Connect a Sui wallet first (use the “Connect Sui wallet” button in the header)."
     );
   }
 
-  // wallet.signer is set by WalletBridge.tsx once Privy resolves the Sui
-  // signing callback. Until that wiring is done, it is null (see walletBridge.ts
-  // TODO) and makeClientsFromProvider wraps it in a loud stub signer.
+  // wallet.signer is a real WalletStandardSigner set by WalletBridge.tsx once a
+  // Sui wallet is connected via dapp-kit. It is only null if the connected
+  // account's public key could not be derived (unknown signature scheme).
   if (!wallet.signer) {
     throw new WalletNotConnectedError(
-      "Sui signer not available. The wallet bridge has not yet provided a " +
-        "signing function — ensure <WalletBridge> is mounted inside <PrivyProvider>."
+      "Sui signer not available — the connected wallet's key scheme is not " +
+        "supported. Connect a standard Ed25519 Sui wallet to sign transactions."
     );
   }
 

@@ -2,11 +2,11 @@
 
 import { PrivyProvider } from "@privy-io/react-auth";
 import { PRIVY_APP_ID } from "@/lib/env";
-import WalletBridge from "./WalletBridge";
 
 /**
- * Real-mode auth shell. Social/email login mints an embedded wallet so users
- * can transact (mint license tokens, etc.) without a browser extension.
+ * Real-mode auth shell. Email/social login provides identity/UX. Sui signing is
+ * handled separately by dapp-kit (see SuiDappProvider / WalletBridge) because
+ * Privy v3.28 has no Sui wallet support.
  *
  * This file statically imports Privy and is itself loaded lazily by
  * Providers.tsx only when a Privy app id is configured, so the provider is
@@ -34,7 +34,6 @@ export default function PrivyAuthProvider({
         },
       }}
     >
-      <WalletBridge />
       {children}
     </PrivyProvider>
   );

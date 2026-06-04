@@ -9,15 +9,30 @@ const PrivyAuthProvider = dynamic(() => import("./PrivyAuthProvider"), {
   ssr: false,
 });
 
+// dapp-kit (Sui wallet-standard) supplies the browser SIGNING context. It is
+// always mounted — independent of Privy — because Sui signing comes from a
+// connected Sui wallet, not from Privy (Privy v3.28 has no Sui support). Loaded
+// client-only (it touches localStorage / window for wallet discovery).
+const SuiDappProvider = dynamic(() => import("./SuiDappProvider"), {
+  ssr: false,
+});
+
 /**
- * Top-level auth context. Must wrap the ENTIRE app (header included) so the
- * header's wallet button can call usePrivy() — it has to be inside PrivyProvider.
- * WasmGate is applied separately (in layout) around <main> only, so the header
- * and nav stay visible while the secure client runtime initializes.
+ * Top-level provider stack, wrapping the ENTIRE app (header included).
+ *
+ *   SuiDappProvider (dapp-kit: Sui signing + WalletBridge)
+ *     └─ PrivyAuthProvider (auth/login; only when PRIVY_APP_ID is set)
+ *
+ * The header's Privy button needs usePrivy() (inside PrivyProvider) and the Sui
+ * connect button needs dapp-kit context (inside SuiDappProvider), so both wrap
+ * the header. WasmGate is applied separately (in layout) around <main> only, so
+ * the header and nav stay visible while the secure client runtime initializes.
  */
 export default function Providers({ children }: { children: React.ReactNode }) {
-  if (!PRIVY_APP_ID) {
-    return <>{children}</>;
-  }
-  return <PrivyAuthProvider>{children}</PrivyAuthProvider>;
+  const inner = PRIVY_APP_ID ? (
+    <PrivyAuthProvider>{children}</PrivyAuthProvider>
+  ) : (
+    <>{children}</>
+  );
+  return <SuiDappProvider>{inner}</SuiDappProvider>;
 }

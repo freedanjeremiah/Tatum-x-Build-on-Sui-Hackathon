@@ -1,46 +1,94 @@
 "use client";
 
-import { useEffect } from "react";
-import { useWallets } from "@privy-io/react-auth";
-import { setActiveWallet } from "@/lib/walletBridge";
+import { useEffect, useMemo } from "react";
+import {
+  useCurrentAccount,
+  useSignTransaction,
+  useSignPersonalMessage,
+} from "@mysten/dapp-kit";
+import { publicKeyFromRawBytes } from "@mysten/sui/verify";
+import type { PublicKey, SignatureScheme } from "@mysten/sui/cryptography";
+import {
+  setActiveWallet,
+  WalletStandardSigner,
+  type WalletStandardSignFns,
+} from "@/lib/walletBridge";
+
+// Candidate signature schemes for deriving a PublicKey from a wallet-standard
+// account's raw public-key bytes. The account exposes raw bytes + address but
+// not the scheme, so we pick the scheme whose derived address matches the
+// account's address (honest derivation — never a guessed/fake key).
+const CANDIDATE_SCHEMES: SignatureScheme[] = [
+  "ED25519",
+  "Secp256k1",
+  "Secp256r1",
+];
+
+function derivePublicKey(
+  rawBytes: Uint8Array,
+  address: string,
+): PublicKey | null {
+  for (const scheme of CANDIDATE_SCHEMES) {
+    try {
+      const pk = publicKeyFromRawBytes(scheme, rawBytes);
+      if (pk.toSuiAddress() === address) return pk;
+    } catch {
+      /* wrong scheme for these bytes — try the next */
+    }
+  }
+  return null;
+}
 
 /**
- * Publishes the active Privy wallet's address (and Sui signer, once wired) to
- * lib/walletBridge so getClients() (a non-hook async fn) can sign/send txs.
- * Privy embedded wallets (social/email logins) don't inject window.sui or
- * window.ethereum, so this bridge is the only signing path those users have.
- * Renders nothing; mounted inside PrivyProvider.
+ * Publishes the connected Sui wallet (address + a real Signer) to
+ * lib/walletBridge so getClients() — a non-hook async fn — can sign and send
+ * transactions and build Seal SessionKeys in the browser.
  *
- * TODO(A2/signer): Once the Privy Sui provider shape is confirmed, replace the
- *   null signer below with a real SuiSignerShim. Steps:
- *     1. Call wallet.getSuiProvider() (or wallet.getWalletClient('sui')).
- *     2. Wrap it with new SuiSignerShim(address, signFn, getPubKeyFn).
- *     3. Pass the shim as `signer` to setActiveWallet.
- *   Until then, read paths work but write paths throw WalletNotConnectedError.
+ * Sui signing comes from @mysten/dapp-kit (the Sui wallet-standard), NOT Privy:
+ * Privy v3.28 has no Sui support (see lib/walletBridge.ts header). Privy still
+ * handles email/social login; a user connects a Sui wallet via dapp-kit for the
+ * on-chain write/decrypt paths. Renders nothing; mounted inside the providers.
  */
 export default function WalletBridge() {
-  const { wallets } = useWallets();
+  const account = useCurrentAccount();
+  const { mutateAsync: signTransaction } = useSignTransaction();
+  const { mutateAsync: signPersonalMessage } = useSignPersonalMessage();
+
+  // Stable callback bag for the signer (mutateAsync identities are stable).
+  const signFns = useMemo<WalletStandardSignFns>(
+    () => ({
+      signTransaction: (input) => signTransaction(input),
+      signPersonalMessage: (input) => signPersonalMessage(input),
+    }),
+    [signTransaction, signPersonalMessage],
+  );
 
   useEffect(() => {
-    const wallet = wallets?.[0];
-    if (!wallet) {
+    if (!account) {
       setActiveWallet(null);
       return;
     }
 
-    // TODO(A2/signer): Obtain the Sui signer from Privy and set it here.
-    // For now we set signer: null so the address is available for display /
-    // read paths while write paths throw an honest error.
-    setActiveWallet({
-      signer: null,
-      address: wallet.address,
-    });
+    const publicKey = derivePublicKey(
+      account.publicKey as Uint8Array,
+      account.address,
+    );
 
-    // Cleanup: clear the wallet ref when the wallet disconnects.
+    if (!publicKey) {
+      // We have an address but couldn't reconstruct a usable PublicKey (unknown
+      // scheme). Expose the address for read/display paths, but leave signer null
+      // so write paths fail honestly rather than with a broken signer.
+      setActiveWallet({ signer: null, address: account.address });
+      return;
+    }
+
+    const signer = new WalletStandardSigner(account.address, publicKey, signFns);
+    setActiveWallet({ signer, address: account.address });
+
     return () => {
       setActiveWallet(null);
     };
-  }, [wallets]);
+  }, [account, signFns]);
 
   return null;
 }

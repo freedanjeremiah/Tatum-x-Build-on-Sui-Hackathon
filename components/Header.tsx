@@ -1,11 +1,18 @@
 "use client";
 
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import VaultMark from "./ui/VaultMark";
 import WalletButton from "./WalletButton";
 import ProfileMenu from "./ProfileMenu";
 import TatumStatus from "./TatumStatus";
+
+// Sui signing wallet (dapp-kit). Client-only: it discovers browser wallets via
+// window/localStorage. Separate from the Privy auth button (WalletButton).
+const SuiWalletButton = dynamic(() => import("./SuiWalletButton"), {
+  ssr: false,
+});
 
 const NAV = [
   { href: "/", label: "Browse" },
@@ -69,6 +76,7 @@ export default function Header() {
         <div style={{ flex: 1 }} />
         <TatumStatus />
         <ProfileMenu />
+        <SuiWalletButton />
         <WalletButton />
       </div>
     </header>
