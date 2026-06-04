@@ -1,8 +1,8 @@
-// Pins raw bytes to IPFS server-side so the Pinata JWT never reaches the browser.
-// The bytes are PUBLIC by design: for gated/compute artifacts they are CDR
-// CIPHERTEXT (encrypted client-side — the server never sees plaintext); for the
-// public tier they are the cleartext the user chose to publish. This route holds
-// no keys and gates no access; it only pins to IPFS and returns the CID.
+// Publishes raw bytes to Walrus server-side so the storage signer never reaches
+// the browser. The bytes are PUBLIC by design: for gated/compute artifacts they
+// are Seal CIPHERTEXT (encrypted client-side — the server never sees plaintext);
+// for the public tier they are the cleartext the user chose to publish. This route
+// holds no keys and gates no access; it only stores the blob and returns its id.
 
 export const runtime = "nodejs"; // Edge unsupported (uses node fetch + secret env)
 
@@ -17,9 +17,9 @@ export async function POST(req: Request): Promise<Response> {
     });
   }
   try {
-    // Runs in Node → pinFile takes the direct-Pinata path with the server JWT.
+    // Runs in Node → pinFile publishes to Walrus with the server signer.
     const { uri, hash } = await pinFile(new Uint8Array(buf));
-    const cid = uri.replace(/^ipfs:\/\//, "");
+    const cid = uri.replace(/^walrus:\/\//, "");
     return new Response(JSON.stringify({ cid, uri, hash }), {
       status: 200,
       headers: { "content-type": "application/json" },

@@ -1,6 +1,5 @@
-// Royalty helpers — Sui-native (replaces the Story RoyaltyModule / IP royalty
-// vault path). On Sui each artifact carries its OWN on-chain revenue vault
-// (`revenue: Balance<SUI>` in tessera::registry):
+// Royalty helpers — Sui-native. Each artifact carries its OWN on-chain revenue
+// vault (`revenue: Balance<SUI>` in tessera::registry):
 //
 //   - `payRoyalty` pays SUI into an artifact's vault (Move `pay_royalty`). Anyone
 //     may pay — a derivative's licensee tipping upstream, a marketplace
@@ -10,8 +9,7 @@
 //   - `claimRevenue` lets the owner withdraw the accrued balance (Move
 //     `claim_revenue`, cap-gated by the ArtifactCap).
 //
-// No viem, no @story-protocol, no removed EVM constants. Never logs secrets.
-// Fails closed: a failed/aborted tx throws (no silent fallback).
+// Never logs secrets. Fails closed: a failed/aborted tx throws (no silent fallback).
 
 import { RegistryClient } from "./registry";
 import type { SuiClient, Signer } from "./clients";

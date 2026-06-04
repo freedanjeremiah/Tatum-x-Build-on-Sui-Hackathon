@@ -1,8 +1,7 @@
-// SPEC §8.7 proof (Sui-native): a group license unlocks a group-tier artifact.
+// Group-unlock proof (Sui-native): a group license unlocks a group-tier artifact.
 //
-// On Sui the EVM GroupLicenseReadCondition is replaced by the `group` Seal tier
-// (move/sources/tessera.move): a group-tier artifact's `seal_approve` admits its
-// owner OR any address in its `license_holders`. We:
+// The `group` Seal tier (move/sources/tessera.move): a group-tier artifact's
+// `seal_approve` admits its owner OR any address in its `license_holders`. We:
 //   1. create a shared Group object,
 //   2. upload a GROUP-tier artifact and bind it to that group,
 //   3. mint (grant) a license for a member address on the group artifact,

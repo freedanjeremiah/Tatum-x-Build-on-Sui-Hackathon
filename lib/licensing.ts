@@ -1,4 +1,4 @@
-// Licensing helpers — the Sui replacement for the Story PIL license layer.
+// Licensing helpers — Sui-native on-chain licensing.
 //
 // In the Sui model a "license" is simply membership of an artifact's on-chain
 // `license_holders` set (lib/registry.ts / tessera::registry). Holding a license
@@ -12,12 +12,12 @@
 //     `add_license_holder`. Backed by RegistryClient.addLicenseHolder.
 //
 // The terms-builder shape (`commercialRemixTerms` / `attributionTerms` /
-// `computeTerms` / `resolveTerms`) is kept chain-agnostic so existing callers and
-// tests keep reading commercialUse / commercialRevShare / defaultMintingFee, but
-// it is now plain descriptive metadata — there is no on-chain PIL terms object on
-// Sui; access is governed entirely by `license_holders` + `seal_approve`.
+// `computeTerms` / `resolveTerms`) is plain descriptive metadata exposing
+// commercialUse / commercialRevShare / defaultMintingFee. There is no separate
+// on-chain terms object on Sui; access is governed entirely by `license_holders`
+// + `seal_approve`.
 //
-// No viem, no @story-protocol, no removed EVM constants. Never logs secrets.
+// Never logs secrets.
 
 import { RegistryClient } from "./registry";
 import type { SuiClient, Signer } from "./clients";
@@ -38,16 +38,8 @@ export interface PilTerms {
 
 export type TermsKind = "commercialRemix" | "attribution" | "compute";
 
-/** Native-SUI currency tag for license payments (replaces Story's WIP token). */
+/** Native-SUI currency tag for license payments. */
 export const SUI_CURRENCY = "0x2::sui::SUI" as const;
-
-/**
- * Back-compat alias for the old Story WIP token constant. Several not-yet-migrated
- * callers (lib/royalty.ts, lib/group.ts) still import `WIP_TOKEN`; on Sui it now
- * resolves to the native SUI currency tag. Kept so those clusters keep compiling
- * until they are migrated.
- */
-export const WIP_TOKEN = SUI_CURRENCY;
 
 /** Commercial-remix terms (commercial use + revenue share + minting fee). */
 export function commercialRemixTerms({ rev, fee }: { rev: number; fee: bigint }): PilTerms {
@@ -105,11 +97,10 @@ export async function resolveTerms(
 /**
  * Encode the artifact ids a reader claims a license for into an opaque aux blob.
  *
- * On the EVM path this ABI-encoded license token ids for a read-condition. On Sui
- * the on-chain `seal_approve` policy is the real gate (it reads `license_holders`
- * directly), so no aux data is needed for access — this helper is retained only
- * so callers that still thread an `accessAuxData` value keep compiling. It returns
- * a deterministic JSON-array string of the ids (NOT consumed by seal_approve).
+ * The on-chain `seal_approve` policy is the real gate (it reads `license_holders`
+ * directly), so no aux data is needed for access. This helper exists for callers
+ * that thread an `accessAuxData` value for display/logging; it returns a
+ * deterministic JSON-array string of the ids (NOT consumed by seal_approve).
  */
 export function encodeAccessAuxData(artifactIds: Array<string | bigint>): string {
   return JSON.stringify(artifactIds.map((x) => x.toString()));

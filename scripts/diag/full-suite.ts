@@ -1,13 +1,13 @@
-// Full functionality suite — exercises every OpenVault flow end-to-end against
-// the live Aeneid testnet. Each step prints a tx hash + outcome.
+// Full functionality suite — exercises every Tessera flow end-to-end against
+// the live Sui testnet. Each step prints a tx hash + outcome.
 //
 // Tests:
-//   1.  uploadPublic                → real public IP + pinned bytes
-//   2.  uploadGated                 → real gated IP + sealed vault
-//   3.  uploadPrivate               → real private IP + owner-only vault
-//   4.  uploadCompute               → real compute IP + ComputeWorkerReadCondition vault
-//   5.  download(gated, mint=true)  → real license mint + decrypt + return plaintext
-//   6.  download(private, mint=false) → owner decrypt of owner-only vault
+//   1.  uploadPublic                → real public artifact + stored bytes
+//   2.  uploadGated                 → real gated artifact + Seal-encrypted blob
+//   3.  uploadPrivate               → real private artifact + owner-only blob
+//   4.  uploadCompute               → real compute artifact + worker-gated blob
+//   5.  download(gated, mint=true)  → real license buy + decrypt + return plaintext
+//   6.  download(private, mint=false) → owner decrypt of owner-only blob
 //   7.  runComputeJob               → worker decrypts, aggregates, registers derivative
 //   8.  payRoyalty                  → consumer pays royalties to compute child
 //   9.  getClaimable + claimRevenue → owner reads + claims revenue

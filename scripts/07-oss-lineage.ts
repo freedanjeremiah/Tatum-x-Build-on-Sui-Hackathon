@@ -1,10 +1,10 @@
-// Addendum §A (OSS provenance) — register an upstream OSS model as a PUBLIC
-// provenance parent, then a derivative of it.
+// OSS provenance — register an upstream OSS model as a PUBLIC provenance parent,
+// then a derivative of it.
 //
 // Honesty rule: when wrapping an OSS model we do NOT claim ownership. The
-// provenance IP carries the external source URL, the true upstream license, and
-// the original authors, and attaches ONLY attribution PIL terms (never
-// commercial). The proven logic now lives in
+// provenance artifact carries the external source URL, the true upstream license,
+// and the original authors, and attaches ONLY attribution-only terms (never
+// commercial). The proven logic lives in
 // lib/artifacts.{registerProvenanceParent,registerDerivative}.
 //
 // Run: pnpm real scripts/07-oss-lineage.ts
@@ -36,7 +36,7 @@ async function main() {
       title: "Llama-3-8B-Finetuned-Support",
       description: "A support-domain fine-tune of the OSS Llama-3-8B.",
       tags: ["llm", "finetune", "support"],
-      creators: [{ name: "OpenVault Demo", address: owner, contributionPercent: 100 }],
+      creators: [{ name: "Tessera Demo", address: owner, contributionPercent: 100 }],
       modality: "model",
       externalSource: HF_URL,
     },

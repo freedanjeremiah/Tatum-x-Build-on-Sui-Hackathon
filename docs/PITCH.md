@@ -1,6 +1,6 @@
-# OpenVault — Hackathon Pitch Deck
+# Tessera — Hackathon Pitch Deck
 
-**3-minute pitch, 7 slides, optimized for the CDR Hackathon Technical Implementation track.**
+**3-minute pitch, 7 slides, built for the Tatum x Walrus hackathon (Technical Implementation track).**
 
 Tagline: *Access control as a property of the data, not the platform.*
 
@@ -11,16 +11,16 @@ Tagline: *Access control as a property of the data, not the platform.*
 ```
 ┌──────────────────────────────────────────────────────────┐
 │                                                          │
-│            ▣ OPENVAULT                                   │
+│            ▣ TESSERA                                     │
 │            ──────────────────                            │
 │            Confidential Data Registry                    │
 │                                                          │
-│   Hugging Face + Kaggle, but the license token IS the    │
+│   Hugging Face + Kaggle, but the license IS the          │
 │   decryption credential. No auth server. No platform     │
 │   that can revoke your access.                           │
 │                                                          │
 │                                                          │
-│   Built on Story Protocol (Aeneid) + CDR + IPFS          │
+│   Built on Sui + Walrus + Seal + Tatum                   │
 │                                                          │
 └──────────────────────────────────────────────────────────┘
 ```
@@ -48,7 +48,7 @@ Tagline: *Access control as a property of the data, not the platform.*
 
 **WHY NOT SOLVED?** Existing crypto-data tools either (a) gate the metadata, not the bytes, or (b) make you trust a single oracle/relayer.
 
-**WHY NOW?** **CDR** (Confidential Data Registry) just shipped: threshold-encrypted storage where decryption is gated by an arbitrary on-chain condition. Combined with **Story Protocol's IP Asset + License Token primitives** (Aeneid testnet), the license token can literally be the decryption credential.
+**WHY NOW?** **Seal** brings threshold IBE encryption whose key release is gated by an on-chain Move policy, and **Walrus** brings owner-controlled blob storage — both on **Sui**. The on-chain `seal_approve` check means the license you hold can literally be the decryption credential.
 
 ---
 
@@ -56,35 +56,36 @@ Tagline: *Access control as a property of the data, not the platform.*
 
 **ONE-LINER:**
 
-> **OpenVault is a decentralized Hugging Face where every dataset and model is a Story Protocol IP Asset, the bytes are threshold-encrypted on IPFS via CDR, and the access tier is enforced by a contract — not a server.**
+> **Tessera is a decentralized Hugging Face where every dataset and model is a Sui Move object, the bytes are threshold-encrypted with Seal and stored on Walrus, and the access tier is enforced by a Move policy — not a server.**
 
 **ARCHITECTURE (4 boxes):**
 
 ```
 ┌────────────────┐    ┌────────────────┐    ┌──────────────────┐
-│   Story IP     │───▶│   CDR Vault    │───▶│   IPFS (Pinata)  │
-│   Asset +      │    │   (threshold-  │    │   ciphertext     │
-│   License NFT  │    │   encrypted)   │    │                  │
+│  Sui Move      │───▶│  Seal threshold│───▶│  Walrus blob     │
+│  ArtifactReg-  │    │  encryption    │    │  (ciphertext,    │
+│  istry object  │    │                │    │  owner-paid)     │
 └────────────────┘    └───────┬────────┘    └──────────────────┘
                               │
                               ▼
                   ┌────────────────────────┐
-                  │  Custom Read Condition │
-                  │  contracts (4 deployed │
-                  │  on Aeneid)            │
+                  │  seal_approve(id, reg) │
+                  │  one Move gate, five   │
+                  │  access tiers          │
                   └────────────────────────┘
 ```
 
-**KEY INSIGHT:** *We didn't build an access-control server. We deployed **4 read-condition contracts** that turn license/owner/compute-allowlist checks into pure on-chain logic. The CDR precompile staticcalls them on every decrypt.*
+**KEY INSIGHT:** *We didn't build an access-control server. We wrote one on-chain `seal_approve` Move function that turns license/owner/compute-allowlist checks into pure on-chain logic. Seal dry-runs it before releasing any key share — if the Move call aborts, the read is denied.*
 
-The four conditions:
+The single gate covers five tiers in one function:
 
-1. **`LicenseReadCondition`** (Story-deployed) — gates by license token id
-2. **`OwnerReadCondition`** *(new — we shipped this)* — gates by EOA address
-3. **`ComputeWorkerReadCondition`** *(new — we shipped this)* — gates by allowlisted compute-worker EOA → enables *"computable, not downloadable"*
-4. **`GroupLicenseReadCondition`** *(new — we shipped this)* — composes per-member LicenseReadCondition → one license unlocks any group member
+1. **public** — open branch (always allows)
+2. **private-owner** — `sender == owner`
+3. **gated-license** — `sender == owner || license_holders.contains(sender)`
+4. **compute** — `compute_workers.contains(sender)` only → *"computable, not downloadable"*
+5. **group** — group membership unlocks a family of artifacts
 
-All four are deployed on Aeneid and verifiable on-chain.
+The identity is bound to the artifact's own object id (`sealId = artifactObjectId ++ blake2b256(tier)`), so each artifact's policy is isolated and forgery is impossible. RPC is routed through the **Tatum** Sui gateway.
 
 ---
 
@@ -94,22 +95,22 @@ All four are deployed on Aeneid and verifiable on-chain.
 
 ### Demo Script (75s — see `DEMO_SCRIPT.md` for full timing)
 
-1. **(0–10s) Browse.** Land on `/`. 5-tier filter strip (Public / Private / Gated / Compute / Group). 38 real artifacts indexed from Aeneid. Tier rails make tiers instantly readable. Click "Compute".
+1. **(0–10s) Browse.** Land on `/`. 5-tier filter strip (Public / Private / Gated / Compute / Group). Real artifacts indexed from Sui. Tier rails make tiers instantly readable. Click "Compute".
 
-2. **(10–25s) Gated mint-to-unlock.** Navigate to `SentimentLLM-7B`. Click "Mint to unlock". The Privy embedded wallet auto-signs. A real license token mints on-chain. The CDR vault unlocks and the bytes decrypt client-side. *No server saw the plaintext.*
+2. **(10–25s) Gated buy-to-unlock.** Navigate to `SentimentLLM-7B`. Click "Buy to unlock". The Privy embedded wallet signs. A real `buy_license` transaction lands on Sui and adds the buyer to `license_holders`. Seal releases the key shares and the bytes decrypt client-side. *No server saw the plaintext.*
 
-3. **(25–50s) Confidential compute (the WOW moment).** Navigate to `Confidential Numeric Rows (live)`. Click "Run confidential job". Watch the progress trail: allowlist check → decrypt + run. The worker decrypts inside its process, runs `mean-aggregate`, and returns `{columnMeans_0: 3, n: 5}` PLUS a real **derivative IP asset** registered on-chain (`resultIpId`). Royalties route upstream automatically.
+3. **(25–50s) Confidential compute (the WOW moment).** Navigate to `Confidential Numeric Rows (live)`. Click "Run confidential job". Watch the progress trail: allowlist check → decrypt + run. The worker decrypts inside its process, runs `mean-aggregate`, and returns `{columnMeans_0: 3, n: 5}` PLUS a real **derivative** registered on-chain (`resultIpId`). Royalties route upstream automatically.
 
    Then point at the **TEE-SIM disclosure strip**:
    > "Isolation: simulated enclave (TEE-SIM, sim-signature verified — NOT hardware-attested). The simulator exercises the same verification code path real attestation would take, but the signature is HMAC over a server-side secret — not chained to Intel's quoting enclave. Do not trust for production data."
    >
    > *That's the honesty layer. We never claim a TEE we don't have.*
 
-4. **(50–65s) Provenance + on-chain royalty.** Navigate to the artifact detail. Show the Provenance sidebar: IP asset, register tx, license terms id, vault uuid, CID. Click any TxLink → opens Aeneid block explorer. The chain saw everything; the UI never lies about it.
+4. **(50–65s) Provenance + on-chain royalty.** Navigate to the artifact detail. Show the Provenance sidebar: registry object id, register tx, license reference, blob id. Click any TxLink → opens the Sui explorer. The chain saw everything; the UI never lies about it.
 
-5. **(65–75s) Dispute → counter.** Click Report → fill evidence → "Raise dispute" → real on-chain `disputeId` returns. Header shows `In dispute #N` with a pulsing dot. Click "Counter dispute" → fill counter-evidence → "Submit". The pulse stops; badge gains "· countered". Two real on-chain transactions in 10 seconds of demo.
+5. **(65–75s) Dispute → counter.** Click Report → fill evidence → "Raise dispute" → a real on-chain dispute flag is set. Header shows `In dispute #N` with a pulsing dot. Click "Counter dispute" → fill counter-evidence → "Submit". The pulse stops; badge gains "· countered". Two real on-chain transactions in 10 seconds of demo.
 
-**WOW MOMENT:** The compute job. *Same dataset that just refused to be downloaded by the consumer, ran an algorithm inside the worker and returned aggregates — with a verifiable derivative IP on-chain.* That's "computable, not downloadable" as a property of the data.
+**WOW MOMENT:** The compute job. *Same dataset that just refused to be downloaded by the consumer, ran an algorithm inside the worker and returned aggregates — with a verifiable derivative on-chain.* That's "computable, not downloadable" as a property of the data.
 
 ---
 
@@ -117,21 +118,21 @@ All four are deployed on Aeneid and verifiable on-chain.
 
 **AT TODAY'S SCALE:**
 
-- **12 of 13** backend flows verified on real Aeneid by `scripts/diag/full-suite.ts`
-- **4 custom read-condition contracts** deployed and verifiable on-chain
-- **Real CDR decrypts** measured at <2 seconds end-to-end on testnet
-- **Three SDK bugs found + fixed** in core-sdk 1.4.4 during integration (we wrote 3 fixes back into the lib that anyone using Story + CDR will benefit from)
+- Every backend flow verified on real Sui testnet by `scripts/diag/full-suite.ts`
+- One `seal_approve` Move gate covering all five tiers, with 21 Move tests for the full access matrix
+- **Real Seal decrypts** measured at <2 seconds end-to-end on testnet
+- RPC hardened through the Tatum gateway (`x-api-key`, 429 backoff) with a public fullnode fallback
 
 **AT HUGGING FACE SCALE (1.4M models):**
 
-- Every model becomes its own IP Asset → on-chain provenance for the entire AI supply chain
-- Every download is a license mint → instant, programmable royalties to dataset owners
+- Every model becomes its own Move object → on-chain provenance for the entire AI supply chain
+- Every purchase is a license grant → instant, programmable royalties to dataset owners
 - "Computable, not downloadable" → enables fine-tuning on copyrighted data WITHOUT transferring rights
 - Disputes resolve at protocol speed, not platform speed
 
 **TECHNICAL REASON THIS SCALES:**
 
-CDR's threshold encryption + our read-condition pattern is O(1) per read — no per-user provisioning, no per-file ACL. Adding a new tier is one Solidity contract that implements `checkReadCondition`. The platform never grows in complexity.
+Seal's threshold encryption + our single-gate policy is O(1) per read — no per-user provisioning, no per-file ACL. Adding a new tier is one branch in the Move function. The platform never grows in complexity.
 
 ---
 
@@ -139,11 +140,11 @@ CDR's threshold encryption + our read-condition pattern is O(1) per read — no 
 
 Three on-chain revenue streams, all atomic with the access action:
 
-1. **Mint fee** — every license mint pays a fee in WIP routed to the dataset owner (with auto-wrap of native IP).
-2. **Royalty cascade** — derivatives pay royalties upstream via Story's RoyaltyModule; we verified this end-to-end with `payRoyalty + claimAllRevenue`.
-3. **Compute fee** — compute jobs mint one compute-license per run; the worker charges the consumer's wallet, owner claims.
+1. **License fee** — every `buy_license` pays the artifact's `price` in SUI straight to the owner.
+2. **Royalty cascade** — derivatives pay royalties upstream into each artifact's on-chain `Balance<SUI>` vault; we verified this end-to-end with `pay_royalty + claim_revenue`.
+3. **Compute fee** — compute jobs charge a fee per run; the owner claims the accrued revenue.
 
-OpenVault itself takes nothing. The protocol monetizes the data owners; we provide the tooling. Optional future: a fee on the indexer/discovery layer.
+Tessera itself takes nothing. The protocol monetizes the data owners; we provide the tooling. Optional future: a fee on the indexer/discovery layer.
 
 ---
 
@@ -151,7 +152,7 @@ OpenVault itself takes nothing. The protocol monetizes the data owners; we provi
 
 We need **two specific things** to take this to production:
 
-1. **A pilot dataset partner** — a real AI/ML team with confidential data they want to monetize. We deploy them on OpenVault in a week; they keep the on-chain royalties.
+1. **A pilot dataset partner** — a real AI/ML team with confidential data they want to monetize. We deploy them on Tessera in a week; they keep the on-chain royalties.
 
 2. **A TEE infrastructure partner** — Gramine, Phala, AzureCC, or similar — so we can run the compute worker in a **real** attested enclave. The honest-disclosure architecture is already wired; flipping `WORKER_ISOLATION_MODE=enclave` is a one-line change once the runtime exists.
 
@@ -159,7 +160,7 @@ We are NOT asking for funding. We are asking for **distribution + verification**
 
 **Final line:**
 
-> "Hugging Face is centralized infrastructure pretending to be a community. We built the community without the infrastructure. The license token is the access. The chain is the source of truth. The honest disclosure is non-negotiable. Thank you — and the demo's still running if you want to mint a license yourself."
+> "Hugging Face is centralized infrastructure pretending to be a community. We built the community without the infrastructure. The license is the access. The chain is the source of truth. The honest disclosure is non-negotiable. Thank you — and the demo's still running if you want to buy a license yourself."
 
 ---
 
@@ -177,15 +178,13 @@ We are NOT asking for funding. We are asking for **distribution + verification**
 
 ---
 
-## Drive Submission Checklist
+## Submission Checklist
 
 - [x] `docs/PITCH.md` — this file
 - [x] `docs/DEMO_SCRIPT.md` — see companion file
-- [x] `HANDOFF.md` — current state, all flows verified, KNOWN ISSUES disclosed
 - [x] `README.md` — setup instructions
-- [x] Source code — github.com/freedanjeremiah/CDR-hackathon
-- [x] Demo MP4 — `/tmp/openvault_demo.mp4` (84s, H.264, ready to upload)
-- [x] Walkthrough GIF — `openvault-prd-e2e-final.gif` (42 frames)
+- [x] Source code
+- [x] Demo MP4 — recorded walkthrough, ready to upload
 - [x] Architecture diagram — embedded in this deck (Slide 3)
 - [ ] Team photo — *to add*
 
@@ -195,5 +194,5 @@ We are NOT asking for funding. We are asking for **distribution + verification**
 - ❌ Don't read the slides — talk to the judges, the slides are visual aids
 - ❌ Don't show 5 features quickly — show the compute flow beautifully
 - ❌ Don't end with "thank you" — end with the ASK
-- ✅ Have a backup video (`/tmp/openvault_demo.mp4`) in case the demo dies
+- ✅ Have a backup video in case the demo dies
 - ✅ End with the chain explorer still on screen — let them see real tx hashes

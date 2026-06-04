@@ -7,7 +7,7 @@ import ModelCard from "@/components/ModelCard";
 import TxLink from "@/components/TxLink";
 import Icon from "@/components/ui/Icon";
 
-const ADDRESS_EXPLORER = "https://aeneid.storyscan.io/address/";
+const ADDRESS_EXPLORER = "https://suiscan.xyz/testnet/account/";
 
 export default function ProfilePage({
   params,

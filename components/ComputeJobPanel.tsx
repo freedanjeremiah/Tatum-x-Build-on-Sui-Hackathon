@@ -34,21 +34,21 @@ export default function ComputeJobPanel({ artifact }: { artifact: Artifact }) {
     let cancelled = false;
     fetch("/api/runtime")
       .then((r) => (r.ok ? r.json() : null))
-      .then((data: { workerIsolation?: string; cdr?: { attestationEnabled?: boolean; enforced?: boolean } } | null) => {
+      .then((data: { workerIsolation?: string; keyServers?: { attestationEnabled?: boolean; enforced?: boolean } } | null) => {
         if (cancelled || !data) return;
         const wi = data.workerIsolation ?? "plain-server";
-        const cdrPart = data.cdr?.attestationEnabled
-          ? data.cdr.enforced
-            ? "CDR validator TEEs attested (enforced)"
-            : "CDR validator TEEs attested (report-only)"
-          : "CDR validator TEEs not attested";
+        const keyServersPart = data.keyServers?.attestationEnabled
+          ? data.keyServers.enforced
+            ? "Seal key-server TEEs attested (enforced)"
+            : "Seal key-server TEEs attested (report-only)"
+          : "Seal key-server TEEs not attested";
         const wiPart =
           wi === "enclave"
             ? "compute worker in attested enclave"
             : wi === "enclave-sim"
               ? "compute worker in SIMULATED enclave (TEE-SIM declared) — NOT hardware-attested"
               : "compute worker on plain server (operator-trusted, demo)";
-        setDeclaredMode(`${wiPart}; ${cdrPart}`);
+        setDeclaredMode(`${wiPart}; ${keyServersPart}`);
       })
       .catch(() => {
         // /api/runtime missing → leave declaredMode null; IsolationStrip falls
@@ -512,10 +512,10 @@ function IsolationStrip({
         ? `Isolation: ${mode}.`
         : "Isolation: plain server (operator-trusted, demo).";
   const body = isEnclave
-    ? "Worker measurements are verified by hardware attestation. CDR delivers keys only; privacy comes from the attested worker + the algorithm allowlist."
+    ? "Worker measurements are verified by hardware attestation. Seal delivers keys only; privacy comes from the attested worker + the algorithm allowlist."
     : isSim
       ? "The simulator exercises the same verification code path real attestation would take, but the signature is HMAC over a server-side secret — not chained to Intel's quoting enclave. Do not trust for production data."
-      : "The operator can see plaintext in memory. A production deployment would run in an attested SGX/TDX enclave. CDR does key-delivery only; compute privacy comes from worker isolation + the algorithm allowlist, not from CDR.";
+      : "The operator can see plaintext in memory. A production deployment would run in an attested SGX/TDX enclave. Seal does gated key-delivery only; compute privacy comes from worker isolation + the algorithm allowlist, not from Seal.";
   return (
     <div
       style={{

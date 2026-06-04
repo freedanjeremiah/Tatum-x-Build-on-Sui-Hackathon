@@ -1,12 +1,10 @@
 // One-time registry bootstrap / connectivity check (Sui-native).
 //
-// On Story this script created a shared SPG NFT collection that every upload
-// minted from. SUI HAS NO SUCH COLLECTION: in Tessera each artifact is its OWN
-// shared `ArtifactRegistry` object (move/sources/tessera.move), minted directly
-// by `register(...)` — there is nothing to pre-create. This script is kept (the
-// package.json/demo references the 0x-prefixed step ordering) as a bootstrap that
-// verifies the published package id + signer are wired before the demo runs. It
-// performs NO on-chain mutation.
+// There is no shared NFT collection to pre-create: in Tessera each artifact is its
+// OWN shared `ArtifactRegistry` object (move/sources/tessera.move), minted directly
+// by `register(...)`. This script is kept (the package.json/demo references the
+// numeric step ordering) as a bootstrap that verifies the published package id +
+// signer are wired before the demo runs. It performs NO on-chain mutation.
 //
 // Run: pnpm real scripts/00-create-collection.ts
 

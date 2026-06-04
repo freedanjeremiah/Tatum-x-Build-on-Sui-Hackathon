@@ -1,7 +1,6 @@
-// High-level artifact API — SUI / WALRUS / SEAL core (migration task B2).
+// High-level artifact API — Sui / Walrus / Seal core.
 //
-// Replaces the old Story + CDR + IPFS path. Each upload* function enforces the
-// REGISTER-BEFORE-ENCRYPT invariant:
+// Each upload* function enforces the REGISTER-BEFORE-ENCRYPT invariant:
 //   1. register the artifact on-chain (lib/registry.ts) → get `artifactId` (the
 //      ArtifactRegistry shared-object id, which is the Seal id prefix) + `capId`.
 //   2. Seal-encrypt the plaintext bound to (artifactId, tier) (lib/crypto.ts).
@@ -12,12 +11,9 @@
 // seal_approve tx kind, obtains a Seal SessionKey, reads the ciphertext from the
 // Walrus aggregator, and Seal-decrypts. Fail closed on NoAccessError — never retry.
 //
-// DESCRIPTOR FIELD NAMES are preserved (`ipId`, `cid`, `vaultUuid`) to minimize
-// Phase-C churn, but their CONTENTS now carry Sui/Walrus ids — see types/artifact.ts:
-//   ipId  → Sui ArtifactRegistry object id (was Story ipId)
-//   cid   → Walrus blobId (was IPFS CID)
-// New fields `capId` (ArtifactCap id) and `blobObjectId` (Walrus Blob object id)
-// are added for the renewal/cap paths.
+// In the public Artifact descriptor, `ipId` is the Sui ArtifactRegistry object id
+// and `cid` is the Walrus blobId — see types/artifact.ts. `capId` (ArtifactCap id)
+// and `blobObjectId` (Walrus Blob object id) carry the renewal/cap paths.
 //
 // Invariants honored:
 //   - No silent fallbacks; fail closed on NoAccess.
@@ -37,7 +33,7 @@ import type { Artifact, Tier } from "../types/artifact";
 // --- Types --------------------------------------------------------------
 
 /**
- * Client bundle for the Sui core. Replaces the old {cdr, story, account} bundle.
+ * Client bundle for the Sui core.
  * Produced by lib/clients.makeClientsFromKey (server) or makeClientsFromProvider
  * (browser, via lib/useClients.getClients). `signer` pays gas + WAL and signs the
  * registry txs; `client` is the read SuiClient; `address` is the on-chain owner.
@@ -134,7 +130,7 @@ async function encryptAndPublish(
   // per README, public artifacts are not access-controlled, but seal_approve for
   // the `public` tier admits anyone — so encrypting public bytes is effectively a
   // no-op gate while satisfying the Walrus ciphertext guard and keeping ONE
-  // uniform upload/download path for every tier. (Chosen per B2 task guidance.)
+  // uniform upload/download path for every tier.
   const ciphertext = await getCrypto().encrypt(
     artifactId,
     coreTier(tier),
@@ -336,8 +332,8 @@ export async function registerProvenanceParent(
 
   return {
     ipId: reg.artifactId as `0x${string}`,
-    // licenseTermsId is a B3 (licensing) concern; there is no Story terms id in the
-    // Sui model. Empty string keeps the public return shape compatible with callers.
+    // The Sui licensing model carries no separate terms id; licensing is enforced
+    // by the Move policy. Empty string keeps the public return shape stable for callers.
     licenseTermsId: "",
     ipMetadataURI: md.ipMetadataURI,
     createdTx: reg.digest as `0x${string}`,
@@ -404,9 +400,9 @@ export async function registerDerivative(
 interface DownloadInput {
   /** ArtifactRegistry object id (descriptor.ipId). */
   ipId: `0x${string}`;
-  /** Walrus blobId (descriptor.cid). Preferred over the legacy `uuid`. */
+  /** Walrus blobId (descriptor.cid). Preferred over the numeric `uuid` handle. */
   blobId?: string;
-  /** @deprecated legacy CDR vault uuid — ignored in the Sui path. */
+  /** Optional numeric artifact handle — ignored when a blobId/cid is present. */
   uuid?: number;
   /** Walrus blobId fallback when callers still pass it as `cid`. */
   cid?: string;

@@ -1,5 +1,4 @@
-// Storage layer — Walrus blobs. Tessera migration A3.
-// Replaces the old Pinata/IPFS storage with @mysten/walrus WalrusClient.
+// Storage layer — Walrus blobs, backed by @mysten/walrus WalrusClient.
 //
 // Design:
 //   - Storage class (canonical API): publishBlob, publishQuilt, read, readMany,
@@ -8,14 +7,11 @@
 //     JSON/whitespace (defense in depth — Seal encryption happens in lib/crypto.ts
 //     before this layer is called, but we guard here too per invariant #7).
 //   - Write-retry: transient committee/epoch/certification faults are retried up
-//     to 3× with cache reset (same pattern as sharegraph storage.ts).
-//   - Compat shims at the bottom: pinJSON, pinFile, heliaProvider, storageProvider
-//     keep existing callers (lib/artifacts.ts, lib/metadata.ts, API routes, worker,
-//     scripts) compiling unchanged. A Walrus blobId takes the role the IPFS CID had.
+//     to 3× with cache reset.
+//   - The artifact blob is addressed by its Walrus blobId.
 //
 // Config sourced from lib/constants.ts (WALRUS_AGGREGATOR, SUI_NETWORK,
 // STORAGE_EPOCHS). SuiClient obtained from lib/clients.ts (getReadClient()).
-// Do NOT import from sharegraph; this is an independent adaptation.
 
 import { WalrusClient } from "@mysten/walrus";
 import { WalrusFile } from "@mysten/walrus";
@@ -333,44 +329,24 @@ export function getStorage(wasmUrl?: string): Storage {
 }
 
 // ---------------------------------------------------------------------------
-// Compatibility shims — preserve the old Pinata-era caller-facing API so
-// existing callers (lib/artifacts.ts, lib/metadata.ts, app/api/pin*, worker,
-// scripts) keep compiling without changes in this task (Phase B will migrate
-// them properly).
+// Convenience helpers over the canonical Storage class, used by lib/metadata.ts,
+// the /api/pin* routes, scripts, and the worker.
 //
-// Mapping:
-//   pinJSON(obj)       → publishes JSON bytes as a Walrus blob via aggregator
-//                        upload; returns { uri: "walrus://<blobId>", hash }
-//                        NOTE: pinJSON on the write path requires a signer —
-//                        callers that used the CDR storageProvider path (helia-
-//                        Provider / storageProvider) are NOT affected because
-//                        those callers pass bytes through cdr.uploader directly.
-//                        pinJSON is called only from lib/metadata.ts for public
-//                        metadata pinning; in Phase B it will be migrated to an
-//                        on-chain metadata scheme or an off-chain DB. For now we
-//                        fall back to the aggregator for reads and throw on writes
-//                        that lack a signer, so the existing shape is preserved
-//                        without silently losing data.
-//
-//   pinFile(bytes)     → same as pinJSON but for raw bytes
-//   heliaProvider()    → returns a compat StorageProvider (upload/download via
-//                        Walrus aggregator HTTP — no signer = read-only in the
-//                        new model; upload path deferred to Phase B CDR swap)
-//   storageProvider()  → alias for heliaProvider
+//   publishBlob(...)   → publish ciphertext bytes as a Walrus blob (needs a signer)
+//   storageProvider()  → an upload/download provider: download reads gaslessly via
+//                        the aggregator; upload requires a signer (see Storage)
 // ---------------------------------------------------------------------------
 
-/** A pinned-content reference: a walrus:// URI and a 0x-prefixed content hash. */
+/** A stored-content reference: a walrus:// URI and a 0x-prefixed content hash. */
 export interface PinResult {
   uri: string;
   hash: `0x${string}`;
 }
 
 /**
- * Loose StorageProvider shape (mirrors the old Pinata StorageProvider). The
- * real provider (lib/pinataStorage) implemented the CDR SDK's
- * `upload(data, opts)→cid` / `download(cid)→bytes` contract. This compat shim
- * keeps the same shape so CDR-consuming callers keep compiling; Phase B will
- * replace the CDR vault with a Walrus+Seal equivalent.
+ * Loose StorageProvider shape: `upload(data, opts)→blobId` /
+ * `download(blobId)→bytes`. A thin adapter over the Walrus Storage class for
+ * callers that want the provider shape rather than the class directly.
  */
 export interface StorageProvider {
   /** Optional identity helper over a content-id string. */
@@ -506,64 +482,52 @@ function sha256js(data: Uint8Array): string {
 }
 
 // ---------------------------------------------------------------------------
-// Compat shim: pinJSON
-// Old: pinned to IPFS via Pinata, returned { uri: "ipfs://<CID>", hash }
-// New: publishes bytes to Walrus via aggregator URL; returns
-//      { uri: "walrus://<blobId>", hash }.
+// Helper: pinJSON
+// Publishes JSON bytes to Walrus; returns { uri: "walrus://<blobId>", hash }.
 //
-// WRITE NOTE: The old pinJSON called Pinata directly from Node (JWT path) or
-// via /api/pin (browser path). In the Walrus world, writing requires a signer
-// (WAL fee + gas). Callers that relied on JWT-only server-side writes (metadata
-// pinning in lib/metadata.ts, /api/pin) will need Phase B wiring to supply a
-// signer. For now we surface a clear error rather than silently losing data.
-// The /api/pin route still calls this — it will fail until Phase B migrates
-// metadata storage (e.g. to Sui objects or an off-chain store).
+// WRITE NOTE: writing to Walrus requires a signer (WAL fee + gas). This helper
+// is the no-signer entry point used by /api/pin and lib/metadata.ts for public
+// metadata; it content-hashes the payload and surfaces a clear error when no
+// signer is available, rather than silently dropping data. To persist, call
+// Storage.publishBlob() with a server keypair.
 // ---------------------------------------------------------------------------
 
 /**
  * Pin a JSON object to Walrus.
- * COMPAT SHIM — replaces the old Pinata pinJSON. A blobId takes the CID role.
  * uri format: "walrus://<blobId>"  hash: sha256 of the canonical JSON.
  *
- * WRITE path requires a signer (not available in this shim layer); throws
- * with a clear message directing callers to Phase B migration.
+ * The write path requires a signer; without one this throws with a clear message
+ * directing callers to Storage.publishBlob().
  */
 export async function pinJSON(obj: unknown): Promise<PinResult> {
   const json = JSON.stringify(obj);
   const hash = sha256hex(json);
-  // Phase B: this shim throws until the metadata store is migrated to Walrus
-  // with a proper signer. The /api/pin route and lib/metadata.ts must be
-  // updated in Phase B to supply a Signer obtained from the wallet or server key.
   throw new Error(
-    "pinJSON: Pinata removed (A3 migration). Metadata writes require a Walrus signer — " +
-    "migrate lib/metadata.ts and /api/pin to use Storage.publishBlob() with a server keypair (Phase B). " +
+    "pinJSON: Walrus metadata writes require a signer — " +
+    "use Storage.publishBlob() with a server keypair. " +
     `(Would have hashed: ${hash})`
   );
 }
 
 /**
  * Pin raw bytes to Walrus.
- * COMPAT SHIM — replaces the old Pinata pinFile. A blobId takes the CID role.
  * uri format: "walrus://<blobId>"  hash: sha256 of the bytes.
  *
- * WRITE path requires a signer; throws with a clear migration message.
+ * The write path requires a signer; throws with a clear message otherwise.
  */
 export async function pinFile(bytes: Uint8Array): Promise<PinResult> {
   const hash = sha256hex(bytes);
   throw new Error(
-    "pinFile: Pinata removed (A3 migration). File writes require a Walrus signer — " +
-    "migrate callers to use Storage.publishBlob() with a server keypair (Phase B). " +
+    "pinFile: Walrus file writes require a signer — " +
+    "use Storage.publishBlob() with a server keypair. " +
     `(Would have hashed: ${hash})`
   );
 }
 
 /**
- * Returns a Walrus-backed StorageProvider for compatibility with the CDR SDK.
- * Upload still requires a signer — this shim returns a provider whose upload()
- * throws with a migration message. Download delegates to the aggregator (gasless).
- *
- * COMPAT SHIM — old name was heliaProvider / storageProvider.
- * Phase B will replace the CDR vault wiring entirely (Walrus + Seal path).
+ * Returns a Walrus-backed StorageProvider. Download reads gaslessly via the
+ * aggregator; upload requires a signer, so the provider's upload() throws and
+ * directs callers to Storage.publishBlob() with a signer.
  */
 export async function storageProvider(): Promise<StorageProvider> {
   const storage = getStorage();
@@ -571,8 +535,8 @@ export async function storageProvider(): Promise<StorageProvider> {
     CID: (s: string) => s,
     async upload(_data: Uint8Array): Promise<string> {
       throw new Error(
-        "storageProvider.upload: Pinata removed (A3 migration). CDR vault writes are being " +
-        "replaced with Walrus+Seal in Phase B. Use Storage.publishBlob() with a signer directly."
+        "storageProvider.upload: Walrus writes require a signer. " +
+        "Use Storage.publishBlob() with a signer directly."
       );
     },
     async download(blobId: string): Promise<Uint8Array> {
@@ -582,8 +546,5 @@ export async function storageProvider(): Promise<StorageProvider> {
   };
 }
 
-/**
- * Deprecated alias for backwards compatibility.
- * @deprecated Use `storageProvider()` or `getStorage()` directly.
- */
+/** Alias for `storageProvider()`. */
 export const heliaProvider = storageProvider;

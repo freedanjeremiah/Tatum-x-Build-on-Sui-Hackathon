@@ -2,21 +2,21 @@
 //
 // This drives the REAL worker (worker/compute-worker.ts) with
 // WORKER_ISOLATION_MODE=enclave-sim, exercising the same code path real SGX/TDX
-// attestation would take. The CDR validator attestation is OFF here (real
-// validator attestation requires a reachable CDR endpoint that emits SGX
-// quotes); WORKER_ISOLATION_MODE=enclave-sim only attests the WORKER process.
+// attestation would take. Seal key-server attestation is OFF here (real key-server
+// attestation requires reachable key servers that emit SGX quotes);
+// WORKER_ISOLATION_MODE=enclave-sim only attests the WORKER process.
 //
 // What the script proves:
 //   1. The worker generates + verifies a sim TEE quote BEFORE any decrypt.
 //   2. The sim quote is structurally a SGX-style header+body+HMAC, but the
 //      header.teeType is "SGX-SIM" and the kind marker is "sim-sgx-quote" —
-//      a real attestation verifier (Intel DCAP / Azure Attestation / CDR
-//      validator chain) will reject this kind out of hand. No forgery surface.
+//      a real attestation verifier (Intel DCAP / Azure Attestation / a Seal
+//      key-server's enclave check) will reject this kind out of hand. No forgery surface.
 //   3. The result.isolationMode honestly says "SIMULATED enclave … NOT
 //      hardware-attested" instead of the prior "plain-server" string.
 //   4. When the allowlist fails (off-allowlist algorithm), the rejection still
 //      reports the sim isolation mode honestly (no plain-server lie).
-//   5. When the dataset has no CDR vault, decryption throws — the sim quote is
+//   5. When the dataset has no Seal-gated blob, decryption throws — the sim quote is
 //      STILL surfaced in the failed result so callers can see what was attested
 //      pre-decrypt.
 //
@@ -84,20 +84,20 @@ async function main() {
   showResult("rejected result", rejected);
 
   // -----------------------------------------------------------------
-  // (C) Allowed algorithm + a dataset with no real CDR vault. The sim
+  // (C) Allowed algorithm + a dataset with no real stored blob. The sim
   //     pre-attestation runs; then decrypt throws because we never
-  //     provisioned a vault. The failed result carries the sim quote so the
+  //     provisioned a blob. The failed result carries the sim quote so the
   //     caller can see exactly what was attested before the downstream fault.
   // -----------------------------------------------------------------
-  header("C. Worker runs pre-attestation, then decrypt fails (no real vault)");
+  header("C. Worker runs pre-attestation, then decrypt fails (no real blob)");
   const dataset: Artifact = {
     ipId: DATASET_IPID,
     tier: "compute",
     modality: "dataset",
-    title: "Sim demo dataset (no real vault)",
-    description: "Demonstration only; no CDR vault provisioned.",
+    title: "Sim demo dataset (no real blob)",
+    description: "Demonstration only; no stored blob provisioned.",
     tags: ["demo"],
-    ipMetadataURI: "ipfs://demo",
+    ipMetadataURI: "walrus://demo",
     createdTx: "0x0" as `0x${string}`,
     computeEnabled: true,
     allowedAlgoHashes: ALGO_ALLOWED,

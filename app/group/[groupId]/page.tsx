@@ -15,9 +15,9 @@ import { formatSui } from "@/lib/sui-format";
  * Group bundle page. Shows the group artifact + member artifacts, a group
  * license summary with a subscribe CTA, and a Distribute-royalties action.
  *
- * SPEC §8.7 OPEN ITEM is surfaced prominently: one group license unlocking
- * every member's vault is NOT yet confirmed in CDR — this demo falls back to
- * per-IP gating.
+ * One OPEN ITEM is surfaced prominently: a single group license unlocking every
+ * member's blob is future work — today each member artifact is gated per-artifact
+ * via its own `license_holders`.
  */
 export default function GroupPage({
   params,

@@ -70,7 +70,7 @@ export default function Header() {
           className="meta ov-network"
           style={{ color: "var(--ov-text-faint)" }}
         >
-          Aeneid testnet
+          Sui testnet
         </span>
         <ProfileMenu />
         <WalletButton />

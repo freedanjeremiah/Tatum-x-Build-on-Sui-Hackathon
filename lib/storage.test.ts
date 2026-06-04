@@ -18,7 +18,7 @@ itInt("pinJSON hash recomputes from the pinned content", async () => {
   const { hash, uri } = await pinJSON(obj);
   const expected = "0x" + createHash("sha256").update(JSON.stringify(obj)).digest("hex");
   expect(hash).toBe(expected);
-  expect(uri.startsWith("ipfs://")).toBe(true);
+  expect(uri.startsWith("walrus://")).toBe(true);
 });
 
 itInt("pinFile returns deterministic uri+hash for raw bytes", async () => {
@@ -28,7 +28,7 @@ itInt("pinFile returns deterministic uri+hash for raw bytes", async () => {
   expect(a.hash).toBe(b.hash);
   const expected = "0x" + createHash("sha256").update(Buffer.from(bytes)).digest("hex");
   expect(a.hash).toBe(expected);
-  expect(a.uri.startsWith("ipfs://")).toBe(true);
+  expect(a.uri.startsWith("walrus://")).toBe(true);
 });
 
 itInt("heliaProvider() returns a storage provider object", async () => {

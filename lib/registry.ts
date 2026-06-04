@@ -1,14 +1,13 @@
-// Tessera registry adapter — the Sui Move replacement for lib/storyAdapter.ts.
+// Tessera registry adapter — on-chain artifact registration via Sui Move.
 //
-// Migration task B1 (MIGRATION_PLAN.md §B1). Replaces Story Protocol IP-asset
-// registration with the `tessera::registry` Move module: each artifact is its
-// OWN shared object (`ArtifactRegistry`) whose object id IS the Seal id prefix
-// (see lib/crypto.ts `sealIdBytes`). The owner receives an `ArtifactCap`.
+// Backed by the `tessera::registry` Move module: each artifact is its OWN shared
+// object (`ArtifactRegistry`) whose object id IS the Seal id prefix (see
+// lib/crypto.ts `sealIdBytes`). The owner receives an `ArtifactCap`.
 //
 // The register-before-encrypt invariant: callers MUST `register(...)` first,
 // read the returned `artifactId` (the ArtifactRegistry object id) from the tx
 // effects, derive the sealId from it, THEN encrypt + store the blob. This module
-// returns that `artifactId` so lib/artifacts.ts (rewired in B2) can hold it.
+// returns that `artifactId` so lib/artifacts.ts can hold it.
 //
 // Adapted from sharegraph packages/core/src/chain.ts (SessionClient): the
 // `exec()` fail-closed unwrap of the v2 tagged-union result, locating created

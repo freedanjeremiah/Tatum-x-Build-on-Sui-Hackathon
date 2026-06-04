@@ -1,6 +1,6 @@
 // Runtime introspection — read-only.
-// Reports the SERVER-DECLARED isolation mode + CDR attestation config so the
-// UI can render honest disclosures BEFORE any compute job runs. No secrets,
+// Reports the SERVER-DECLARED isolation mode + Seal key-server attestation config
+// so the UI can render honest disclosures BEFORE any compute job runs. No secrets,
 // no signer state — just the declared posture of the running process.
 
 export const runtime = "nodejs";
@@ -15,7 +15,7 @@ export async function GET(): Promise<Response> {
   const cfg = getAttestationConfig();
   const body = {
     workerIsolation: workerIsolation(),
-    cdr: {
+    keyServers: {
       attestationEnabled: !!cfg,
       enforced: attestationEnforced(cfg),
       expectedMrEnclave: cfg?.expectedMrEnclave ?? null,

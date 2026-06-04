@@ -3,8 +3,8 @@ import { createHash } from "node:crypto";
 import { RUN_INTEGRATION } from "./itest";
 import { buildIpaMetadata } from "./metadata";
 
-// buildIpaMetadata pins to real Pinata (needs PINATA_JWT + network), so these
-// hit live storage and are gated. They skip by default.
+// buildIpaMetadata writes to live Walrus storage (needs a signer + network), so
+// these are gated and skip by default.
 const itInt = test.skipIf(!RUN_INTEGRATION);
 
 const owner = "0x000000000000000000000000000000000000dEaD" as const;
@@ -33,7 +33,7 @@ itInt("ipMetadataHash recomputes from the pinned content (deterministic hash)", 
     modality: "dataset" as const,
   };
   const m = await buildIpaMetadata(args);
-  expect(m.ipMetadataURI.startsWith("ipfs://")).toBe(true);
+  expect(m.ipMetadataURI.startsWith("walrus-meta://")).toBe(true);
   // Re-hashing the (deterministic) ipMetadata object yields the same hash.
   const recomputed =
     "0x" + createHash("sha256").update(m.__ipMetadataJSON!).digest("hex");

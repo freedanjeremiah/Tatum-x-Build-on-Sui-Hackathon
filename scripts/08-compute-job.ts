@@ -1,14 +1,15 @@
-// Addendum §C6 — Confidential compute job (REAL worker).
+// Confidential compute job (REAL worker).
 //
 // Proves the access + allowlist invariants against the real chain:
-//   1. Upload a compute-enabled dataset to CDR (real vault, real IP registration),
+//   1. Upload a compute-enabled dataset (Seal-encrypted blob on Walrus + on-chain
+//      registration),
 //   2. Drive runComputeJob from worker/compute-worker with an ALLOWLISTED algo:
 //      - worker checks algoHash ∈ allowedAlgoHashes BEFORE any decryption,
-//      - mints a real compute license token, presents it to CDR for key delivery,
+//      - mints a real compute license, presents it so Seal delivers the key,
 //      - runs the hash-pinned algo and registers the result as a derivative,
 //      - returns ONLY metrics — never raw rows.
 //   3. Drive a second job with an OFF-allowlist algo: the real worker rejects it
-//      and provably never calls CDR decrypt (decryptCalled: false).
+//      and provably never calls Seal decrypt (decryptCalled: false).
 //
 // Compute helpers live in lib/compute; the dataset upload uses lib/artifacts.uploadCompute.
 // The confidential-compute worker is worker/compute-worker.ts.
@@ -35,7 +36,7 @@ async function main() {
       title: "Confidential Numeric Rows",
       description: "Compute-enabled dataset; raw rows never leave the enclave.",
       tags: ["dataset", "compute"],
-      creators: [{ name: "OpenVault Demo", address: owner, contributionPercent: 100 }],
+      creators: [{ name: "Tessera Demo", address: owner, contributionPercent: 100 }],
       modality: "dataset",
     },
     // Explicit terms — no silent default.
@@ -51,7 +52,7 @@ async function main() {
   console.log("vaultUuid:", dataset.vaultUuid);
   console.log("computeLicenseTermsId:", dataset.computeLicenseTermsId);
 
-  // Job 1: allowlisted algo → real worker decrypts via CDR, runs mean-aggregate,
+  // Job 1: allowlisted algo → real worker decrypts via Seal, runs mean-aggregate,
   // registers the result as a derivative, returns metrics only.
   console.log("\n--- Job 1: allowlisted algo (sha256:mean-aggregate) ---");
   const r1 = await runComputeJob({
@@ -74,7 +75,7 @@ async function main() {
   }
   console.log("✓ job1 done — only metrics returned, raw rows never exposed");
 
-  // Job 2: off-allowlist algo → real worker rejects before any CDR decryption.
+  // Job 2: off-allowlist algo → real worker rejects before any Seal decryption.
   console.log("\n--- Job 2: off-allowlist algo (sha256:dump-all-rows) ---");
   const r2 = await runComputeJob({
     datasetIpId,

@@ -1,4 +1,4 @@
-// Tessera Sui client factory. Replaces the old Story/CDR/viem clients.
+// Tessera Sui client factory.
 //
 // Server-side: SuiClient routed through the Tatum gateway (with x-api-key header)
 // and an Ed25519Keypair signer loaded from WALLET_PRIVATE_KEY / MASTER_SUI_PRIVKEY.

@@ -1,13 +1,12 @@
-// IPA + NFT metadata builder. Constructs metadata JSON per the Story IPA
-// metadata standard and returns the four fields the registration flow needs.
+// Artifact + NFT metadata builder. Constructs the model-card metadata JSON and
+// returns the four fields the registration flow needs.
 //
-// SUI MIGRATION (B2): the old Pinata/IPFS pinJSON write path is gone (lib/storage
-// pinJSON now throws — it is a write shim). Public artifact metadata is small,
-// non-secret JSON; we content-address it LOCALLY (sha-256) and return a
-// deterministic `walrus-meta://<sha256>` URI plus the matching hash. No network
-// write, no fake pin, no secrets. Durable off-chain metadata persistence (e.g. a
-// dedicated public Walrus blob or an off-chain store with a Signer) is deferred to
-// a later phase; the descriptor still carries a stable, verifiable content hash.
+// Public artifact metadata is small, non-secret JSON; we content-address it
+// LOCALLY (sha-256) and return a deterministic `walrus-meta://<sha256>` URI plus
+// the matching hash. No network write, no secrets. Durable off-chain metadata
+// persistence (a dedicated public Walrus blob, or an off-chain store with a
+// Signer) is future work; the descriptor still carries a stable, verifiable
+// content hash today.
 //
 // Provenance rule: when `externalSource` is set (an OSS parent), the metadata
 // records the external source and asserts NO commercial terms (provenance only).
@@ -46,7 +45,7 @@ export interface IpaMetadataResult {
 }
 
 /**
- * Build + pin IPA and NFT metadata, returning the registerIpAsset fields.
+ * Build the artifact + NFT metadata, returning the fields the registration needs.
  */
 export async function buildIpaMetadata(
   args: BuildIpaMetadataArgs
@@ -55,7 +54,7 @@ export async function buildIpaMetadata(
   // Provenance parents never assert commercial terms.
   const commercial = externalSource ? false : !!args.commercial;
 
-  // IPA metadata per Story's standard (https://docs.story.foundation).
+  // Model-card metadata for the artifact.
   const ipMetadata: Record<string, unknown> = {
     title,
     description,

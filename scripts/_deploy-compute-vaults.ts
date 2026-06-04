@@ -1,9 +1,7 @@
-// Seed the compute-tier artifacts' royalty vaults (Sui-native). On Story this
-// minted a self-license to DEPLOY a royalty vault contract for each compute IP.
-// On Sui every artifact already owns its vault (`revenue: Balance<SUI>`), so there
-// is nothing to deploy — instead we pay a small royalty into each compute
-// artifact so its vault is demonstrably accruing (and claimable). No
-// re-registration.
+// Seed the compute-tier artifacts' royalty vaults (Sui-native). Every artifact
+// already owns its vault (`revenue: Balance<SUI>`), so there is nothing to deploy
+// — instead we pay a small royalty into each compute artifact so its vault is
+// demonstrably accruing (and claimable). No re-registration.
 //
 // Run: pnpm real scripts/_deploy-compute-vaults.ts
 

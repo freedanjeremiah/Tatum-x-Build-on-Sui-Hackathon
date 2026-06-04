@@ -189,7 +189,7 @@ function Hero() {
             boxShadow: "0 0 0 4px rgba(232, 71, 43, 0.18)",
           }}
         />
-        <span className="eyebrow">STORY · CONFIDENTIAL DATA REGISTRY</span>
+        <span className="eyebrow">SUI · CONFIDENTIAL DATA REGISTRY</span>
       </div>
       <h1
         className="h1 anim-up"
@@ -213,9 +213,9 @@ function Hero() {
           animationDelay: "110ms",
         }}
       >
-        Datasets and models registered as Story IP Assets, threshold-encrypted on
-        IPFS. The license token <em>is</em> the decryption credential — there is
-        no auth server.
+        Datasets and models registered as Sui Move objects, threshold-encrypted
+        with Seal and stored on Walrus. The license <em>is</em> the decryption
+        credential — there is no auth server.
       </p>
 
       <div

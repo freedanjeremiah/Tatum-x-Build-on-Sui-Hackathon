@@ -9,29 +9,28 @@ type PillarDef = {
 const PILLARS: PillarDef[] = [
   {
     icon: "vault",
-    title: "Story IP Assets",
-    body: "Every dataset or model is registered on Story Protocol (Aeneid) as an IP Asset with on-chain provenance and a registration transaction you can verify.",
+    title: "Sui Move objects",
+    body: "Every dataset or model is registered on Sui as its own Move object with on-chain provenance and a registration transaction you can verify.",
   },
   {
     icon: "shield",
-    title: "Threshold encryption via CDR",
-    body: "Payloads are sealed with the CDR threshold scheme. No single party holds the key — decryption requires the on-chain read condition to be satisfied.",
+    title: "Threshold encryption via Seal",
+    body: "Payloads are sealed with Seal's threshold scheme. No single party holds the key — decryption requires the on-chain seal_approve policy to be satisfied.",
   },
   {
     icon: "layers",
-    title: "IPFS storage",
-    body: "Encrypted bytes and metadata are pinned to IPFS and addressed by CID, so the artifact is content-addressed and portable rather than locked in one host.",
+    title: "Walrus storage",
+    body: "Encrypted bytes and metadata are stored on Walrus and addressed by blob id, so the artifact is content-addressed and portable rather than locked in one host.",
   },
   {
     icon: "key",
     title: "On-chain access tiers",
-    body: "Public, gated, private, group, and compute tiers map to read conditions enforced by contract. Gated access is unlocked by minting a license token; compute-tier vaults are computable but never downloadable.",
+    body: "Public, gated, private, group, and compute tiers map to seal_approve branches enforced on-chain. Gated access is unlocked by buying a license; compute-tier blobs are computable but never downloadable.",
   },
 ];
 
-/** "How it works" explainer — the unique content folded in from the old
- *  /about page. Self-contained, no props. Rendered on the landing page below
- *  the artifact grid. */
+/** "How it works" explainer. Self-contained, no props. Rendered on the landing
+ *  page below the artifact grid. */
 export default function HowItWorks() {
   return (
     <section className="anim-up" style={{ marginTop: 8, marginBottom: 8 }}>

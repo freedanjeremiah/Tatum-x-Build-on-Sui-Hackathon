@@ -33,7 +33,7 @@ test("parseRows: JSON shapes still parse", () => {
 const DATASET = "0xcmp0000000000000000000000000000000000005" as `0x${string}`;
 const ALLOWED = ["sha256:mean-aggregate", "sha256:logistic-regression"];
 
-// PURE: the allowlist gate returns BEFORE any client/CDR use, so this needs no
+// PURE: the allowlist gate returns BEFORE any client/Seal use, so this needs no
 // clients and no chain. Off-allowlist (or unregistered) algo must be rejected
 // with decryptCalled provably false.
 test("off-allowlist job → rejected, decrypt NEVER invoked", async () => {
@@ -50,8 +50,8 @@ test("off-allowlist job → rejected, decrypt NEVER invoked", async () => {
   expect(result.resultIpId).toBeUndefined();
 });
 
-// A real compute dataset artifact (must exist on-chain with a CDR vault) for the
-// integration runs. Supply via env so the worker can resolve vaultUuid/terms.
+// A real compute dataset artifact (must exist on-chain with a Seal-gated blob) for
+// the integration runs. Supply via env so the worker can resolve the blob/terms.
 function realDataset(): Artifact {
   return {
     ipId: (process.env.COMPUTE_DATASET_IPID ?? DATASET) as `0x${string}`,
@@ -60,7 +60,7 @@ function realDataset(): Artifact {
     title: "Integration compute dataset",
     description: "Live dataset for confidential-compute integration tests.",
     tags: ["compute", "integration"],
-    ipMetadataURI: process.env.COMPUTE_DATASET_META ?? "ipfs://bafyComputeMeta",
+    ipMetadataURI: process.env.COMPUTE_DATASET_META ?? "walrus://bafyComputeMeta",
     vaultUuid: Number(process.env.COMPUTE_DATASET_VAULT ?? "0"),
     cid: process.env.COMPUTE_DATASET_CID ?? "bafyCompute",
     licenseTermsId: process.env.COMPUTE_DATASET_TERMS ?? "1",

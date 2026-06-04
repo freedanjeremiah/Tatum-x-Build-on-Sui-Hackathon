@@ -1,13 +1,11 @@
-// Group helpers — Sui-native (replaces the Story Group module / even-split pool).
+// Group helpers — Sui-native.
 //
 // On Sui a group is a shared `Group` object (tessera::registry) that records its
 // member artifact ids. Each member artifact also carries `group_id` (so the Seal
-// `group` tier keeps gating via the member's own `license_holders`). There is no
-// EVM read-condition encoding and no on-chain even-split pool — group revenue is
-// realized by claiming each member artifact's own on-chain royalty vault.
+// `group` tier keeps gating via the member's own `license_holders`). Group revenue
+// is realized by claiming each member artifact's own on-chain royalty vault.
 //
-// No viem, no @story-protocol, no removed EVM constants. Never logs secrets.
-// Fails closed: a failed/aborted tx throws (no silent fallback).
+// Never logs secrets. Fails closed: a failed/aborted tx throws (no silent fallback).
 
 import { RegistryClient } from "./registry";
 import { claimRevenue, getClaimable, NoRoyaltyVaultError } from "./royalty";

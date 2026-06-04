@@ -1,6 +1,6 @@
-// Tessera Seal threshold-encryption layer. Migration task A4.
+// Tessera Seal threshold-encryption layer.
 //
-// Design invariants (from MIGRATION_PLAN.md):
+// Design invariants:
 //   - Encrypt-before-publish: plaintext is encrypted here; only ciphertext bytes
 //     reach lib/storage.ts (Walrus). Never log secrets or keys.
 //   - Fail closed on NoAccessError: decrypt() throws immediately on access denial;
@@ -16,11 +16,9 @@
 //   `id`       — the 64-byte sealIdBytes for the artifact+tier being decrypted.
 //   `registry` — the shared ArtifactRegistry object that holds per-artifact policies.
 //
-// Task A5 (Move contract) MUST expose this entry with exactly this argument order.
-// Task B1 (registry adapter) is responsible for constructing and signing the
-// seal_approve tx kind, calling buildSealApproveTx() from this module.
-//
-// Adapted from sharegraph packages/core/src/crypto.ts. Do NOT import from sharegraph.
+// The Move contract exposes this entry with exactly this argument order. The
+// registry adapter (lib/registry.ts) constructs and signs the seal_approve tx
+// kind, calling buildSealApproveTx() from this module.
 
 import { SealClient, SessionKey, NoAccessError, EncryptedObject } from '@mysten/seal';
 import { blake2b } from '@noble/hashes/blake2b';
@@ -44,7 +42,7 @@ export { SessionKey, NoAccessError, EncryptedObject };
 // ---------------------------------------------------------------------------
 // Tessera access tiers — each tier results in a distinct Seal identity so the
 // on-chain policy for "public" vs "gated-license" vs "compute" can be enforced
-// by separate seal_approve branches in the Move contract (A5).
+// by separate seal_approve branches in the Move contract.
 // ---------------------------------------------------------------------------
 
 export type ArtifactTier =
@@ -221,9 +219,9 @@ export function isNoAccess(e: unknown): boolean {
  *
  * Returns the BCS-encoded transaction-kind bytes to pass to `Crypto.decrypt`.
  *
- * NOTE: This helper lives here for convenience but the registry adapter (B1)
- * owns the call site. B1 should supply the correct `artifactObjectId`
- * (ArtifactRegistry shared object) and `sealId` derived via `sealIdBytes`.
+ * NOTE: This helper lives here for convenience but the registry adapter owns the
+ * call site. It supplies the correct `artifactObjectId` (ArtifactRegistry shared
+ * object) and `sealId` derived via `sealIdBytes`.
  */
 export async function buildSealApproveTx(
   artifactObjectId: string,
@@ -233,8 +231,7 @@ export async function buildSealApproveTx(
 ): Promise<Uint8Array> {
   const tx = new Transaction();
   tx.moveCall({
-    // ASSUMPTION (A5): module name is `registry`, function name is `seal_approve`.
-    // If A5 uses a different module/function name, update this target string.
+    // The Move module name is `registry` and the gate function is `seal_approve`.
     target: `${packageId}::registry::seal_approve`,
     arguments: [
       tx.pure.vector('u8', sealId),     // id: vector<u8>

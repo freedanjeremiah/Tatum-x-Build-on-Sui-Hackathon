@@ -1,8 +1,8 @@
-# OpenVault — Live Demo Script
+# Tessera — Live Demo Script
 
 **Total time: 75 seconds (slide 4 of the pitch).**
 
-This script drives the **production** build (`pnpm build && pnpm start`) with `WORKER_ISOLATION_MODE=enclave-sim` so the new TEE-SIM honest disclosure is visible on camera. The Playwright recording in `scripts/demo/record-demo.py` follows this same beat list.
+This script drives the **production** build (`pnpm build && pnpm start`) with `WORKER_ISOLATION_MODE=enclave-sim` so the TEE-SIM honest disclosure is visible on camera. The Playwright recording in `scripts/demo/record-demo.py` follows this same beat list.
 
 ---
 
@@ -10,7 +10,6 @@ This script drives the **production** build (`pnpm build && pnpm start`) with `W
 
 1. **Production server running.**
    ```bash
-   cd openvault
    rm -rf .next
    WORKER_ISOLATION_MODE=enclave-sim WORKER_SIM_KEY=demo-secret pnpm build
    WORKER_ISOLATION_MODE=enclave-sim WORKER_SIM_KEY=demo-secret pnpm start &
@@ -24,13 +23,13 @@ This script drives the **production** build (`pnpm build && pnpm start`) with `W
    pnpm real scripts/demo/fund-privy-wallet.ts 0xYOUR_PRIVY_ADDRESS 4
    ```
 
-4. **Backup video ready.** `/tmp/openvault_demo.mp4` is the recorded walkthrough. If anything dies on stage, switch to the MP4.
+4. **Backup video ready.** The recorded walkthrough is your fallback. If anything dies on stage, switch to the MP4.
 
 5. **Browser tabs already open:**
    - Tab 1: `http://localhost:3000/` (Browse — Compute filter pre-selected)
-   - Tab 2: `https://aeneid.explorer.story.foundation/` (block explorer, ready for TxLink clicks)
+   - Tab 2: `https://suiscan.xyz/testnet/` (Sui explorer, ready for TxLink clicks)
 
-6. **Network OK.** Test the on-chain tx flow once 5 minutes before stage. Aeneid testnet has occasional RPC lag.
+6. **Network OK.** Test the on-chain tx flow once 5 minutes before stage. The Sui testnet has occasional RPC lag; the Tatum gateway smooths most of it.
 
 ---
 
@@ -41,12 +40,12 @@ This script drives the **production** build (`pnpm build && pnpm start`) with `W
 **Click:** Compute filter chip.
 
 **Say (10 sec):**
-> "Every artifact here is a Story Protocol IP Asset on Aeneid. The 5 tiers — Public, Private, Gated, Group, Compute — are enforced by **on-chain read-condition contracts** we deployed. The compute filter shows datasets that are computable but never downloadable. Watch why that matters."
+> "Every artifact here is a Sui Move object. The 5 tiers — Public, Private, Gated, Group, Compute — are enforced by **one on-chain `seal_approve` Move policy**. The compute filter shows datasets that are computable but never downloadable. Watch why that matters."
 
 **What the audience sees:**
-- The cream MECHATONE paper background, halftone grid
+- The cream paper background, halftone grid
 - 5 tier chips (with tier glyph + label, not just color)
-- 38 real artifacts indexed from Aeneid
+- Real artifacts indexed from Sui
 - Each card has a 3px tier rail on the left edge
 
 ### Beat 2 — Click into gated artifact (0:10–0:15)
@@ -56,16 +55,16 @@ This script drives the **production** build (`pnpm build && pnpm start`) with `W
 **Say (5 sec):**
 > "Gated tier. Hugging Face's basic version of paywalled models — but here the paywall **is the encryption**."
 
-### Beat 3 — Mint to unlock (0:15–0:35)
+### Beat 3 — Buy to unlock (0:15–0:35)
 
-**Click:** "Mint to unlock" button.
+**Click:** "Buy to unlock" button.
 
-**Wait ~22 seconds for the on-chain mint + CDR decrypt to complete.** Talk through it:
+**Wait ~22 seconds for the on-chain license purchase + Seal decrypt to complete.** Talk through it:
 
 **Say while waiting (20 sec):**
-> "The Privy embedded wallet just signed a `mintLicenseTokens` transaction. The fee — 1 WIP wei in this demo — got auto-wrapped from my native IP balance and routed to the royalty module. Now the CDR vault sees the license token in `accessAuxData`, the `LicenseReadCondition` contract returns true, and threshold-decryption happens *in the browser*.
+> "The Privy embedded wallet just signed a `buy_license` transaction. The price in SUI went straight to the owner, and my address was added to the artifact's `license_holders` set on-chain. Now Seal dry-runs `seal_approve`, sees I'm a holder, releases the key shares, and threshold-decryption happens *in the browser*.
 >
-> The server never touched the plaintext. The Hugging Face model card flow we all know — but the license token literally **is** the access key."
+> The server never touched the plaintext. The Hugging Face model card flow we all know — but the license literally **is** the access key."
 
 **What the audience sees:**
 - Wallet pill shows `0x4d29…6A` in the header
@@ -84,21 +83,21 @@ This script drives the **production** build (`pnpm build && pnpm start`) with `W
 **Wait ~25 seconds. Narrate the progress trail.**
 
 **Say while waiting (25 sec):**
-> "Watch the progress trail. The worker generates a structurally-valid SGX quote, verifies it against the configured expected measurements, then — and only then — calls CDR's gated download. The `ComputeWorkerReadCondition` contract checks that the caller is on the allowlisted operator list. A *consumer's* wallet would revert here. The worker's wallet passes. The bytes decrypt inside the worker process, the mean-aggregate algorithm runs, and a real derivative IP asset gets registered on-chain.
+> "Watch the progress trail. The worker generates a structurally-valid SGX quote, verifies it against the configured expected measurements, then — and only then — runs the Seal-gated decrypt. The `compute` branch of `seal_approve` checks the caller is on the artifact's `compute_workers` allowlist. A *consumer's* wallet would abort here. The worker's wallet passes. The bytes decrypt inside the worker process, the mean-aggregate algorithm runs, and a real derivative gets registered on-chain.
 >
 > Notice what we just returned: `{columnMeans_0: 3, n: 5}`. Aggregates only. No raw rows. The data physically never left the worker."
 
 **Point at the result panel:**
-> "Real `resultIpId`. Real `resultTx`. Click the IP TxLink and you'll see the derivative on Aeneid's block explorer with the correct parent pointer for royalty routing."
+> "Real `resultIpId`. Real `resultTx`. Click the TxLink and you'll see the derivative on the Sui explorer with the correct parent pointer for royalty routing."
 
 ### Beat 5 — Provenance + Royalty (1:05–1:15)
 
 **Navigate back to the gated artifact detail page.**
 
 **Point at the Provenance sidebar:**
-> "Every artifact view surfaces — without hiding behind a tooltip — the IP asset id, the register transaction, the license terms id, the vault uuid, the IPFS CID. The chain saw everything. We never hide it."
+> "Every artifact view surfaces — without hiding behind a tooltip — the registry object id, the register transaction, the license reference, the Walrus blob id. The chain saw everything. We never hide it."
 
-**Click the IP asset TxLink → opens the block explorer.**
+**Click the registry-object TxLink → opens the Sui explorer.**
 
 > "There. That's the chain's truth. The UI is honest about it."
 
@@ -111,7 +110,7 @@ This script drives the **production** build (`pnpm build && pnpm start`) with `W
 **Click "Raise dispute". Wait 22 sec.**
 
 **Say (5 sec while waiting):**
-> "Real `disputeId` on-chain. Bond auto-wrapped. The arbitration policy's reviewer gets 30 days. The target — me — can counter."
+> "A real dispute flag is set on-chain and a `Disputed` event is emitted. The arbitration reviewer gets 30 days. The target — me — can counter."
 
 **Click "Done", then "Counter dispute". Fill counter-evidence:** `Provenance clean.`
 
@@ -123,7 +122,7 @@ This script drives the **production** build (`pnpm build && pnpm start`) with `W
 **Don't navigate.** Leave the artifact detail page on screen with the In dispute · countered badge.
 
 **Say (5 sec, full eye contact with judges):**
-> "License token IS the access key. Compute happens in attested-or-honestly-not-attested isolation. Every transaction is on Aeneid. The Hugging Face flow, but the chain enforces what the platform used to."
+> "The license IS the access key. Compute happens in attested-or-honestly-not-attested isolation. Every transaction is on Sui. The Hugging Face flow, but the chain enforces what the platform used to."
 
 ---
 
@@ -131,12 +130,12 @@ This script drives the **production** build (`pnpm build && pnpm start`) with `W
 
 | Q | A |
 |---|---|
-| "Why CDR vs Lit Protocol / IPFS-encryption / Filecoin?" | CDR's threshold encryption + arbitrary read-condition contract is the *exact* shape we needed. The condition is a Solidity function — we just deployed four of them. |
+| "Why Seal vs Lit Protocol / client-side encryption / Filecoin?" | Seal's threshold IBE + an arbitrary on-chain `seal_approve` policy is the *exact* shape we needed. The condition is a Move function — we wrote one that covers all five tiers. |
 | "Is the worker really trusted?" | No, and we say so on every compute screen. Production needs attested SGX/TDX. The TEE-SIM mode proves the verification code path works; it does NOT claim hardware attestation. |
-| "What about decryption revocation?" | CDR cannot revoke. Rotate by re-encrypting. We disclose this in the footer on every page. |
-| "How does the group tier work?" | Our `GroupLicenseReadCondition` composes the audited `LicenseReadCondition` over each member IP. A consumer who holds a license on **any** member can unlock **every** member's vault. |
-| "Token economics?" | License mint fees + royalty cascade + compute fees. All on-chain. OpenVault takes nothing. |
-| "Is it production-ready?" | Backend: 12/13 integration tests PASS on real chain. UI: PRD-compliant per audit. TEE: simulated. CDR endpoint stability is the only external dependency we don't own. |
+| "What about decryption revocation?" | Seal cannot revoke a granted credential. Rotate by re-encrypting. We disclose this in the footer on every page. |
+| "How does the group tier work?" | The `group` branch of `seal_approve` admits the owner or any address in the artifact's `license_holders`. Today each member is gated per-artifact; a single-identity group unlock is future work. |
+| "Token economics?" | License fees + royalty cascade + compute fees. All on-chain in SUI. Tessera takes nothing. |
+| "Is it production-ready?" | Backend: integration tests pass on real Sui testnet. UI: PRD-compliant per audit. TEE: simulated. The browser write-signer is the one disclosed gap; server signing works today. |
 
 ---
 
@@ -144,14 +143,14 @@ This script drives the **production** build (`pnpm build && pnpm start`) with `W
 
 | If this dies on stage | Do this |
 |---|---|
-| Dev server not responding | Switch to `/tmp/openvault_demo.mp4` |
+| Dev server not responding | Switch to the backup MP4 |
 | Privy login expired | Switch to backup video |
-| Compute job revert | Already prepared — say *"sometimes the testnet RPC is slow — here's what success looks like"* + switch to backup |
-| TxLink broken | Show the screenshot at `/tmp/openvault_demo_step_05_run_compute_job.png` |
+| Compute job aborts | Already prepared — say *"sometimes the testnet RPC is slow — here's what success looks like"* + switch to backup |
+| TxLink broken | Show the per-step screenshot from the recording |
 | All of the above | Talk through Slide 3 (architecture). The honest-disclosure philosophy lands even without the demo. |
 
 ---
 
 ## Post-demo CTA (after Q&A)
 
-> "Code is on GitHub. The four read-condition contracts are verifiable on Aeneid right now. Full integration test suite at `scripts/diag/full-suite.ts` — `pnpm real` it yourself. The handoff doc lists every flow, every fix, every KNOWN ISSUE we found in core-sdk 1.4.4. We documented the bugs we hit so the next team building on Story + CDR doesn't lose a day to them."
+> "Code is on GitHub. The `seal_approve` Move policy is verifiable on Sui right now — `cd move && sui move test` runs the full access matrix. Full integration suite at `scripts/diag/full-suite.ts` — `pnpm real` it yourself. Every flow runs end-to-end on the live testnet."

@@ -13,7 +13,7 @@ const PrivyAuthProvider = dynamic(() => import("./PrivyAuthProvider"), {
  * Top-level auth context. Must wrap the ENTIRE app (header included) so the
  * header's wallet button can call usePrivy() — it has to be inside PrivyProvider.
  * WasmGate is applied separately (in layout) around <main> only, so the header
- * and nav stay visible while the CDR WASM runtime initializes.
+ * and nav stay visible while the secure client runtime initializes.
  */
 export default function Providers({ children }: { children: React.ReactNode }) {
   if (!PRIVY_APP_ID) {

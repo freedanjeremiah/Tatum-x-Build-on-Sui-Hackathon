@@ -1,16 +1,14 @@
-# OpenVault — Frontend PRD
+# Tessera — Frontend PRD
 
-> **Note (2026-06-03):** §3 (Design system) was rewritten for the **MECHATONE
-> reskin** — warm cream paper, navy + orange-red 2-ink palette, Oswald display
-> + DM Sans + JetBrains Mono + Noto Sans JP, halftone-dot background, offset
-> screenprint shadows. The previous dark "deep ink + emerald" aesthetic is
-> retired. §1, §2 (intent/voice) and §4+ (behaviour) are unchanged.
+> **Design system note:** §3 uses the **MECHATONE** aesthetic — warm cream paper,
+> navy + orange-red 2-ink palette, Oswald display + DM Sans + JetBrains Mono +
+> Noto Sans JP, halftone-dot background, offset screenprint shadows. §1, §2
+> (intent/voice) and §4+ (behaviour) describe current product behavior.
 
-A self-contained design brief for OpenVault's web frontend. Hand this document
-to Claude (or any designer) as the source of truth for what to build, how it
-should feel, and which screens/components exist today. The goal is design
-fidelity that matches the product thesis without inventing flows that the
-backend can't support.
+A self-contained design brief for Tessera's web frontend. Hand this document to a
+designer as the source of truth for what to build, how it should feel, and which
+screens/components exist today. The goal is design fidelity that matches the
+product thesis without inventing flows that the backend can't support.
 
 ---
 
@@ -19,12 +17,11 @@ backend can't support.
 > **A decentralized Hugging Face + Kaggle where access control is a property of
 > the data, not the platform.**
 
-- Datasets and ML models are registered as Story Protocol IP Assets on Aeneid
-  testnet (chain 1315).
-- Heavy bytes are threshold-encrypted on IPFS via CDR (Confidential Data
-  Registry).
-- The license token *is* the decryption credential — there is no auth server.
-- Tier (Public / Private / Gated / Group / Compute) is enforced on-chain.
+- Datasets and ML models are registered as Sui Move objects on Sui testnet.
+- Heavy bytes are threshold-encrypted with Seal and stored on Walrus.
+- The license *is* the decryption credential — there is no auth server.
+- Tier (Public / Private / Gated / Group / Compute) is enforced on-chain by a
+  Move `seal_approve` policy.
 
 If a design choice ever obscures any of those four lines, it is wrong.
 
@@ -161,9 +158,9 @@ out 720px down from the top (replaces the original engineering grid).
 - **Spinner** (`components/ui/Spinner.tsx`): 14px ring border with accent on
   top, `ov-spin`.
 - **VaultMark** (`components/ui/VaultMark.tsx`): brand glyph.
-- **TxLink** (`components/TxLink.tsx`): mono chip linking to
-  `aeneid.explorer.story.foundation/ipa/<ipId>` or
-  `aeneid.storyscan.io/tx/<hash>`. Always shows the suffix tag (`IPA` or `TX`).
+- **TxLink** (`components/TxLink.tsx`): mono chip linking to the Sui explorer
+  object page (`suiscan.xyz/testnet/object/<id>`) or tx page
+  (`suiscan.xyz/testnet/tx/<digest>`). Always shows the suffix tag (`OBJ` or `TX`).
 - **Step counter** (Upload wizard): circular numbered chip; turns into a check
   glyph when done.
 - **Spinner**: 14px ring border with accent on top, `ov-spin`.
@@ -186,21 +183,22 @@ out 720px down from the top (replaces the original engineering grid).
 (server-only)
 /api/index                 GET: list/filter artifacts. POST: self-index.
 /api/compute               POST: dispatch a confidential job to the worker.
-/api/pin, /api/pin-file    POST: relay public pinning to Pinata.
+/api/pin, /api/pin-file    POST: store public metadata/bytes on Walrus.
 ```
 
 Top nav (`Header.tsx`): Browse · Upload · Leaderboard, with active-link
 underline in `--ov-accent`. Right side shows network label
-(`AENEID TESTNET`, mono uppercase) and the WalletButton (Privy login).
+(`SUI TESTNET`, mono uppercase) and the WalletButton (Privy login).
 
 The page wrapper (`app/layout.tsx`) mounts:
 1. `<Providers>` (Privy auth provider + wallet bridge).
-2. `<WasmGate>` — blocks rendering of any CDR-touching screen until the WASM
-   confidential-decryption module has initialised. Shows a calm
+2. `<WasmGate>` — a readiness gate around confidential-decryption screens. The
+   Seal + Walrus client runtime is pure JS with no init step, so today it is a
+   transparent passthrough; if a future client needs a warm-up it shows a calm
    "Initializing secure runtime…" centered spinner.
 3. `<Header>` (sticky, blur background).
 4. The route's content inside `#ov-root`.
-5. A globally pinned `CdrLimitsNotice` disclosure strip at the bottom.
+5. A globally pinned `SealLimitsNotice` disclosure strip at the bottom.
 
 ---
 
@@ -216,7 +214,7 @@ The page wrapper (`app/layout.tsx`) mounts:
 Face's models page but technical.
 
 **Hero** (`app/page.tsx → Hero`).
-- Eyebrow chip: `STORY · CONFIDENTIAL DATA REGISTRY` (mono, accent dot).
+- Eyebrow chip: `SUI · CONFIDENTIAL DATA REGISTRY` (mono, accent dot).
 - H1: "**Access control as a** `<span>property of the data.</span>`" — the
   second line is `--ov-accent`. Tight tracking, 4xl on sm+.
 - Sub: one-liner about the thesis.
@@ -282,8 +280,8 @@ panel.
 3. **Tier.** A picker (`components/TierPicker.tsx`): 5 mini-cards (Public,
    Gated, Compute, Group, Private). Active card outlined + tinted in its tier
    color.
-   - When Gated or Compute is selected, a 2-up sub-grid reveals "Minting fee
-     (WIP)" and "Revenue share (%)".
+   - When Gated or Compute is selected, a 2-up sub-grid reveals "License price
+     (SUI)" and "Revenue share (%)".
    - When Compute is selected, an algorithm-allowlist chooser shows two
      allowed hashes (`sha256:mean-aggregate`, `sha256:logistic-regression`) as
      toggle buttons with a checkbox glyph. Below it: a one-liner reminding
@@ -359,25 +357,24 @@ panel + lineage graph. Now also: **royalties** for owners.
    children boxes joined by `DERIVATIVE →` arrows. Each box shows TierBadge +
    title + IP TxLink. Highlights "THIS" in the current artifact's box.
 
-3. **Royalty panel.** `components/RoyaltyPanel.tsx`. Shown when there is a
-   `licenseTermsId`.
+3. **Royalty panel.** `components/RoyaltyPanel.tsx`. Shown when the artifact has
+   a revenue vault.
    - Header "ROYALTIES" with a Refresh action on the right.
-   - Claimable revenue card: monospace 18px value (e.g. `0.0042 WIP`), with a
-     small line "N indexed derivative route to this IP."
+   - Claimable revenue card: monospace 18px value (e.g. `0.0042 SUI`), with a
+     small line "N indexed derivatives route to this artifact."
    - "Claim revenue (owner)" CTA (filled accent). Disabled when no indexed
      derivatives exist.
-   - Divider, then "Pay royalties to this IP" sub-form: amount input + WIP
-     label + "Pay royalty" outlined button. Footnote: "Auto-wraps native IP →
-     WIP if needed."
+   - Divider, then "Pay royalties to this artifact" sub-form: amount input + SUI
+     label + "Pay royalty" outlined button. Footnote: "Paid in native SUI."
    - After a tx: a green "✓ Tx confirmed" strip with a TxLink.
 
 **Sidebar (right, fixed 280px).** PROVENANCE card with rows:
-- IP asset → TxLink (ipa)
+- Registry object → TxLink (obj)
 - Created → TxLink (tx)
-- License terms (mono id, e.g. `2553`)
+- License reference (mono id)
 - Compute terms (when present)
-- Parent IP → TxLink (ipa)
-- Group → TxLink (ipa)
+- Parent artifact → TxLink (obj)
+- Group → TxLink (obj)
 - OSS source → external link (truncated, accent color)
 
 **Report dialog.** `components/ReportDialog.tsx` opens as a centered modal
@@ -386,10 +383,9 @@ panel + lineage graph. Now also: **royalties** for owners.
 - Evidence textarea.
 - Evidence CID strip (mono, auto-generated fresh per open via
   `freshEvidenceCidBrowser`).
-- Bond disclosure: "A bond in WIP is required to raise a dispute (read
-  on-chain from the arbitration policy at submit time, auto-wrapped from
-  native IP). It is returned if your report is upheld and forfeited if it is
-  rejected."
+- Disclosure: "Raising a dispute sets an on-chain flag and emits a `Disputed`
+  event against the target artifact; arbitration (slashing, refunds) is handled
+  off-chain by a reviewer. There is no on-chain bond."
 - Cancel (outlined) and "Raise dispute" (filled `--tier-gated`).
 - Success: replaces the form with "Dispute #N raised" strip + TxLink + Done.
 
@@ -457,8 +453,8 @@ disclosure is part of the brand.
 
 **Purpose.** Show a group artifact, its member IPs, and (eventually) a single
 group-license subscribe action. The current implementation is honest about
-the open spec item: one group license unlocking every member's vault is not
-yet confirmed in CDR, so members are still gated per-IP.
+the open item: a single group license unlocking every member's blob is future
+work, so members are still gated per-artifact.
 
 **Component.** `app/group/[groupId]/page.tsx`.
 
@@ -474,8 +470,8 @@ treat it as the final shape of the action even while the contract path is
 not wired.
 
 **Open-item disclosure.** A `--tier-gated` strip at the bottom of the access
-panel: "SPEC §8.7 — group license → member-vault unlock is unconfirmed in
-CDR; per-IP gating fallback applied."
+panel: "Group license → member-blob unlock is future work; per-artifact gating
+applies today."
 
 **Empty / 404.** When the group id doesn't resolve: a centered "No group
 with that ID" zone + the mono group id + a Back to browse button.
@@ -536,8 +532,8 @@ panel of three bulleted disclosures with their relevant spec references.
 | `Header` | Sticky nav + wallet entry + network label | global |
 | `WalletButton` / `WalletButtonPrivy` | Privy connect + post-login chip | header |
 | `PrivyAuthProvider` / `Providers` | Privy context + wallet bridge | layout |
-| `WasmGate` | Blocks CDR-touching screens until WASM ready | layout |
-| `WalletBridge` | Surfaces the active EIP-1193 provider to `lib/useClients` | layout |
+| `WasmGate` | Readiness gate around decryption screens (passthrough today) | layout |
+| `WalletBridge` | Surfaces the active wallet provider to `lib/useClients` | layout |
 | `ModelCard` + `TierBadge` | Browse card + reusable tier pill | Browse, search |
 | `TierPicker` | 5-up tier chooser cards | Upload |
 | `AlgoAllowlist` | Read-only display of allowed algorithms | Compute detail |
@@ -585,25 +581,25 @@ visible to the user at the exact moment they matter.
 2. **No download for compute artifacts.** The compute card surfaces
    "Computable · not downloadable" in the tier color. The artifact detail
    page shows the same. The wizard explains it during tier pick.
-3. **Decryption is irrevocable.** The `CdrLimitsNotice` surfaces "CDR has no
+3. **Decryption is irrevocable.** The `SealLimitsNotice` surfaces "Seal has no
    decryption revocation" — rotate by re-encrypting.
-4. **Group license → member unlock is unconfirmed.** Group page shows the
-   spec disclosure prominently.
-5. **Provenance is always shown.** Every artifact view shows the real ipId +
-   real register tx hash via `TxLink`. Off-chain claims must visually defer
-   to on-chain evidence.
+4. **Group license → member unlock is future work.** Group page shows the
+   disclosure prominently.
+5. **Provenance is always shown.** Every artifact view shows the real registry
+   object id + real register tx digest via `TxLink`. Off-chain claims must
+   visually defer to on-chain evidence.
 
 ---
 
 ## 9. Networks, links, identifiers (visual treatment)
 
-- Network label `AENEID TESTNET` lives only in the header right side — mono,
+- Network label `SUI TESTNET` lives only in the header right side — mono,
   uppercase, faint. The page itself never repeats it in big type.
-- `ipId` truncation in chips: `0xAAAA…BBBB` (4-on-each-side). Full id is
-  available via the linked explorer page.
-- `tx hash` truncation: same pattern, with `TX` suffix tag.
-- License terms id: render as `2553` in mono, optionally prefixed with `#`.
-- Vault UUID: `5546` in mono, prefixed with `uuid:` when needed.
+- `ipId` (registry object id) truncation in chips: `0xAAAA…BBBB`
+  (4-on-each-side). Full id is available via the linked explorer page.
+- `tx digest` truncation: same pattern, with `TX` suffix tag.
+- License reference: render in mono, optionally prefixed with `#`.
+- Vault handle: render in mono, prefixed with `uuid:` when needed.
 
 ---
 
@@ -619,10 +615,10 @@ visible to the user at the exact moment they matter.
 
 ## 11. Things explicitly out of scope for the design
 
-- Mainnet UX (this is testnet only — explorer links go to Aeneid).
-- Hiding metadata; CIDs / vault uuids / license terms ids are public by
+- Mainnet UX (this is testnet only — explorer links go to the Sui testnet explorer).
+- Hiding metadata; blob ids / object ids / license references are public by
   design.
-- Revoking decryption; the spec is clear that rotation is the only path.
+- Revoking decryption; rotation by re-encrypting is the only path.
 - Building competing tier color schemes; `lib/tiers.ts` is the source.
 - A full mobile redesign (responsive is required; mobile-first is not).
 

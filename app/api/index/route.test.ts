@@ -1,9 +1,9 @@
 import { test, expect } from "vitest";
 
 // Isolate the route's datastore BEFORE importing it — the route lazily opens
-// `process.env.OPENVAULT_DB_PATH` on first request, so an in-memory DB here means
-// these tests never pollute the real index (indexer/openvault.db).
-process.env.OPENVAULT_DB_PATH = ":memory:";
+// `process.env.TESSERA_DB_PATH` on first request, so an in-memory DB here means
+// these tests never pollute the real index (indexer/tessera.db).
+process.env.TESSERA_DB_PATH = ":memory:";
 
 const { POST, GET } = await import("./route");
 
@@ -15,7 +15,7 @@ test("POST accepts a valid owner and GET filters by it", async () => {
   const body = {
     ipId: "0xa910000000000000000000000000000000000001",
     tier: "public", modality: "dataset", title: "API Owned",
-    description: "d", tags: ["api"], ipMetadataURI: "ipfs://m",
+    description: "d", tags: ["api"], ipMetadataURI: "walrus://m",
     createdTx: "0xabcdef01",
     owner: "0xCcCc000000000000000000000000000000000003",
   };
@@ -35,7 +35,7 @@ test("POST rejects a non-hex owner", async () => {
     body: JSON.stringify({
       ipId: "0xa920000000000000000000000000000000000002",
       tier: "public", modality: "dataset", title: "Bad", description: "d",
-      tags: [], ipMetadataURI: "ipfs://m", createdTx: "0xabcdef02", owner: "not-hex",
+      tags: [], ipMetadataURI: "walrus://m", createdTx: "0xabcdef02", owner: "not-hex",
     }),
   }));
   expect(res.status).toBe(400);

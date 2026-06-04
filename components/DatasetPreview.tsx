@@ -1,23 +1,24 @@
 "use client";
 
-// Public-artifact inline preview. For the public tier with a CID we fetch the
-// payload from the IPFS gateway and render an honest, bounded preview (≤20 rows
-// for tabular/JSON, a clamped text excerpt, or an image). For any encrypted tier
-// — or a missing CID — we render the locked state and link to the License tab.
-// Never fabricates a preview: on fetch failure we show a real error panel.
+// Public-artifact inline preview. For the public tier with a blob id we fetch the
+// payload from the Walrus aggregator and render an honest, bounded preview (≤20
+// rows for tabular/JSON, a clamped text excerpt, or an image). For any encrypted
+// tier — or a missing blob id — we render the locked state and link to the License
+// tab. Never fabricates a preview: on fetch failure we show a real error panel.
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { WALRUS_AGGREGATOR } from "@/lib/constants";
 import DisclosureStrip from "./ui/DisclosureStrip";
 import Spinner from "./ui/Spinner";
 
-// Same IPFS gateway the public download path uses (see DownloadButton).
-const GATEWAY = "https://gateway.pinata.cloud/ipfs/";
+// Same Walrus aggregator the public download path uses (see DownloadButton).
+const GATEWAY = `${WALRUS_AGGREGATOR.replace(/\/+$/, "")}/v1/blobs/`;
 const MAX_ROWS = 20;
 const MAX_TEXT = 2048;
 
 function cidHash(cid: string): string {
-  return cid.replace(/^ipfs:\/\//, "");
+  return cid.replace(/^walrus:\/\//, "");
 }
 
 type Kind = "rows" | "text" | "image" | "none";
@@ -188,7 +189,7 @@ export default function DatasetPreview({
           fontSize: 13,
         }}
       >
-        <Spinner /> Loading preview from IPFS…
+        <Spinner /> Loading preview from Walrus…
       </div>
     );
   }

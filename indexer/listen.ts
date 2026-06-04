@@ -5,7 +5,7 @@
 // touches decryption keys, NEVER sees plaintext, NEVER gates access. The on-chain
 // `seal_approve` policy is the only real gate.
 //
-// Replaces the old viem EVM log subscription. We poll `SuiClient.queryEvents`
+// We poll `SuiClient.queryEvents`
 // filtered to the registry module, cursor-paginate from the oldest unseen event,
 // upsert into the read model, and persist the paging cursor so a restart resumes
 // where it left off. Public RPC has no long-lived websocket subscription here, so

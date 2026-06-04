@@ -1,8 +1,7 @@
 // Real-connectivity probe (Sui-native) — no gas required.
-// Proves: Pinata pinning (JWT, public metadata only), Sui RPC liveness via the
-// Tatum gateway (chain identifier + reference gas price), and the signer's SUI
-// balance (funded check). Adapted from sharegraph's keystore `ensureFunded`
-// balance read (apps/mcp/src/keystore.ts) — uses client.core.getBalance.
+// Proves: the Walrus storage helper is reachable (public metadata path), Sui RPC
+// liveness via the Tatum gateway (chain identifier + reference gas price), and the
+// signer's SUI balance (funded check) via client.core.getBalance.
 import { config } from "dotenv";
 import { resolve } from "node:path";
 config({ path: resolve(process.cwd(), ".env.local") });
@@ -14,20 +13,18 @@ import { TATUM_SUI_JSONRPC, TESSERA_PACKAGE_ID } from "../lib/constants";
 async function main() {
   const pk = process.env.WALLET_PRIVATE_KEY ?? process.env.MASTER_SUI_PRIVKEY;
   console.log(
-    "PINATA_JWT present:",
-    !!process.env.PINATA_JWT,
     "SUI key present:",
     !!pk,
     "TATUM gateway:",
     TATUM_SUI_JSONRPC,
   );
 
-  // 1) Pinata pin (real, JWT only) — public metadata pinning still used by uploads.
+  // 1) Walrus storage helper (public metadata path).
   try {
     const pinned = await pinJSON({ probe: "tessera", t: "real-connectivity" });
-    console.log("✓ PINATA pinJSON ->", pinned.uri);
+    console.log("✓ WALRUS pinJSON ->", pinned.uri);
   } catch (e) {
-    console.log("✗ PINATA pinJSON failed:", (e as Error).message);
+    console.log("✗ WALRUS pinJSON failed:", (e as Error).message);
   }
 
   if (!pk) {

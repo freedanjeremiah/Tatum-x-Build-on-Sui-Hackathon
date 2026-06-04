@@ -6,23 +6,23 @@ import Icon from "./ui/Icon";
 const LIMITS: { t: string; d: string; ref: string }[] = [
   {
     t: "No decryption revocation",
-    d: "CDR cannot revoke a decryption credential once minted. Rotate access by re-encrypting to a new vault.",
-    ref: "SPEC §4.2",
+    d: "Seal cannot revoke a decryption credential once granted. Rotate access by re-encrypting under a new identity.",
+    ref: "Confidentiality",
   },
   {
     t: "Compute runs on a plain server",
     d: "The demo worker is operator-trusted — plaintext is visible in memory. Production would attest an SGX/TDX enclave.",
-    ref: "SPEC §6.1",
+    ref: "Compute",
   },
   {
     t: "Group → member unlock unconfirmed",
-    d: "One group license unlocking every member vault is not yet confirmed in CDR. Per-IP gating fallback applies today.",
-    ref: "SPEC §8.7",
+    d: "One group license unlocking every member artifact is gated per-artifact today; a single-identity group unlock is future work.",
+    ref: "Grouping",
   },
 ];
 
-/** Collapsible, persistent spec-disclosure footer. Lives in the layout. */
-export default function CdrLimitsNotice() {
+/** Collapsible, persistent disclosure footer. Lives in the layout. */
+export default function SealLimitsNotice() {
   const [open, setOpen] = useState(false);
 
   return (

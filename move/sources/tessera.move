@@ -1,12 +1,11 @@
-/// Tessera registry — the on-chain IP record + Seal access gate for the Tessera
-/// decentralized data/model marketplace (migrated from EVM Solidity
-/// read-conditions to Sui Move + Seal).
+/// Tessera registry — the on-chain artifact record + Seal access gate for the
+/// Tessera decentralized data/model marketplace.
 ///
 /// Each artifact is its OWN shared object of type `ArtifactRegistry` (one shared
 /// object per artifact). `seal_approve` is dry-run by Seal key servers with the
 /// SessionKey's address as the tx sender; an ABORT means DENY (fail closed).
 ///
-/// Seal identity contract (set by task A4, `lib/crypto.ts`):
+/// Seal identity contract (matched by `lib/crypto.ts`):
 ///   sealId (64 bytes) = artifactObjectId(32 bytes) ++ blake2b256(utf8(tier))(32 bytes)
 /// A4's `buildSealApproveTx` calls:
 ///   ${PACKAGE}::registry::seal_approve(id: vector<u8>, registry: &ArtifactRegistry)
@@ -159,7 +158,7 @@ public struct GroupMemberAdded has copy, drop {
 public struct Disputed has copy, drop {
     artifact: ID,
     reporter: address,
-    /// IPFS/Walrus CID (or any opaque evidence pointer) as UTF-8 bytes.
+    /// Walrus blob id (or any opaque evidence pointer) as UTF-8 bytes.
     evidence: vector<u8>,
     /// running dispute count after this report.
     count: u64,

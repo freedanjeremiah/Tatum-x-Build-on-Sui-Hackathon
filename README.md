@@ -139,7 +139,7 @@ The `real` family preloads `.env.local` via `node --env-file`.
 ├─ indexer/        SQLite read-model over Sui Move events (cache only — never keys or plaintext)
 ├─ scripts/        flow scripts (00..09), diagnostics (diag/), seed corpus (sample/)
 ├─ e2e/            Playwright verification harness (own package.json)
-└─ docs/           design specs, the migration plan, pitch, run logs
+└─ docs/           design specs, pitch, demo script
 ```
 
 ### How the layers fit
@@ -174,4 +174,5 @@ decryption revocation beyond forward-only (rotate by re-encrypting) · a product
 full per-wallet license enumeration · the attested-enclave compute deployment (designed for, simulated
 here) · the Privy→Sui browser write-signer (server signing works today).
 
-> See `docs/MIGRATION_PLAN.md` for the full Story/CDR/IPFS → Sui/Walrus/Seal/Tatum mapping.
+Tessera is built natively on Sui, Walrus, Seal, and Tatum — every layer chosen for the job it
+alone can do.

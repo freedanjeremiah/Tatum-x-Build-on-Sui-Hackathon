@@ -55,7 +55,7 @@ export default function DownloadButton({ artifact }: DownloadButtonProps) {
     setPhase("decrypting");
     try {
       // Public artifacts: the descriptor's `cid` is the Walrus blobId. Fetch the
-      // blob bytes straight from the Walrus aggregator (no IPFS gateway).
+      // blob bytes straight from the Walrus aggregator.
       const blobId = artifact.cid ?? "";
       if (!blobId) throw new Error("This artifact has no Walrus blobId to download.");
       const base = WALRUS_AGGREGATOR.replace(/\/+$/, "");

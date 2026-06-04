@@ -1,9 +1,9 @@
 // Shared SUI ↔ MIST formatting helpers (9 decimals).
 //
-// On Sui all on-chain amounts are bigint MIST (1 SUI = 1e9 MIST). The migrated
-// lib APIs (royalty/licensing) take and return bigint MIST directly — there is
-// no viem parseEther/formatEther. These two helpers are the ONE place the UI
-// converts between a human "1.25" SUI string and bigint MIST. No external deps.
+// On Sui all on-chain amounts are bigint MIST (1 SUI = 1e9 MIST). The lib APIs
+// (royalty/licensing) take and return bigint MIST directly. These two helpers are
+// the ONE place the UI converts between a human "1.25" SUI string and bigint MIST.
+// No external deps.
 
 /** Number of decimal places in 1 SUI. */
 export const SUI_DECIMALS = 9;

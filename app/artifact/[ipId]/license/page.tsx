@@ -1,7 +1,7 @@
 // License & Access tab. Index-only (no keys / no plaintext). Shows the tier's
-// access summary, the on-chain license-terms references (with Story explorer
-// links), a PIL summary line, and — for the gated tier — the same mint-to-unlock
-// flow the Card tab uses (DownloadButton).
+// access summary, the on-chain license references (with Sui explorer links), a
+// license summary line, and — for the gated tier — the same mint-to-unlock flow
+// the Card tab uses (DownloadButton).
 
 export const runtime = "nodejs";
 
@@ -12,14 +12,15 @@ import { tierMeta } from "@/lib/tiers";
 import { TierGlyph } from "@/components/ui/TierBadge";
 import DisclosureStrip from "@/components/ui/DisclosureStrip";
 import DownloadButton from "@/components/DownloadButton";
+import { SUI_EXPLORER_OBJECT } from "@/lib/constants";
 
-// Story IP explorer license-terms page. Derived from the IPA explorer base in
-// lib/constants.ts so it tracks the same network.
-const EXPLORER_LICENSE = "https://aeneid.explorer.story.foundation/license/";
+// Sui object explorer base — license references resolve to the artifact's
+// on-chain registry object, which holds the `license_holders` set.
+const EXPLORER_LICENSE = SUI_EXPLORER_OBJECT;
 
-// PIL (Programmable IP License) one-line summary per tier. These describe the
-// real access policy each tier registers on Story.
-const PIL_SUMMARY: Record<Tier, string> = {
+// One-line license summary per tier. These describe the real access policy each
+// tier enforces on-chain via `seal_approve`.
+const LICENSE_SUMMARY: Record<Tier, string> = {
   public: "Commercial use · attribution license attached",
   gated: "Commercial · mint a license token to decrypt",
   private: "Owner-only · not licensed for others",
@@ -86,7 +87,7 @@ export default async function LicensePage({
             color: "var(--ov-text-faint)",
           }}
         >
-          {PIL_SUMMARY[artifact.tier]}
+          {LICENSE_SUMMARY[artifact.tier]}
         </p>
 
         {isGated ? (
@@ -161,10 +162,10 @@ function TermsRow({ label, id }: { label: string; id: string }) {
         target="_blank"
         rel="noopener noreferrer"
         className="txlink"
-        title={`View license terms #${id} on the Story explorer`}
+        title={`View license terms #${id} on the Sui explorer`}
       >
         <span className="font-mono">#{id}</span>
-        <span className="suffix">PIL</span>
+        <span className="suffix">LIC</span>
       </a>
     </div>
   );

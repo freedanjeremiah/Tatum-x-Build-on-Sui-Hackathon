@@ -1,9 +1,9 @@
-// Pins PUBLIC metadata only — no secrets, no plaintext artifact bytes.
-// This route pins a PUBLIC metadata JSON object (title/description/tags/
-// creators/etc.) to IPFS. It NEVER handles decryption keys or raw artifact
-// payloads; those never touch the backend (the CDR vault is client-side).
+// Publishes PUBLIC metadata only — no secrets, no plaintext artifact bytes.
+// This route stores a PUBLIC metadata JSON object (title/description/tags/
+// creators/etc.) on Walrus. It NEVER handles decryption keys or raw artifact
+// payloads; those never touch the backend (Seal encryption is client-side).
 
-export const runtime = "nodejs"; // Edge unsupported for sqlite/CDR
+export const runtime = "nodejs"; // Edge unsupported for the Walrus/native path
 
 import { pinJSON } from "@/lib/storage";
 

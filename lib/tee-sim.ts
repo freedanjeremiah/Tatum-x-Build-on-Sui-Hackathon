@@ -10,7 +10,7 @@
 //
 //  1. `kind: "sim-sgx-quote"` is encoded in the header and re-asserted by every
 //     verify call. A real attestation verifier (Intel DCAP, Microsoft Azure
-//     Attestation, the CDR validator chain) will REJECT this kind out of hand
+//     Attestation, a Seal key-server's enclave check) will REJECT this kind out of hand
 //     because the signature is an HMAC over a server-side secret, not an
 //     ECDSA-P256 signature chained to an Intel quoting enclave certificate.
 //
@@ -97,7 +97,7 @@ export interface SimVerifyResult {
 }
 
 const SIM_SECRET_ENV = "WORKER_SIM_KEY";
-const DEFAULT_SECRET_SEED = "openvault-tee-sim-default-secret-v1";
+const DEFAULT_SECRET_SEED = "tessera-tee-sim-default-secret-v1";
 const QE_VENDOR_ID_SIM = "OV-SIM-QE";
 const DISCLOSURE =
   "Simulated enclave (TEE-SIM v1) — cryptographically UNVERIFIED by hardware. Do NOT trust for production data; operator can still see plaintext in memory. Use only for development/CI.";

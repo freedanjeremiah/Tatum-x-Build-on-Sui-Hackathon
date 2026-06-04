@@ -1,8 +1,8 @@
 // INDEX route.
 // GET — serves PUBLIC artifact metadata for browse/search. NEVER accesses
 // decryption keys, NEVER reads plaintext artifact bytes, NEVER gates access.
-// POST — self-index handler: a client that just minted an IP Asset POSTs the
-// resulting public Artifact descriptor here so the read model is consistent
+// POST — self-index handler: a client that just registered an artifact on-chain
+// POSTs the resulting public Artifact descriptor here so the read model is consistent
 // (the on-chain indexer eventually catches up too, but self-index is the
 // authoritative writer for upload-time fields the event log doesn't carry —
 // vaultUuid, tier, allowedAlgoHashes, computeLicenseTermsId, etc).
@@ -12,7 +12,7 @@
 // shares — none of those ever exist server-side and the route rejects any body
 // shape that doesn't match a public Artifact.
 
-export const runtime = "nodejs"; // Edge unsupported for sqlite/CDR
+export const runtime = "nodejs"; // Edge unsupported for sqlite
 
 import { openDb, getArtifact, listArtifacts, upsertArtifact } from "@/indexer/db";
 import type { DB } from "@/indexer/db";
@@ -22,9 +22,9 @@ let _db: DB | null = null;
 
 function db(): DB {
   if (_db) return _db;
-  // OPENVAULT_DB_PATH lets tests point at an isolated/in-memory DB so they never
-  // write throwaway rows into the real index (indexer/openvault.db).
-  _db = openDb(process.env.OPENVAULT_DB_PATH || undefined);
+  // TESSERA_DB_PATH lets tests point at an isolated/in-memory DB so they never
+  // write throwaway rows into the real index (indexer/tessera.db).
+  _db = openDb(process.env.TESSERA_DB_PATH || undefined);
   return _db;
 }
 
@@ -76,9 +76,8 @@ function isHex(s: unknown): s is `0x${string}` {
   return typeof s === "string" && HEX_RE.test(s);
 }
 
-// SUI MIGRATION (B2): `createdTx` now carries a Sui transaction DIGEST (base58),
-// not an EVM tx hash (0x-hex). Accept either: a 0x-hex string OR a non-empty
-// base58 digest. Still rejects empties and junk.
+// `createdTx` carries a Sui transaction DIGEST (base58). Accept either a 0x-hex
+// string OR a non-empty base58 digest. Still rejects empties and junk.
 const BASE58_RE = /^[1-9A-HJ-NP-Za-km-z]+$/;
 function isTxRef(s: unknown): s is `0x${string}` {
   return typeof s === "string" && s.length > 0 && (HEX_RE.test(s) || BASE58_RE.test(s));

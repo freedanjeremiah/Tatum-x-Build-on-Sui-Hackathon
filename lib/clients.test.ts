@@ -5,7 +5,7 @@ const itInt = test.skipIf(!RUN_INTEGRATION);
 
 itInt("real Seal-gated round-trip: upload then download returns same bytes", async () => {
   const clients = await realClients();
-  // Sui core client bundle shape (no Story/CDR handles anymore).
+  // Sui core client bundle shape.
   expect(clients).toMatchObject({
     client: expect.anything(),
     signer: expect.anything(),

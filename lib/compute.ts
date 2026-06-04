@@ -1,8 +1,8 @@
 // Compute helpers: allowlist gating, ComputeJob construction, the runComputeJob
 // worker contract, and a browser-facing runJob that POSTs to /api/compute.
 //
-// HONESTY: CDR does key-delivery ONLY. Compute privacy = worker isolation +
-// the per-dataset algorithm allowlist, NOT CDR. A compute result returns ONLY
+// HONESTY: Seal does gated key-delivery ONLY. Compute privacy = worker isolation +
+// the per-dataset algorithm allowlist, NOT Seal. A compute result returns ONLY
 // metrics — never raw rows. The worker refuses any algoHash not on the dataset's
 // allowlist BEFORE any decryption (rejected, decryptCalled: false).
 
@@ -66,8 +66,9 @@ export interface RunComputeJobInput {
  * The worker contract implemented by worker/compute-worker.ts. The /api/compute
  * route calls it.
  *
- * Worker runs OUTSIDE CDR. CDR is gated key-delivery only. Compute privacy =
- * this worker's isolation + the per-dataset algorithm allowlist.
+ * The worker is the privacy boundary, not Seal — Seal only delivers keys when the
+ * on-chain policy allows. Compute privacy = this worker's isolation + the
+ * per-dataset algorithm allowlist.
  */
 export type RunComputeJob = (
   input: RunComputeJobInput

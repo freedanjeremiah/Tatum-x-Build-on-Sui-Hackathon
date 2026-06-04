@@ -41,7 +41,7 @@ export class WalletNotConnectedError extends Error {
  * The returned `client` is always a live SuiClient (read-path works
  * immediately). The returned `signer` is a shim that will throw
  * WalletNotConnectedError if the wallet bridge has not provided a real signing
- * function — this is the honest stub described in the migration plan (A2).
+ * function — an honest stub until the browser write-signer is wired.
  */
 export async function getClients(): Promise<BrowserClients> {
   const { makeClientsFromProvider } = await import("./clients");

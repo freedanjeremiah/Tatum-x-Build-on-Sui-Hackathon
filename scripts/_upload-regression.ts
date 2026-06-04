@@ -25,7 +25,7 @@ async function main() {
         "A 417-byte ordinary-least-squares linear regression (2 features, R²≈0.9999). Portable JSON weights — predict y = intercept + w·x.",
       tags: ["regression", "model", "linear", "ols", "tiny"],
       creators: [
-        { name: "OpenVault Demo", address: owner, contributionPercent: 100 },
+        { name: "Tessera Demo", address: owner, contributionPercent: 100 },
       ],
       modality: "model",
     },

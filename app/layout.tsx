@@ -9,7 +9,7 @@ import "./globals.css";
 import Providers from "@/components/Providers";
 import Header from "@/components/Header";
 import WasmGate from "@/components/WasmGate";
-import CdrLimitsNotice from "@/components/CdrLimitsNotice";
+import SealLimitsNotice from "@/components/SealLimitsNotice";
 
 const oswald = Oswald({
   variable: "--font-oswald",
@@ -39,7 +39,7 @@ const notoJP = Noto_Sans_JP({
 export const metadata: Metadata = {
   title: "Tessera — Confidential Data Registry",
   description:
-    "Access control as a property of the data. A confidential model & dataset hub on Story + CDR.",
+    "Access control as a property of the data. A confidential model & dataset hub on Sui, Walrus & Seal.",
 };
 
 export default function RootLayout({
@@ -59,7 +59,7 @@ export default function RootLayout({
             <WasmGate>
               <main className="flex-1">{children}</main>
             </WasmGate>
-            <CdrLimitsNotice />
+            <SealLimitsNotice />
           </Providers>
         </div>
       </body>

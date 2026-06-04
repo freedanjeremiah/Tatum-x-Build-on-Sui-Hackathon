@@ -1,22 +1,23 @@
 // Files & Versions tab. Index-only. Shows the single registration version with
-// its on-chain tx, and the file's CID. Public artifacts link the CID through an
-// IPFS gateway "in the clear"; encrypted tiers show the CID + vault uuid behind
-// an honest "threshold-sealed — not downloadable here" disclosure. No fabricated
-// file sizes.
+// its on-chain tx, and the file's blob id. Public artifacts link the blob through
+// the Walrus aggregator "in the clear"; encrypted tiers show the blob id + vault
+// handle behind an honest "threshold-sealed — not downloadable here" disclosure.
+// No fabricated file sizes.
 
 export const runtime = "nodejs";
 
 import { getArtifact, openDb } from "@/indexer/db";
 import type { DB } from "@/indexer/db";
 import type { Artifact } from "@/types/artifact";
+import { WALRUS_AGGREGATOR } from "@/lib/constants";
 import TxLink from "@/components/TxLink";
 import DisclosureStrip from "@/components/ui/DisclosureStrip";
 
-// Same IPFS gateway the public download path uses (see DownloadButton).
-const GATEWAY = "https://gateway.pinata.cloud/ipfs/";
+// Same Walrus aggregator the public download path uses (see DownloadButton).
+const GATEWAY = `${WALRUS_AGGREGATOR.replace(/\/+$/, "")}/v1/blobs/`;
 
 function cidHash(cid: string): string {
-  return cid.replace(/^ipfs:\/\//, "");
+  return cid.replace(/^walrus:\/\//, "");
 }
 
 let _db: DB | null = null;
@@ -53,7 +54,7 @@ export default async function FilesPage({
               v1 · initial registration
             </span>
             <span className="meta" style={{ color: "var(--ov-text-faint)" }}>
-              Registered on Story
+              Registered on Sui
             </span>
           </div>
           <TxLink hash={artifact.createdTx} />
@@ -77,7 +78,7 @@ export default async function FilesPage({
               color: "var(--ov-text-dim)",
             }}
           >
-            No file CID indexed for this artifact.
+            No blob id indexed for this artifact.
           </p>
         ) : isPublic ? (
           <>
@@ -106,13 +107,13 @@ export default async function FilesPage({
                 rel="noopener noreferrer"
                 className="btn btn-ghost btn-sm"
               >
-                Open on IPFS
+                Open on Walrus
               </a>
             </Row>
             <div style={{ marginTop: 14 }}>
               <DisclosureStrip tone="public" icon="shield">
-                Public artifact — the payload is stored unencrypted on IPFS and
-                fetchable directly from the gateway above.
+                Public artifact — the payload is stored unencrypted on Walrus and
+                fetchable directly from the aggregator above.
               </DisclosureStrip>
             </div>
           </>
@@ -120,7 +121,7 @@ export default async function FilesPage({
           <>
             <Row>
               <span className="meta" style={{ color: "var(--ov-text-faint)" }}>
-                CID
+                Blob id
               </span>
               <span
                 className="font-mono"

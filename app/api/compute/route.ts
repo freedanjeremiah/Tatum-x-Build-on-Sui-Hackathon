@@ -1,5 +1,6 @@
-// Worker runs OUTSIDE CDR. CDR is gated key-delivery only. Compute privacy =
-// this worker's isolation + the per-dataset algorithm allowlist.
+// The worker is the privacy boundary, not Seal — Seal only delivers keys when the
+// on-chain policy allows. Compute privacy = this worker's isolation + the
+// per-dataset algorithm allowlist.
 //
 // This route ENQUEUES/RUNS a compute job. It loads the dataset's PUBLIC index
 // record to read its allowedAlgoHashes, then delegates to the real
@@ -10,7 +11,7 @@
 //   - a "done" run returns ONLY aggregate metrics (never raw rows) and registers
 //     the result as a derivative of the dataset (royalties flow upstream).
 
-export const runtime = "nodejs"; // Edge unsupported for sqlite/CDR
+export const runtime = "nodejs"; // Edge unsupported for sqlite + native crypto
 
 import { openDb, getArtifact } from "@/indexer/db";
 import { runComputeJob } from "@/worker/compute-worker";

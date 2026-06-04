@@ -7,11 +7,9 @@ import {
   SUI_CURRENCY,
 } from "./licensing";
 
-// CHANGED (B3a, Sui migration): the old test asserted encodeAccessAuxData matched
-// viem's ABI uint256[] encoding. On Sui there is no ABI read-condition aux blob —
-// access is gated entirely by on-chain `license_holders` + `seal_approve`, so the
-// helper now returns a deterministic JSON-array string of the artifact ids it is
-// given (retained only for caller compatibility). We assert that new shape here.
+// Access is gated entirely by on-chain `license_holders` + `seal_approve`, so
+// encodeAccessAuxData returns a deterministic JSON-array string of the artifact
+// ids it is given (used only for display/logging). We assert that shape here.
 test("encodeAccessAuxData stringifies ids as a JSON array", () => {
   expect(encodeAccessAuxData([1n])).toBe('["1"]');
   expect(encodeAccessAuxData(["0xabc", 2n])).toBe('["0xabc","2"]');

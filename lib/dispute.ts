@@ -1,5 +1,5 @@
-// Dispute helpers — Sui-native (replaces the Story DisputeModule / arbitration
-// oracle). On Sui a dispute is an on-chain flag + event in tessera::registry:
+// Dispute helpers — Sui-native. On Sui a dispute is an on-chain flag + event in
+// tessera::registry:
 //
 //   - `raiseReport` files evidence against a target artifact (Move `raise_dispute`):
 //     sets the sticky `disputed` flag, bumps `dispute_count`, emits `Disputed`.
@@ -8,14 +8,12 @@
 //     (intentionally NOT modeled on-chain — the flag is forward-only).
 //
 // A fresh evidence CID is generated every call — a real dispute must never reuse
-// stale evidence. `freshEvidenceCid` is chain-agnostic (node:crypto only).
+// stale evidence. `freshEvidenceCid` uses node:crypto only.
 //
-// BONDS: the EVM path required a WIP bond posted to an optimistic oracle. This
-// Sui model has NO on-chain bond — disputes are permissionless flags/events, and
-// arbitration (slashing, refunds) is handled off-chain by a reviewer. Dropping
-// the bond is documented here rather than faked with a magic SUI number.
-//
-// No viem, no @story-protocol, no removed EVM constants. Never logs secrets.
+// BONDS: this model has NO on-chain bond — disputes are permissionless
+// flags/events, and arbitration (slashing, refunds) is handled off-chain by a
+// reviewer. Dropping the bond is documented here rather than faked with a magic
+// SUI number. Never logs secrets.
 
 import { randomUUID } from "node:crypto";
 
@@ -30,8 +28,7 @@ export interface DisputeClients {
 
 // ---------------------------------------------------------------------------
 // freshEvidenceCid — a unique CIDv0 (dag-pb + sha2-256) every call.
-// Chain-agnostic: kept identical to the EVM path so existing UI / index shapes
-// (which display a "Qm…" CID) are unchanged. The CID is an opaque pointer; on
+// The UI / index shapes display a "Qm…" CID. The CID is an opaque pointer; on
 // Sui it is stored as the UTF-8 bytes of the `Disputed`/`CounterEvidence` event.
 // ---------------------------------------------------------------------------
 
