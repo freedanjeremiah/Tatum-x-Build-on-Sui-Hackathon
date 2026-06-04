@@ -22,12 +22,29 @@
 ///                       consumers are denied -> "computable, not downloadable".
 module reef::registry;
 
+use reef::enclave::{Self, Enclave};
 use sui::balance::{Self, Balance};
 use sui::coin::{Self, Coin};
 use sui::event;
 use sui::hash;
 use sui::sui::SUI;
 use sui::vec_set::{Self, VecSet};
+
+/// One-time witness / type tag binding the on-chain Enclave to this package.
+public struct REEF has drop {}
+
+/// Intent scope for an enclave-signed confidential-compute result.
+const COMPUTE_RESULT_INTENT: u8 = 0;
+
+/// BCS payload the enclave signs. dataset_id is the 32-byte parent object id.
+public struct ComputeResultPayload has copy, drop {
+    dataset_id: vector<u8>,
+    algo_hash: vector<u8>,
+    metrics: vector<u8>,
+}
+
+/// Enclave signature failed to verify against the registered enclave.
+const EBadEnclaveSig: u64 = 100;
 
 // ---- tiers ----
 const TIER_PUBLIC: u8 = 0;
@@ -189,6 +206,31 @@ public entry fun register_derivative(
     group_id: Option<ID>,
     ctx: &mut TxContext,
 ) {
+    register_internal(tier, price, group_id, option::some(parent), ctx);
+}
+
+/// Register a derivative whose lineage points at `parent`, but ONLY if the
+/// supplied enclave-signed compute result verifies on-chain. The enclave signs
+/// ComputeResultPayload { dataset_id = parent's object id bytes, algo_hash,
+/// metrics }. Aborts (no derivative created) on a bad signature.
+public entry fun register_derivative_attested(
+    tier: u8,
+    price: u64,
+    parent: ID,
+    group_id: Option<ID>,
+    enclave: &Enclave<REEF>,
+    timestamp_ms: u64,
+    algo_hash: vector<u8>,
+    metrics: vector<u8>,
+    signature: vector<u8>,
+    ctx: &mut TxContext,
+) {
+    let dataset_id = object::id_to_bytes(&parent);
+    let payload = ComputeResultPayload { dataset_id, algo_hash, metrics };
+    let ok = enclave::verify_signature<REEF, ComputeResultPayload>(
+        enclave, COMPUTE_RESULT_INTENT, timestamp_ms, payload, &signature,
+    );
+    assert!(ok, EBadEnclaveSig);
     register_internal(tier, price, group_id, option::some(parent), ctx);
 }
 
