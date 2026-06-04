@@ -10,6 +10,7 @@ import Providers from "@/components/Providers";
 import Header from "@/components/Header";
 import WasmGate from "@/components/WasmGate";
 import SealLimitsNotice from "@/components/SealLimitsNotice";
+import OnchainConfigNotice from "@/components/OnchainConfigNotice";
 
 const oswald = Oswald({
   variable: "--font-oswald",
@@ -56,6 +57,7 @@ export default function RootLayout({
         <div id="ov-root" className="ov-app flex min-h-screen flex-col">
           <Providers>
             <Header />
+            <OnchainConfigNotice />
             <WasmGate>
               <main className="flex-1">{children}</main>
             </WasmGate>
