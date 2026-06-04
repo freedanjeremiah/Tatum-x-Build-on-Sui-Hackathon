@@ -17,7 +17,7 @@ export default function ArtifactDetail({ artifact }: { artifact: Artifact }) {
   const [reportOpen, setReportOpen] = useState(false);
   const [counterOpen, setCounterOpen] = useState(false);
   const [disputeId, setDisputeId] = useState<string | null>(null);
-  const [counterTx, setCounterTx] = useState<`0x${string}` | null>(null);
+  const [counterTx, setCounterTx] = useState<string | null>(null);
 
   const t = tierMeta(artifact.tier);
   const isCompute = artifact.tier === "compute";

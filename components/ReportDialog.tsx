@@ -31,7 +31,7 @@ export default function ReportDialog({
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{
     disputeId: string;
-    txHash: `0x${string}`;
+    txHash: string;
   } | null>(null);
 
   useEffect(() => {
@@ -50,11 +50,13 @@ export default function ReportDialog({
     try {
       const clients = await getClients();
       const { raiseReport } = await import("@/lib/dispute");
-      const { disputeId, txHash } = await raiseReport(clients.story, {
-        targetIpId: artifact.ipId,
+      const reason = evidence.trim() || "IMPROPER_REGISTRATION";
+      const { disputeId, txHash } = await raiseReport(
+        clients,
+        artifact.ipId,
         cid,
-        tag: "IMPROPER_REGISTRATION",
-      });
+        reason,
+      );
       const id = String(disputeId);
       setResult({ disputeId: id, txHash });
       onDisputed(id);
@@ -197,10 +199,11 @@ export default function ReportDialog({
                 marginTop: 14,
               }}
             >
-              A bond in <span className="font-mono">WIP</span> is required to
-              raise a dispute (read on-chain from the arbitration policy at
-              submit time, auto-wrapped from native IP). It is returned if your
-              report is upheld and forfeited if it is rejected.
+              Raising a report is permissionless on Sui — it sets the
+              artifact&apos;s on-chain <span className="font-mono">disputed</span>{" "}
+              flag and emits the evidence event. There is no on-chain bond;
+              arbitration (resolution, any slashing) is handled off-chain by a
+              reviewer.
             </p>
 
             {error ? (

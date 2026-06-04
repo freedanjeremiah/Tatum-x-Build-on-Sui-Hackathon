@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { formatEther } from "viem";
 import type { Artifact } from "@/types/artifact";
 import { getClients, WalletNotConnectedError } from "@/lib/useClients";
+import { formatSui, parseSui } from "@/lib/sui-format";
 import TxLink from "./TxLink";
-import DisclosureStrip from "./ui/DisclosureStrip";
 import Icon from "./ui/Icon";
 import Spinner from "./ui/Spinner";
+import DisclosureStrip from "./ui/DisclosureStrip";
 
 interface RoyaltyPanelProps {
   artifact: Artifact;
@@ -16,59 +16,32 @@ interface RoyaltyPanelProps {
 type Phase = "idle" | "loading" | "claiming" | "paying" | "done" | "error";
 
 /**
- * Owner-facing royalty controls. Reads claimable from the RoyaltyModule; lets
- * the owner claim accrued revenue from indexed derivatives; lets anyone
- * "tip"/pay royalties to this IP (auto-wraps native IP → WIP).
+ * Owner-facing royalty controls. Reads the artifact's accrued on-chain revenue
+ * vault (getClaimable); lets the owner claim it with their ArtifactCap
+ * (claimRevenue); lets anyone pay royalties into the vault (payRoyalty). All
+ * amounts are bigint MIST — formatted via lib/sui-format. Currency is SUI.
  */
 export default function RoyaltyPanel({ artifact }: RoyaltyPanelProps) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
   const [claimable, setClaimable] = useState<bigint | null>(null);
-  const [lastTx, setLastTx] = useState<`0x${string}` | null>(null);
+  const [lastTx, setLastTx] = useState<string | null>(null);
   const [payAmount, setPayAmount] = useState("0.01");
-  const [derivativeIds, setDerivativeIds] = useState<string[]>([]);
-  const [derivLoadError, setDerivLoadError] = useState<string | null>(null);
-  // null = unknown (still checking); false = no royalty vault → cannot receive
-  // royalties yet (deployed on first commercial license mint).
-  const [vaultReady, setVaultReady] = useState<boolean | null>(null);
 
+  // Read the artifact's accrued revenue vault on mount (read-only — no signer
+  // needed; getClaimable accepts a bare SuiClient bundle).
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const { receiverHasRoyaltyVault } = await import("@/lib/royalty");
-        const ok = await receiverHasRoyaltyVault(artifact.ipId);
-        if (!cancelled) setVaultReady(ok);
+        const { makeSuiClient } = await import("@/lib/clients");
+        const { getClaimable } = await import("@/lib/royalty");
+        const client = makeSuiClient();
+        const v = await getClaimable(client, artifact.ipId);
+        if (!cancelled) setClaimable(v);
       } catch {
         // Read failed (RPC hiccup) — leave unknown so we don't wrongly block.
-        if (!cancelled) setVaultReady(null);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [artifact.ipId]);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const r = await fetch(`/api/index`);
-        if (!r.ok) {
-          if (!cancelled) setDerivLoadError(`derivatives index returned ${r.status}`);
-          return;
-        }
-        const data = (await r.json()) as Artifact[];
-        if (!Array.isArray(data) || cancelled) return;
-        const kids = data
-          .filter((a) => a.parentIpId === artifact.ipId)
-          .map((a) => a.ipId);
-        setDerivativeIds(kids);
-      } catch (e) {
-        if (!cancelled)
-          setDerivLoadError(
-            e instanceof Error ? e.message : "derivatives index unreachable",
-          );
+        if (!cancelled) setClaimable(null);
       }
     })();
     return () => {
@@ -80,17 +53,14 @@ export default function RoyaltyPanel({ artifact }: RoyaltyPanelProps) {
     setPhase("loading");
     setError(null);
     try {
-      const clients = await getClients();
+      const { makeSuiClient } = await import("@/lib/clients");
       const { getClaimable } = await import("@/lib/royalty");
-      const v = await getClaimable(clients.story, { ipId: artifact.ipId });
+      const client = makeSuiClient();
+      const v = await getClaimable(client, artifact.ipId);
       setClaimable(v);
       setPhase("idle");
     } catch (e) {
-      if (e instanceof WalletNotConnectedError) {
-        setError(e.message);
-      } else {
-        setError(e instanceof Error ? e.message : "Failed to read claimable.");
-      }
+      setError(e instanceof Error ? e.message : "Failed to read claimable.");
       setPhase("error");
     }
   }
@@ -100,20 +70,26 @@ export default function RoyaltyPanel({ artifact }: RoyaltyPanelProps) {
     setError(null);
     setLastTx(null);
     try {
-      const clients = await getClients();
-      const { claimRevenue } = await import("@/lib/royalty");
-      if (derivativeIds.length === 0) {
+      if (!artifact.capId) {
         throw new Error(
-          "No indexed derivatives for this IP — nothing to claim through.",
+          "No ArtifactCap available for this artifact — only the owner can claim, and the cap id is required.",
         );
       }
-      const out = await claimRevenue(clients.story, {
-        parentIpId: artifact.ipId,
-        childIpIds: derivativeIds as `0x${string}`[],
-      });
-      setLastTx(out.txHash);
-      setPhase("done");
-      setClaimable(0n);
+      const clients = await getClients();
+      const { claimRevenue, NoRoyaltyVaultError } = await import("@/lib/royalty");
+      try {
+        const out = await claimRevenue(clients, artifact.ipId, artifact.capId);
+        setLastTx(out.txHash);
+        setClaimable(0n);
+        setPhase("done");
+      } catch (e) {
+        if (e instanceof NoRoyaltyVaultError) {
+          setError(e.message);
+          setPhase("error");
+          return;
+        }
+        throw e;
+      }
     } catch (e) {
       if (e instanceof WalletNotConnectedError) {
         setError(e.message);
@@ -129,23 +105,26 @@ export default function RoyaltyPanel({ artifact }: RoyaltyPanelProps) {
     setError(null);
     setLastTx(null);
     try {
-      const clients = await getClients();
-      const { payRoyalty } = await import("@/lib/royalty");
-      const { parseEther } = await import("viem");
       let amount: bigint;
       try {
-        amount = parseEther(payAmount.trim() || "0");
-      } catch {
-        throw new Error("Enter a valid WIP amount.");
+        amount = parseSui(payAmount);
+      } catch (pe) {
+        throw new Error(pe instanceof Error ? pe.message : "Enter a valid SUI amount.");
       }
       if (amount <= 0n) throw new Error("Amount must be greater than 0.");
-      const out = await payRoyalty(clients.story, {
-        childIpId: artifact.ipId,
-        amount,
-        publicClient: clients.publicClient,
-      });
+      const clients = await getClients();
+      const { payRoyalty } = await import("@/lib/royalty");
+      const out = await payRoyalty(clients, artifact.ipId, amount);
       setLastTx(out.txHash);
       setPhase("done");
+      // Refresh the claimable readout after a successful payment.
+      try {
+        const { makeSuiClient } = await import("@/lib/clients");
+        const { getClaimable } = await import("@/lib/royalty");
+        setClaimable(await getClaimable(makeSuiClient(), artifact.ipId));
+      } catch {
+        /* non-fatal */
+      }
     } catch (e) {
       if (e instanceof WalletNotConnectedError) {
         setError(e.message);
@@ -198,7 +177,7 @@ export default function RoyaltyPanel({ artifact }: RoyaltyPanelProps) {
             className="font-mono"
             style={{ fontSize: 20, fontWeight: 700, color: "var(--ov-text)" }}
           >
-            {claimable === null ? "—" : formatEther(claimable)}
+            {claimable === null ? "—" : formatSui(claimable)}
             <span
               style={{
                 marginLeft: 6,
@@ -206,7 +185,7 @@ export default function RoyaltyPanel({ artifact }: RoyaltyPanelProps) {
                 color: "var(--ov-text-faint)",
               }}
             >
-              WIP
+              SUI
             </span>
           </div>
           <div
@@ -216,25 +195,14 @@ export default function RoyaltyPanel({ artifact }: RoyaltyPanelProps) {
               marginTop: 6,
             }}
           >
-            {derivativeIds.length} indexed derivative
-            {derivativeIds.length === 1 ? "" : "s"} route to this IP.
+            Accrues when someone pays a royalty into this artifact&apos;s
+            on-chain vault.
           </div>
-          {derivLoadError ? (
-            <div
-              style={{
-                fontSize: 11,
-                color: "var(--tier-gated)",
-                marginTop: 6,
-              }}
-            >
-              ⚠ derivatives index error: {derivLoadError}
-            </div>
-          ) : null}
         </div>
         <button
           type="button"
           className="btn btn-accent"
-          disabled={busy || derivativeIds.length === 0}
+          disabled={busy || !artifact.capId || (claimable !== null && claimable <= 0n)}
           onClick={handleClaim}
         >
           {phase === "claiming" ? <Spinner /> : null}
@@ -253,7 +221,7 @@ export default function RoyaltyPanel({ artifact }: RoyaltyPanelProps) {
       <hr className="divider" style={{ margin: "18px 0" }} />
 
       <div className="meta" style={{ marginBottom: 10 }}>
-        Pay royalties to this IP
+        Pay royalties to this artifact
       </div>
       <div
         style={{
@@ -281,38 +249,28 @@ export default function RoyaltyPanel({ artifact }: RoyaltyPanelProps) {
               transform: "translateY(-50%)",
             }}
           >
-            WIP
+            SUI
           </span>
         </div>
         <button
           type="button"
           className="btn btn-ghost"
-          disabled={busy || !payAmount.trim() || vaultReady === false}
+          disabled={busy || !payAmount.trim()}
           onClick={handlePay}
         >
           {phase === "paying" ? <Spinner /> : null}
           {phase === "paying" ? "Sending…" : "Pay royalty"}
         </button>
       </div>
-      {vaultReady === false ? (
-        <div style={{ marginTop: 8 }}>
-          <DisclosureStrip tone="gated" icon="flag">
-            This IP has no royalty vault yet, so it can&apos;t receive royalties.
-            A vault is deployed when its first commercial license is minted
-            (gated or compute tier).
-          </DisclosureStrip>
-        </div>
-      ) : (
-        <div
-          style={{
-            fontSize: 11.5,
-            color: "var(--ov-text-faint)",
-            marginTop: 8,
-          }}
-        >
-          Auto-wraps native IP → WIP if needed.
-        </div>
-      )}
+      <div
+        style={{
+          fontSize: 11.5,
+          color: "var(--ov-text-faint)",
+          marginTop: 8,
+        }}
+      >
+        Pays native SUI into the artifact&apos;s on-chain revenue vault.
+      </div>
 
       {error ? (
         <div style={{ marginTop: 16 }}>

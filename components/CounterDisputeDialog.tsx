@@ -28,15 +28,15 @@ export default function CounterDisputeDialog({
   disputeId: string;
   open: boolean;
   onClose: () => void;
-  onCountered: (assertionId: `0x${string}`, txHash: `0x${string}`) => void;
+  onCountered: (cid: string, txHash: string) => void;
 }) {
   const [counterEvidence, setCounterEvidence] = useState("");
   const [cid, setCid] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{
-    assertionId: `0x${string}`;
-    txHash: `0x${string}`;
+    cid: string;
+    txHash: string;
   } | null>(null);
 
   useEffect(() => {
@@ -55,13 +55,13 @@ export default function CounterDisputeDialog({
     try {
       const clients = await getClients();
       const { counterDispute } = await import("@/lib/dispute");
-      const { assertionId, txHash } = await counterDispute(clients.story, {
-        ipId: artifact.ipId,
-        disputeId,
-        counterEvidenceCID: cid,
-      });
-      setResult({ assertionId, txHash });
-      onCountered(assertionId, txHash);
+      const { cid: filedCid, txHash } = await counterDispute(
+        clients,
+        artifact.ipId,
+        cid,
+      );
+      setResult({ cid: filedCid, txHash });
+      onCountered(filedCid, txHash);
     } catch (e) {
       setError(
         e instanceof WalletNotConnectedError
@@ -90,9 +90,9 @@ export default function CounterDisputeDialog({
         {result ? (
           <div>
             <DisclosureStrip tone="public" icon="check">
-              Counter-evidence assertion{" "}
+              Counter-evidence{" "}
               <span className="font-mono" style={{ fontSize: 11 }}>
-                {result.assertionId.slice(0, 10)}…{result.assertionId.slice(-6)}
+                {result.cid.slice(0, 10)}…{result.cid.slice(-6)}
               </span>{" "}
               submitted. <TxLink hash={result.txHash} />
             </DisclosureStrip>
@@ -103,8 +103,8 @@ export default function CounterDisputeDialog({
                 color: "var(--ov-text-faint)",
               }}
             >
-              The arbitration policy&apos;s reviewer will evaluate both sides
-              during the liveness window.
+              A reviewer will evaluate both sides off-chain. The counter-evidence
+              event is now recorded on Sui.
             </p>
             <div
               style={{
@@ -202,9 +202,10 @@ export default function CounterDisputeDialog({
                 marginTop: 14,
               }}
             >
-              No additional bond from the counter-party — the original
-              disputer&apos;s bond is on the line. If the counter-evidence is
-              upheld, the bond is forfeited; otherwise it&apos;s refunded.
+              Submitting counter-evidence is permissionless on Sui and posts no
+              bond — it records a CounterEvidence event for the off-chain
+              reviewer. It does not clear the disputed flag; resolution is
+              off-chain.
             </p>
 
             {error ? (

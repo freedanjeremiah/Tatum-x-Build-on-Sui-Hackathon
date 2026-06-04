@@ -13,8 +13,8 @@ import { getClients, WalletNotConnectedError } from "@/lib/useClients";
 
 /**
  * Create a new group bundle by calling lib/group.createGroup with the selected
- * member IPs and the group's license terms id. Lives at /group/new — wallet-
- * gated, surfaces the real tx hash + groupIpId on success.
+ * member artifact ids. Lives at /group/new — wallet-gated, surfaces the real tx
+ * digest + the shared Group object id (groupId) + GroupCap id on success.
  */
 export default function NewGroupPage() {
   const router = useRouter();
@@ -22,14 +22,14 @@ export default function NewGroupPage() {
   const [loadingIndex, setLoadingIndex] = useState(true);
   const [indexError, setIndexError] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<`0x${string}`>>(new Set());
-  const [termsId, setTermsId] = useState("");
   const [phase, setPhase] = useState<"idle" | "creating" | "done" | "error">(
     "idle",
   );
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{
-    groupIpId: `0x${string}`;
-    txHash: `0x${string}`;
+    groupId: string;
+    capId: string;
+    txHash: string;
   } | null>(null);
 
   useEffect(() => {
@@ -47,20 +47,13 @@ export default function NewGroupPage() {
     return () => ctl.abort();
   }, []);
 
-  // Candidate members: anything with a real licenseTermsId can be a member of a
-  // group (the group's licence terms are independent, but only commercial-remix
-  // artifacts have terms to attach).
+  // Candidate members: any non-group artifact can be recorded as a group member.
+  // On Sui group membership is recorded in the shared Group object (no license
+  // terms id is attached to the group).
   const candidates = useMemo(
-    () => artifacts.filter((a) => !!a.licenseTermsId && a.tier !== "group"),
+    () => artifacts.filter((a) => a.tier !== "group"),
     [artifacts],
   );
-
-  // Suggest the first candidate's terms id when nothing is set yet.
-  useEffect(() => {
-    if (!termsId && candidates.length > 0 && candidates[0].licenseTermsId) {
-      setTermsId(candidates[0].licenseTermsId);
-    }
-  }, [candidates, termsId]);
 
   function toggleMember(id: `0x${string}`) {
     setSelectedIds((prev) => {
@@ -73,12 +66,7 @@ export default function NewGroupPage() {
 
   async function handleCreate() {
     if (selectedIds.size === 0) {
-      setError("Pick at least one member IP.");
-      setPhase("error");
-      return;
-    }
-    if (!termsId.trim()) {
-      setError("Group requires a license terms id.");
+      setError("Pick at least one member artifact.");
       setPhase("error");
       return;
     }
@@ -87,11 +75,8 @@ export default function NewGroupPage() {
     try {
       const clients = await getClients();
       const { createGroup } = await import("@/lib/group");
-      const out = await createGroup(clients.story, {
-        ipIds: Array.from(selectedIds),
-        termsId: termsId.trim(),
-      });
-      setResult({ groupIpId: out.groupIpId, txHash: out.txHash });
+      const out = await createGroup(clients, Array.from(selectedIds));
+      setResult({ groupId: out.groupId, capId: out.capId, txHash: out.txHash });
       setPhase("done");
 
       // Best-effort self-index so /group/<id> resolves immediately on redirect.
@@ -101,16 +86,15 @@ export default function NewGroupPage() {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
-            ipId: out.groupIpId,
+            ipId: out.groupId,
             tier: "group",
             modality: "dataset",
-            title: `Group ${out.groupIpId.slice(0, 6)}…${out.groupIpId.slice(-4)}`,
-            description: `Group bundle of ${memberIds.length} member IP${memberIds.length === 1 ? "" : "s"}.`,
+            title: `Group ${out.groupId.slice(0, 6)}…${out.groupId.slice(-4)}`,
+            description: `Group bundle of ${memberIds.length} member artifact${memberIds.length === 1 ? "" : "s"}.`,
             tags: ["group"],
             ipMetadataURI: "",
             createdTx: out.txHash,
-            groupId: out.groupIpId,
-            licenseTermsId: termsId.trim(),
+            groupId: out.groupId,
           }),
         });
         // Tag each member with the new groupId so the group page can find them.
@@ -120,7 +104,7 @@ export default function NewGroupPage() {
           await fetch("/api/index", {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({ ...a, groupId: out.groupIpId }),
+            body: JSON.stringify({ ...a, groupId: out.groupId }),
           });
         }
       } catch {
@@ -174,8 +158,8 @@ export default function NewGroupPage() {
               marginTop: 8,
             }}
           >
-            {selectedIds.size} member IP{selectedIds.size === 1 ? "" : "s"} bound
-            on-chain.
+            {selectedIds.size} member artifact{selectedIds.size === 1 ? "" : "s"}{" "}
+            recorded on-chain.
           </p>
           <div
             className="panel-soft"
@@ -188,15 +172,15 @@ export default function NewGroupPage() {
               marginRight: "auto",
             }}
           >
-            <Row label="Group IP">
-              <TxLink ipId={result.groupIpId} />
+            <Row label="Group object">
+              <TxLink ipId={result.groupId} />
             </Row>
-            <Row label="Register tx">
+            <Row label="Create tx">
               <TxLink hash={result.txHash} />
             </Row>
-            <Row label="Group terms">
+            <Row label="Group cap">
               <span className="font-mono" style={{ fontSize: 12 }}>
-                #{termsId}
+                {result.capId.slice(0, 8)}…{result.capId.slice(-6)}
               </span>
             </Row>
           </div>
@@ -212,7 +196,7 @@ export default function NewGroupPage() {
             <button
               type="button"
               className="btn btn-accent"
-              onClick={() => router.push(`/group/${result.groupIpId}`)}
+              onClick={() => router.push(`/group/${result.groupId}`)}
             >
               View group
             </button>
@@ -251,11 +235,9 @@ export default function NewGroupPage() {
             lineHeight: 1.6,
           }}
         >
-          Bind member IPs into one group artifact with an even-split reward pool.
-          A reader who mints any member&apos;s license unlocks every group-gated
-          vault. The deployed{" "}
-          <code className="font-mono">GroupLicenseReadCondition</code> enforces
-          this on-chain (spec §8.7).
+          Record member artifacts in one shared on-chain Group object. Each
+          member keeps its own royalty vault; group revenue is realized by
+          claiming each member&apos;s vault via Distribute on the group page.
         </p>
       </div>
 
@@ -263,26 +245,6 @@ export default function NewGroupPage() {
         className="panel anim-up"
         style={{ padding: 24, display: "grid", gap: 22 }}
       >
-        <Field label="Group license terms id">
-          <input
-            className="input mono"
-            value={termsId}
-            onChange={(e) => setTermsId(e.target.value)}
-            placeholder="e.g. 2553"
-            disabled={phase === "creating"}
-          />
-          <p
-            style={{
-              fontSize: 11.5,
-              color: "var(--ov-text-faint)",
-              margin: "6px 0 0",
-            }}
-          >
-            Pre-filled from the first selectable artifact. Must be a real
-            commercial-remix terms id already attached to an IP on Story.
-          </p>
-        </Field>
-
         <div>
           <span className="field-label">Members</span>
           {loadingIndex ? (
@@ -292,12 +254,12 @@ export default function NewGroupPage() {
             />
           ) : indexError ? (
             <DisclosureStrip tone="gated" icon="flag">
-              Could not load candidate IPs: {indexError}
+              Could not load candidate artifacts: {indexError}
             </DisclosureStrip>
           ) : candidates.length === 0 ? (
             <DisclosureStrip tone="gated" icon="flag">
-              No indexed IPs with a license terms id available. Upload at least
-              one gated/compute artifact first.
+              No indexed artifacts available to add as members. Upload at least
+              one artifact first.
             </DisclosureStrip>
           ) : (
             <div
@@ -374,8 +336,7 @@ export default function NewGroupPage() {
                           color: "var(--ov-text-faint)",
                         }}
                       >
-                        {a.ipId.slice(0, 8)}…{a.ipId.slice(-6)} · terms #
-                        {a.licenseTermsId}
+                        {a.ipId.slice(0, 8)}…{a.ipId.slice(-6)} · {a.tier}
                       </code>
                     </span>
                   </button>
@@ -421,10 +382,7 @@ export default function NewGroupPage() {
               boxShadow: "3px 3px 0 var(--ov-navy)",
             }}
             disabled={
-              phase === "creating" ||
-              loadingIndex ||
-              selectedIds.size === 0 ||
-              !termsId.trim()
+              phase === "creating" || loadingIndex || selectedIds.size === 0
             }
             onClick={handleCreate}
           >
@@ -434,21 +392,6 @@ export default function NewGroupPage() {
         </div>
       </div>
     </div>
-  );
-}
-
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label style={{ display: "block" }}>
-      <span className="field-label">{label}</span>
-      {children}
-    </label>
   );
 }
 

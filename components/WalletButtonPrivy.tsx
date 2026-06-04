@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
-import { EXPLORER_IPA } from "@/lib/constants";
+import { SUI_EXPLORER_OBJECT } from "@/lib/constants";
 import Icon from "./ui/Icon";
 
 /** Real-mode wallet control. Only mounted inside PrivyProvider. */
@@ -96,7 +96,7 @@ export default function WalletButtonPrivy() {
             <a
               className="btn btn-ghost btn-sm"
               style={{ justifyContent: "flex-start" }}
-              href={addr ? `${EXPLORER_IPA}${addr}` : EXPLORER_IPA}
+              href={addr ? `${SUI_EXPLORER_OBJECT}${addr}` : SUI_EXPLORER_OBJECT}
               target="_blank"
               rel="noreferrer"
             >

@@ -9,6 +9,7 @@ import DisclosureStrip from "@/components/ui/DisclosureStrip";
 import Icon from "@/components/ui/Icon";
 import Spinner from "@/components/ui/Spinner";
 import { getClients, WalletNotConnectedError } from "@/lib/useClients";
+import { formatSui } from "@/lib/sui-format";
 
 /**
  * Group bundle page. Shows the group artifact + member artifacts, a group
@@ -116,7 +117,6 @@ export default function GroupPage({
   }
 
   const groupIpId = (group.groupId ?? group.ipId) as `0x${string}`;
-  const memberIpIds = members.map((m) => m.ipId);
 
   return (
     <div
@@ -171,10 +171,7 @@ export default function GroupPage({
 
           <AccessPanel group={group} />
 
-          <DistributePanel
-            groupIpId={groupIpId}
-            memberIpIds={memberIpIds}
-          />
+          <DistributePanel members={members} />
 
           <div>
             <div
@@ -238,29 +235,23 @@ function AccessPanel({ group }: { group: Artifact }) {
   const [phase, setPhase] = useState<"idle" | "minting" | "done" | "error">(
     "idle",
   );
-  const [tokenId, setTokenId] = useState<string | null>(null);
+  const [txDigest, setTxDigest] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const canSubscribe = !!group.licenseTermsId;
+  const canSubscribe = true;
 
   async function handleSubscribe() {
-    if (!group.licenseTermsId) return;
     setPhase("minting");
     setError(null);
-    setTokenId(null);
+    setTxDigest(null);
     try {
       const clients = await getClients();
       const { mintLicense } = await import("@/lib/licensing");
-      // 10 WIP cap — explicit ceiling. Actual fee is whatever the group's
-      // license terms charge on-chain; if higher than this cap, the mint
-      // reverts loudly. No silent default.
-      const { parseEther } = await import("viem");
-      const id = await mintLicense(
-        clients.story,
-        group.ipId,
-        group.licenseTermsId,
-        parseEther("10"),
-      );
-      setTokenId(id.toString());
+      // Buy a license against the group object. No explicit price → mintLicense
+      // reads the group's on-chain price and pays exactly that (no fake default;
+      // a mismatch aborts loudly on-chain). This adds the buyer to the group's
+      // license_holders, satisfying seal_approve for the group tier.
+      const out = await mintLicense(clients, group.ipId);
+      setTxDigest(out.digest);
       setPhase("done");
     } catch (e) {
       setError(
@@ -301,10 +292,10 @@ function AccessPanel({ group }: { group: Artifact }) {
           marginTop: 0,
         }}
       >
-        Mints one license token against the group&apos;s terms. Vaults gated by
-        the deployed <code className="font-mono">GroupLicenseReadCondition</code>{" "}
-        will accept this token as <code className="font-mono">accessAuxData</code>{" "}
-        for ANY member.
+        Buys a license on the group object at its on-chain price (native SUI).
+        This adds your wallet to the group&apos;s on-chain license holders, which
+        the Move <code className="font-mono">seal_approve</code> policy checks to
+        unlock the group-gated vaults.
       </p>
       <button
         type="button"
@@ -323,20 +314,11 @@ function AccessPanel({ group }: { group: Artifact }) {
         {phase === "minting" ? <Spinner /> : <Icon name="key" size={15} />}
         {phase === "minting" ? "Minting…" : "Subscribe to unlock family"}
       </button>
-      {!canSubscribe ? (
-        <div style={{ marginTop: 12 }}>
-          <DisclosureStrip tone="gated" icon="flag">
-            This group has no license terms id indexed — subscribe is disabled
-            until a terms id is attached to the group.
-          </DisclosureStrip>
-        </div>
-      ) : null}
-      {phase === "done" && tokenId ? (
+      {phase === "done" && txDigest ? (
         <div style={{ marginTop: 12 }}>
           <DisclosureStrip tone="public" icon="check">
-            License token #
-            <span className="font-mono" style={{ fontSize: 12 }}>{tokenId}</span>{" "}
-            minted. Present it as accessAuxData on any member vault to unlock.
+            License acquired. <TxLink hash={txDigest} /> Your wallet is now in the
+            group&apos;s on-chain license holders.
           </DisclosureStrip>
         </div>
       ) : null}
@@ -349,49 +331,46 @@ function AccessPanel({ group }: { group: Artifact }) {
       ) : null}
       <div style={{ marginTop: 14 }}>
         <DisclosureStrip tone="public" icon="shield">
-          §8.7 wired: GROUP_LICENSE_READ_CONDITION is deployed and member vaults
-          accept any holder of a valid license on the group&apos;s terms. If a
-          specific member was sealed under per-IP gating, that fallback still
-          applies.
+          Group access on Sui is gated by the member&apos;s own
+          <code className="font-mono"> license_holders</code> + group binding
+          (set via the artifact cap). Members sealed under per-IP gating keep that
+          fallback.
         </DisclosureStrip>
       </div>
-      {group.licenseTermsId ? (
-        <div
-          className="meta"
-          style={{
-            marginTop: 12,
-            color: "var(--ov-text-faint)",
-            textAlign: "right",
-          }}
-        >
-          terms #{group.licenseTermsId}
-        </div>
-      ) : null}
     </div>
   );
 }
 
 function DistributePanel({
-  groupIpId,
-  memberIpIds,
+  members,
 }: {
-  groupIpId: `0x${string}`;
-  memberIpIds: `0x${string}`[];
+  members: Artifact[];
 }) {
   const [phase, setPhase] = useState<"idle" | "running" | "done" | "error">(
     "idle",
   );
-  const [txHash, setTxHash] = useState<`0x${string}` | null>(null);
+  const [totalClaimed, setTotalClaimed] = useState<bigint | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // distribute() claims each member's OWN royalty vault, which is owner-gated by
+  // that member's ArtifactCap. We can only drive it for members whose capId is
+  // present in the index (i.e. members the connected wallet registered). Members
+  // without a known capId are skipped honestly — no fake cap.
+  const claimable = members.filter((m) => !!m.capId);
 
   async function handleDistribute() {
     setError(null);
     setPhase("running");
+    setTotalClaimed(null);
     try {
       const clients = await getClients();
       const { distribute } = await import("@/lib/group");
-      const res = await distribute(clients.story, { groupIpId, memberIpIds });
-      setTxHash(res.txHash);
+      const pairs = claimable.map((m) => ({
+        artifactId: m.ipId as string,
+        capId: m.capId as string,
+      }));
+      const res = await distribute(clients, pairs);
+      setTotalClaimed(res.totalClaimed);
       setPhase("done");
     } catch (e) {
       if (e instanceof WalletNotConnectedError) setError(e.message);
@@ -419,8 +398,10 @@ function DistributePanel({
           marginTop: 0,
         }}
       >
-        Collect the group pool and distribute it evenly to all{" "}
-        {memberIpIds.length} member IPs.
+        On Sui each member keeps its own royalty vault. Distribute claims every
+        member vault for which the owner&apos;s ArtifactCap is known
+        ({claimable.length} of {members.length} member
+        {members.length === 1 ? "" : "s"}).
       </p>
       <button
         type="button"
@@ -430,17 +411,27 @@ function DistributePanel({
           color: "var(--tier-group)",
           borderColor: "var(--tier-group)",
         }}
-        disabled={phase === "running" || memberIpIds.length === 0}
+        disabled={phase === "running" || claimable.length === 0}
         onClick={handleDistribute}
       >
         {phase === "running" ? <Spinner /> : null}
         {phase === "done" ? "Distributed" : "Distribute royalties"}
       </button>
 
-      {phase === "done" && txHash ? (
+      {claimable.length === 0 ? (
+        <div style={{ marginTop: 12 }}>
+          <DisclosureStrip tone="gated" icon="flag">
+            No member ArtifactCaps are available in the index, so no member vault
+            can be claimed from here. Each member&apos;s owner must claim their own
+            vault (claim_revenue is cap-gated).
+          </DisclosureStrip>
+        </div>
+      ) : null}
+      {phase === "done" && totalClaimed !== null ? (
         <div style={{ marginTop: 12 }}>
           <DisclosureStrip tone="public" icon="check">
-            Distributed <TxLink hash={txHash} />
+            Distributed {formatSui(totalClaimed)} SUI across{" "}
+            {claimable.length} member vault{claimable.length === 1 ? "" : "s"}.
           </DisclosureStrip>
         </div>
       ) : null}

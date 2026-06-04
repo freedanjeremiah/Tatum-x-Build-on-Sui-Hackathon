@@ -128,18 +128,20 @@ export default function UploadWizard() {
       setProgress("Connecting…");
       const clients = await getClients();
       const meta = buildMeta(clients);
-      const { parseEther } = await import("viem");
-      let feeWei = 1n;
+      const { parseSui } = await import("@/lib/sui-format");
+      // Minting fee / price in MIST (bigint, 9 decimals). Default 1 MIST on a
+      // blank/invalid entry rather than throwing mid-wizard.
+      let feeMist = 1n;
       try {
-        feeWei = parseEther((fee || "1").trim());
+        feeMist = parseSui((fee || "1").trim());
       } catch {
-        feeWei = 1n;
+        feeMist = 1n;
       }
       const rev = Math.min(100, Math.max(0, Number(revshare) || 5));
       const input = {
         bytes: bytes ?? new Uint8Array([0]),
         meta,
-        terms: { rev, fee: feeWei },
+        terms: { rev, fee: feeMist },
       };
 
       const {
@@ -180,7 +182,7 @@ export default function UploadWizard() {
 
       // Record the registering wallet so owner-derived views (profile, "my
       // tokens") and the owner filter on /api/index work for this artifact.
-      artifact.owner = clients.account.address;
+      artifact.owner = clients.account.address as `0x${string}`;
 
       setProgress("Indexing artifact…");
       let indexWarning: string | undefined;
@@ -580,7 +582,7 @@ function StepTier({
             gap: 12,
           }}
         >
-          <Field label="Minting fee (WIP)">
+          <Field label="Minting fee (SUI)">
             <input
               className="input mono"
               inputMode="decimal"
@@ -892,7 +894,7 @@ function StepReview({
         {showFee ? (
           <ReviewRow label="Fee · Rev-share">
             <span className="font-mono">
-              {fee || "0"} WIP · {revshare || "0"}%
+              {fee || "0"} SUI · {revshare || "0"}%
             </span>
           </ReviewRow>
         ) : null}

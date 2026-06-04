@@ -6,18 +6,20 @@ import {
   listLicenseTokens,
   type LicenseTokenList,
 } from "@/lib/licenseTokens";
-import { LICENSE_TOKEN } from "@/lib/constants";
+import type { Artifact } from "@/types/artifact";
+import { SUI_EXPLORER_OBJECT } from "@/lib/constants";
 import Spinner from "@/components/ui/Spinner";
 import DisclosureStrip from "@/components/ui/DisclosureStrip";
 import Icon from "@/components/ui/Icon";
 
-const TOKEN_EXPLORER = "https://aeneid.storyscan.io/token/";
-
 /**
- * My License Tokens — reads the connected wallet's on-chain license token ids.
- * Only mounted inside PrivyProvider (via app/tokens/page → ProfileMenu-style
- * gate), so usePrivy() is always safe here. Never fabricates token ids: empty,
- * error, and non-enumerable states are all honest.
+ * My License Tokens — reads which on-chain artifacts the connected wallet holds
+ * a license for. On Sui a "license token" is membership of an artifact's
+ * `license_holders` set, not an enumerable NFT, so we check the wallet against a
+ * candidate set sourced from the app's own index of gated/group artifacts.
+ *
+ * Only mounted inside PrivyProvider, so usePrivy() is always safe here. Never
+ * fabricates ids: empty, error, and "needs-indexer" states are all honest.
  */
 export default function TokensView() {
   const { ready, authenticated, user } = usePrivy();
@@ -30,14 +32,36 @@ export default function TokensView() {
   useEffect(() => {
     if (!address) return;
     let cancelled = false;
-    // State updates live in a nested async fn (not the synchronous effect body)
-    // so the loading reset doesn't trigger the set-state-in-effect cascade.
     const run = async () => {
       setLoading(true);
       setError(null);
       setResult(null);
       try {
-        const r = await listLicenseTokens(address);
+        const { makeSuiClient } = await import("@/lib/clients");
+        const client = makeSuiClient();
+
+        // Source candidate artifact ids from the app index. On Sui there is no
+        // owner-side object to enumerate, so we check membership against the
+        // gated/group artifacts the app already knows about (honest: a full
+        // enumeration needs an event indexer — see lib/licenseTokens header).
+        let candidateArtifactIds: string[] | undefined;
+        try {
+          const r = await fetch("/api/index");
+          if (r.ok) {
+            const data = (await r.json()) as Artifact[];
+            if (Array.isArray(data)) {
+              candidateArtifactIds = data
+                .filter((a) => a.tier === "gated" || a.tier === "group")
+                .map((a) => a.ipId);
+            }
+          }
+        } catch {
+          // Index unreachable — fall through with no candidates (honest empty).
+        }
+
+        const r = await listLicenseTokens(client, address, {
+          candidateArtifactIds,
+        });
         if (!cancelled) setResult(r);
       } catch (e: unknown) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e));
@@ -85,9 +109,9 @@ export default function TokensView() {
             maxWidth: 560,
           }}
         >
-          License tokens held by your connected wallet, read live from the Story
-          LicenseToken contract on Aeneid. Each gated artifact you unlock mints
-          one of these.
+          Artifacts your connected wallet holds a license for, read live from the
+          Tessera registry on Sui. Each gated or group artifact you unlock adds
+          your address to that artifact&apos;s on-chain license holders.
         </p>
       </div>
 
@@ -127,7 +151,7 @@ export default function TokensView() {
       {/* error / could-not-enumerate */}
       {authenticated && !loading && error ? (
         <DisclosureStrip tone="warning" icon="shield">
-          Couldn&apos;t enumerate tokens on-chain for this contract — {error}
+          Couldn&apos;t read license membership on-chain — {error}
         </DisclosureStrip>
       ) : null}
 
@@ -138,6 +162,23 @@ export default function TokensView() {
             <p style={{ margin: 0, color: "var(--ov-text-dim)", fontSize: 14 }}>
               You don&apos;t hold any license tokens yet.
             </p>
+            {!result.indexed ? (
+              <p
+                className="meta"
+                style={{ marginTop: 10, color: "var(--ov-text-faint)" }}
+              >
+                No candidate artifacts were available to check. A full wallet-wide
+                enumeration needs an off-chain event indexer.
+              </p>
+            ) : (
+              <p
+                className="meta"
+                style={{ marginTop: 10, color: "var(--ov-text-faint)" }}
+              >
+                Checked {result.checked} candidate artifact
+                {result.checked === 1 ? "" : "s"}.
+              </p>
+            )}
           </div>
         ) : (
           <>
@@ -147,7 +188,9 @@ export default function TokensView() {
             >
               {result.tokens.length} TOKEN
               {result.tokens.length === 1 ? "" : "S"}
-              {result.scanned ? " · via Transfer-log scan" : " · via enumeration"}
+              {" · "}
+              {result.checked} candidate
+              {result.checked === 1 ? "" : "s"} checked
             </div>
             <div className="panel" style={{ padding: 6 }}>
               {result.tokens.map((t) => (
@@ -173,17 +216,17 @@ export default function TokensView() {
                     className="font-mono"
                     style={{ fontSize: 13, color: "var(--ov-text)" }}
                   >
-                    #{t.tokenId}
+                    {t.artifactId.slice(0, 8)}…{t.artifactId.slice(-6)}
                   </span>
                   <span style={{ flex: 1 }} />
                   <a
-                    href={`${TOKEN_EXPLORER}${LICENSE_TOKEN}/instance/${t.tokenId}`}
+                    href={`${SUI_EXPLORER_OBJECT}${t.artifactId}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="txlink"
                   >
                     <span>View</span>
-                    <span className="suffix">NFT</span>
+                    <span className="suffix">OBJ</span>
                   </a>
                 </div>
               ))}

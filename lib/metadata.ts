@@ -17,7 +17,9 @@ import type { Modality } from "../types/artifact";
 
 export interface Creator {
   name: string;
-  address: `0x${string}`;
+  // Sui addresses are plain 0x+64hex strings; widened to `string` so browser
+  // signer addresses (typed `string` in BrowserClients) flow without a cast.
+  address: string;
   contributionPercent: number;
 }
 

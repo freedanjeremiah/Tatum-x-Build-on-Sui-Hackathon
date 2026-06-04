@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { Artifact } from "@/types/artifact";
 import { getClients, WalletNotConnectedError } from "@/lib/useClients";
+import { WALRUS_AGGREGATOR } from "@/lib/constants";
 import { tierMeta } from "@/lib/tiers";
 import DecryptProgress from "./DecryptProgress";
 import DisclosureStrip from "./ui/DisclosureStrip";
@@ -53,11 +54,13 @@ export default function DownloadButton({ artifact }: DownloadButtonProps) {
     setError(null);
     setPhase("decrypting");
     try {
-      const ref = artifact.cid ?? "";
-      if (!ref) throw new Error("This artifact has no CID to download.");
-      const cidHash = ref.replace(/^ipfs:\/\//, "");
-      const res = await fetch(`https://gateway.pinata.cloud/ipfs/${cidHash}`);
-      if (!res.ok) throw new Error(`Gateway fetch failed (${res.status})`);
+      // Public artifacts: the descriptor's `cid` is the Walrus blobId. Fetch the
+      // blob bytes straight from the Walrus aggregator (no IPFS gateway).
+      const blobId = artifact.cid ?? "";
+      if (!blobId) throw new Error("This artifact has no Walrus blobId to download.");
+      const base = WALRUS_AGGREGATOR.replace(/\/+$/, "");
+      const res = await fetch(`${base}/v1/blobs/${blobId}`);
+      if (!res.ok) throw new Error(`Walrus aggregator fetch failed (${res.status})`);
       const bytes = new Uint8Array(await res.arrayBuffer());
       triggerBrowserDownload(bytes);
       setPhase("done");
@@ -73,16 +76,22 @@ export default function DownloadButton({ artifact }: DownloadButtonProps) {
     try {
       const clients = await getClients();
       const { download } = await import("@/lib/artifacts");
-      // 10 WIP cap — explicit ceiling on what we'll pay to mint the access
-      // license. The actual on-chain fee is whatever the terms charge; if the
-      // terms exceed this cap, the mint reverts loudly. (No silent default.)
-      const { parseEther } = await import("viem");
+      // Gated (not private): purchase a license first — pay the artifact's
+      // on-chain `price` in MIST via buy_license, which adds the buyer to
+      // license_holders so seal_approve admits the decrypt below. Private (owner)
+      // needs no purchase — the owner already satisfies seal_approve.
+      if (isGated) {
+        const { mintLicense } = await import("@/lib/licensing");
+        // No explicit price → mintLicense reads the artifact's on-chain price and
+        // pays exactly that (no fake default; a mismatch aborts loudly on-chain).
+        await mintLicense(clients, artifact.ipId);
+      }
       const bytes = await download(clients, {
         ipId: artifact.ipId,
-        uuid: artifact.vaultUuid ?? 0,
+        cid: artifact.cid,
+        tier: artifact.tier,
         licenseTermsId: artifact.licenseTermsId ?? "",
         mint: !isPrivate,
-        maxFeeCap: parseEther("10"),
       });
       triggerBrowserDownload(bytes);
       setPhase("done");
