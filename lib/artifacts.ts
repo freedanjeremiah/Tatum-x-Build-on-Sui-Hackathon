@@ -47,17 +47,6 @@ export interface Clients {
   signer: Signer;
   address: string;
   account: { address: string };
-  // --- Legacy passthroughs (NOT used by the Sui core) ----------------------
-  // The B5 compute worker and the B3/B4 royalty/group/dispute scripts still read
-  // these old Story/CDR handles. They are typed as optional `any` here ONLY so
-  // those not-yet-migrated callers keep compiling; B2's own code never touches
-  // them. Remove once B3-B5 + Phase C are migrated.
-  /** @deprecated Story CDR client — removed in the Sui core. */
-  cdr?: any;
-  /** @deprecated Story SDK client — removed in the Sui core. */
-  story?: any;
-  /** @deprecated viem PublicClient — removed in the Sui core. */
-  publicClient?: any;
 }
 
 export type UploadMeta = BuildIpaMetadataArgs;

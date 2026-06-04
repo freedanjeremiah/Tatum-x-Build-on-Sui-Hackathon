@@ -18,7 +18,6 @@
 //
 // Run: pnpm real scripts/diag/full-suite.ts
 
-import { parseEther, formatEther } from "viem";
 import { getClients } from "../_util";
 import {
   uploadPublic,
@@ -67,8 +66,11 @@ async function main() {
   const results: StepResult[] = [];
 
   const clients = await getClients();
-  const owner = (clients.account as any).address as `0x${string}`;
+  const owner = clients.account.address as `0x${string}`;
   console.log("operator:", owner);
+
+  // MIST helpers (Sui royalties are SUI/MIST, not WIP/wei).
+  const MIST_PER_SUI = 1_000_000_000n;
 
   // 1. uploadPublic — pinned cleartext.
   const publicArt = await run(
@@ -153,16 +155,15 @@ async function main() {
     results,
   );
 
-  // 5. download (gated) — mints a license, decrypts.
-  if (gatedArt && gatedArt.licenseTermsId && gatedArt.vaultUuid !== undefined) {
+  // 5. download (gated) — the owner passes seal_approve's gated branch and decrypts.
+  if (gatedArt) {
     await run(
-      "download (gated, mint license)",
+      "download (gated, owner decrypt)",
       async () => {
         const bytes = await download(clients as unknown as Clients, {
           ipId: gatedArt.ipId,
-          uuid: gatedArt.vaultUuid!,
-          licenseTermsId: gatedArt.licenseTermsId!,
-          maxFeeCap: parseEther("5"),
+          cid: gatedArt.cid,
+          tier: "gated",
         });
         const text = new TextDecoder().decode(bytes);
         console.log("  decrypted:", text);
@@ -171,16 +172,15 @@ async function main() {
     );
   }
 
-  // 6. download (private, no mint) — owner decrypts.
-  if (privateArt && privateArt.vaultUuid !== undefined) {
+  // 6. download (private) — owner decrypts the owner-only artifact.
+  if (privateArt) {
     await run(
       "download (private, owner)",
       async () => {
         const bytes = await download(clients as unknown as Clients, {
           ipId: privateArt.ipId,
-          uuid: privateArt.vaultUuid!,
-          licenseTermsId: "",
-          mint: false,
+          cid: privateArt.cid,
+          tier: "private",
         });
         const text = new TextDecoder().decode(bytes);
         console.log("  decrypted:", text);
@@ -212,33 +212,34 @@ async function main() {
     );
   }
 
-  // 8. payRoyalty — pay royalties to the compute child (the derivative).
+  // 8. payRoyalty — pay royalties into the compute derivative's vault, routing
+  // 100% up to the compute parent (so the parent accrues claimable revenue).
   if (computeResult?.resultIpId) {
     await run(
-      "payRoyalty (1 WIP to compute derivative)",
+      "payRoyalty (0.05 SUI → compute derivative, routed up)",
       async () => {
-        const r = await payRoyalty(clients.story as any, {
-          childIpId: computeResult!.resultIpId!,
-          amount: parseEther("0.05"),
+        const r = await payRoyalty(clients, computeResult!.resultIpId!, MIST_PER_SUI / 20n, {
+          parentSharePct: 100,
         });
-        console.log("  tx:", r.txHash);
+        console.log("  tx:", r.parentTxHash ?? r.txHash);
       },
       results,
     );
   }
 
-  // 9. getClaimable + claimRevenue — owner reads + claims.
+  // 9. getClaimable + claimRevenue — owner reads + claims on the compute parent.
   if (computeArt && computeResult?.resultIpId) {
     await run(
       "getClaimable + claimRevenue",
       async () => {
-        const claimable = await getClaimable(clients.story as any, { ipId: computeArt!.ipId });
-        console.log("  claimable on parent:", formatEther(claimable), "WIP");
-        const r = await claimRevenue(clients.story as any, {
-          parentIpId: computeArt!.ipId,
-          childIpIds: [computeResult!.resultIpId!],
-        });
-        console.log("  claim tx:", r.txHash);
+        const claimable = await getClaimable(clients, computeArt!.ipId);
+        console.log("  claimable on parent:", claimable.toString(), "MIST");
+        if (claimable > 0n && computeArt!.capId) {
+          const r = await claimRevenue(clients, computeArt!.ipId, computeArt!.capId);
+          console.log("  claim tx:", r.txHash);
+        } else {
+          console.log("  nothing to claim (vault empty)");
+        }
       },
       results,
     );
@@ -251,11 +252,7 @@ async function main() {
       "raiseReport (IMPROPER_REGISTRATION)",
       async () => {
         const cid = freshEvidenceCid("FullSuite");
-        const r = await raiseReport(clients.story as any, {
-          targetIpId: publicArt!.ipId,
-          cid,
-          tag: "IMPROPER_REGISTRATION",
-        });
+        const r = await raiseReport(clients, publicArt!.ipId, cid, "IMPROPER_REGISTRATION");
         console.log("  disputeId:", r.disputeId, "tx:", r.txHash);
         return r;
       },
@@ -269,12 +266,8 @@ async function main() {
       "counterDispute (counter-evidence)",
       async () => {
         const counterCid = freshEvidenceCid("Counter");
-        const r = await counterDispute(clients.story as any, {
-          ipId: publicArt!.ipId,
-          disputeId: raised!.disputeId,
-          counterEvidenceCID: counterCid,
-        });
-        console.log("  assertionId:", r.assertionId, "tx:", r.txHash);
+        const r = await counterDispute(clients, publicArt!.ipId, counterCid);
+        console.log("  counterCid:", r.cid, "tx:", r.txHash);
       },
       results,
     );
@@ -305,31 +298,29 @@ async function main() {
   );
 
   let group: Awaited<ReturnType<typeof createGroup>> | undefined;
-  if (gatedArt && gated2 && gatedArt.licenseTermsId === gated2.licenseTermsId) {
+  if (gatedArt && gated2) {
     group = await run(
       "createGroup",
       async () => {
-        const r = await createGroup(clients.story as any, {
-          ipIds: [gatedArt.ipId, gated2.ipId],
-          termsId: gatedArt.licenseTermsId!,
-        });
-        console.log("  groupIpId:", r.groupIpId, "tx:", r.txHash);
+        const r = await createGroup(clients, [gatedArt.ipId, gated2.ipId]);
+        console.log("  groupId:", r.groupId, "tx:", r.txHash);
         return r;
       },
       results,
     );
   }
 
-  // 13. distribute — collect + distribute group royalties.
-  if (group && gatedArt && gated2) {
+  // 13. distribute — realize each member's own royalty vault (Sui has no shared
+  // even-split pool; distribute owner-claims each member with its ArtifactCap).
+  if (group && gatedArt && gated2 && gatedArt.capId && gated2.capId) {
     await run(
       "distribute group royalties",
       async () => {
-        const r = await distribute(clients.story as any, {
-          groupIpId: group!.groupIpId,
-          memberIpIds: [gatedArt.ipId, gated2.ipId],
-        });
-        console.log("  tx:", r.txHash);
+        const r = await distribute(clients, [
+          { artifactId: gatedArt.ipId, capId: gatedArt.capId! },
+          { artifactId: gated2.ipId, capId: gated2.capId! },
+        ]);
+        console.log("  totalClaimed:", r.totalClaimed.toString(), "MIST");
       },
       results,
     );

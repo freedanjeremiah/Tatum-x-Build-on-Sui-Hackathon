@@ -12,50 +12,41 @@ import { freshEvidenceCid, raiseReport, counterDispute } from "../lib/dispute";
 
 async function main() {
   const clients = await getClients();
-  const owner = (clients.account as any).address as `0x${string}`;
+  const owner = clients.account.address as `0x${string}`;
 
-  // A target IP to dispute (register one so the script is self-contained).
-  const target = await uploadPublic(clients as any, {
+  // A target artifact to dispute (register one so the script is self-contained).
+  const target = await uploadPublic(clients, {
     bytes: new TextEncoder().encode("disputable artifact"),
     meta: {
       title: "Disputable Artifact",
       description: "Target of a demo dispute.",
       tags: ["demo"],
-      creators: [{ name: "OpenVault Demo", address: owner, contributionPercent: 100 }],
+      creators: [{ name: "Tessera Demo", address: owner, contributionPercent: 100 }],
       modality: "dataset",
     },
   });
   const targetIpId = target.ipId;
 
-  // Bond + liveness omitted: the SDK reads OptimisticOracleV3.getMinimumBond(WIP)
-  // and the arbitration policy's min liveness from chain, then auto-wraps the
-  // bond from native IP via WIP_OPTIONS (spread in raiseReport).
-  const tag = "IMPROPER_REGISTRATION";
+  // No on-chain bond on Sui: disputes are permissionless flags + events; the
+  // reason/CID are recorded in the on-chain `Disputed` event (arbitration is
+  // off-chain). See lib/dispute.ts for the documented bond drop.
+  const reason = "IMPROPER_REGISTRATION";
 
   const evidenceCID = freshEvidenceCid("Evidence");
-  const raised = await raiseReport(clients.story as any, {
-    targetIpId,
-    cid: evidenceCID,
-    tag,
-  });
+  const raised = await raiseReport(clients, targetIpId, evidenceCID, reason);
   logTx("raise dispute", raised.txHash);
 
-  // Counter the assertion with fresh counter-evidence.
+  // Counter the report with fresh counter-evidence.
   const counterCID = freshEvidenceCid("Counter");
-  const counter = await counterDispute(clients.story as any, {
-    ipId: targetIpId,
-    disputeId: raised.disputeId,
-    counterEvidenceCID: counterCID,
-  });
+  const counter = await counterDispute(clients, targetIpId, counterCID);
 
   console.log("=== 04-dispute (SPEC §8.6) ===");
-  console.log("targetIpId:", targetIpId);
-  console.log("disputeId:", raised.disputeId);
-  console.log("bond: (on-chain minimum from arbitration policy)");
+  console.log("targetArtifactId:", targetIpId);
+  console.log("disputeId (tx digest):", raised.disputeId);
+  console.log("disputeCount:", raised.disputeCount.toString());
   console.log("evidenceCID:", evidenceCID);
-  console.log("assertionId:", counter.assertionId);
-  console.log("counterEvidenceCID:", counterCID);
-  logTx("counter assertion", counter.txHash);
+  console.log("counterEvidenceCID:", counter.cid);
+  logTx("counter dispute", counter.txHash);
   console.log("✓ dispute raised + countered (fresh evidence each side)");
 }
 

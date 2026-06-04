@@ -1,48 +1,64 @@
-// Real-connectivity probe — no gas required.
-// Proves: Pinata pinning (JWT), CDR live reads (global pubkey + fees), wallet balance.
+// Real-connectivity probe (Sui-native) — no gas required.
+// Proves: Pinata pinning (JWT, public metadata only), Sui RPC liveness via the
+// Tatum gateway (chain identifier + reference gas price), and the signer's SUI
+// balance (funded check). Adapted from sharegraph's keystore `ensureFunded`
+// balance read (apps/mcp/src/keystore.ts) — uses client.core.getBalance.
 import { config } from "dotenv";
 import { resolve } from "node:path";
 config({ path: resolve(process.cwd(), ".env.local") });
 
 import { pinJSON } from "../lib/storage";
 import { makeClientsFromKey } from "../lib/clients";
-import { RPC_URL, CDR_API_URL } from "../lib/constants";
+import { TATUM_SUI_JSONRPC, TESSERA_PACKAGE_ID } from "../lib/constants";
 
 async function main() {
-  console.log("PINATA_JWT present:", !!process.env.PINATA_JWT, "PK present:", !!process.env.WALLET_PRIVATE_KEY);
+  const pk = process.env.WALLET_PRIVATE_KEY ?? process.env.MASTER_SUI_PRIVKEY;
+  console.log(
+    "PINATA_JWT present:",
+    !!process.env.PINATA_JWT,
+    "SUI key present:",
+    !!pk,
+    "TATUM gateway:",
+    TATUM_SUI_JSONRPC,
+  );
 
-  // 1) Pinata pin (real, JWT only)
+  // 1) Pinata pin (real, JWT only) — public metadata pinning still used by uploads.
   try {
-    const pinned = await pinJSON({ probe: "openvault", t: "real-connectivity" });
+    const pinned = await pinJSON({ probe: "tessera", t: "real-connectivity" });
     console.log("✓ PINATA pinJSON ->", pinned.uri);
   } catch (e) {
     console.log("✗ PINATA pinJSON failed:", (e as Error).message);
   }
 
-  // 2) CDR live reads (no gas)
+  if (!pk) {
+    console.log("• No SUI key set — skipping on-chain probe (set WALLET_PRIVATE_KEY/MASTER_SUI_PRIVKEY).");
+    return;
+  }
+
+  // 2) Sui RPC liveness (no gas) + signer balance.
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { cdr, account, publicClient } = (await makeClientsFromKey(
-      process.env.WALLET_PRIVATE_KEY as `0x${string}`
-    )) as any;
-    console.log("wallet:", account.address);
-    const gpk = await cdr.observer.getGlobalPubKey();
-    console.log("✓ CDR getGlobalPubKey ->", gpk?.length, "bytes");
-    try {
-      const [alloc, write, read] = await Promise.all([
-        cdr.observer.getAllocateFee(),
-        cdr.observer.getWriteFee(),
-        cdr.observer.getReadFee(),
-      ]);
-      console.log("✓ CDR fees (wei): allocate=%s write=%s read=%s", alloc, write, read);
-    } catch (e) {
-      console.log("• CDR fees read failed:", (e as Error).message);
+    const { client, address } = await makeClientsFromKey(pk);
+    console.log("wallet:", address);
+
+    const gasPrice = await client.getReferenceGasPrice();
+    console.log("✓ SUI getReferenceGasPrice ->", gasPrice.toString(), "MIST");
+
+    const bal = await client.core.getBalance({ owner: address, coinType: "0x2::sui::SUI" });
+    const mist = BigInt(bal.balance?.balance ?? "0");
+    console.log(
+      "wallet balance (MIST):",
+      mist.toString(),
+      mist === 0n ? "→ UNFUNDED (use the Sui testnet faucet to send txs)" : "→ funded",
+    );
+
+    if (TESSERA_PACKAGE_ID && TESSERA_PACKAGE_ID.trim() !== "") {
+      const pkg = await client.core.getObject({ objectId: TESSERA_PACKAGE_ID });
+      console.log("✓ tessera package reachable:", Boolean((pkg as { object?: unknown }).object));
+    } else {
+      console.log("• TESSERA_PACKAGE_ID unset — registry calls will fail until it is set.");
     }
-    // 3) wallet balance (gas check)
-    const bal = await publicClient.getBalance({ address: account.address });
-    console.log("wallet balance (wei):", bal, bal === 0n ? "→ UNFUNDED (fund via faucet to send txs)" : "→ funded");
   } catch (e) {
-    console.log("✗ CDR/client init failed:", (e as Error).message);
+    console.log("✗ Sui client/probe failed:", (e as Error).message);
   }
 }
 main().then(() => process.exit(0)).catch((e) => { console.error(e); process.exit(1); });

@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { createRequire } from "node:module";
 
 import { makeClientsFromKey } from "../lib/clients";
-import { STORYSCAN_TX } from "../lib/constants";
+import { SUI_EXPLORER_TX } from "../lib/constants";
 
 // Scripts run under tsx in CJS output (no "type":"module"), so __dirname exists.
 const HERE = typeof __dirname !== "undefined" ? __dirname : process.cwd();
@@ -26,22 +26,23 @@ try {
 const LAST_FILE = resolve(HERE, ".last-upload.json");
 
 /**
- * Returns the {cdr, story, account, ...} client bundle.
- * Requires WALLET_PRIVATE_KEY in the environment; throws loudly if absent.
+ * Returns the Sui ServerClients bundle ({ client, signer, address, account, ... }).
+ * Requires WALLET_PRIVATE_KEY (or MASTER_SUI_PRIVKEY) in the environment; throws
+ * loudly if absent. No fake fallback.
  */
 export async function getClients() {
-  const pk = process.env.WALLET_PRIVATE_KEY;
+  const pk = process.env.WALLET_PRIVATE_KEY ?? process.env.MASTER_SUI_PRIVKEY;
   if (!pk) {
     throw new Error(
-      "WALLET_PRIVATE_KEY is not set. Add it to .env.local and re-run with --env-file .env.local."
+      "WALLET_PRIVATE_KEY (or MASTER_SUI_PRIVKEY) is not set. Add it to .env.local and re-run with --env-file .env.local."
     );
   }
-  return makeClientsFromKey(pk as `0x${string}`);
+  return makeClientsFromKey(pk);
 }
 
-/** Print a labeled link to the Story tx explorer. */
+/** Print a labeled link to the Sui tx explorer. */
 export function logTx(label: string, hash: string) {
-  console.log(`${label}: ${STORYSCAN_TX}${hash}`);
+  console.log(`${label}: ${SUI_EXPLORER_TX}${hash}`);
 }
 
 /** Persist a small JSON blob (uuid/ipId/licenseTermsId/...) for the next script. */
@@ -90,5 +91,5 @@ export async function selfIndex(artifact: Record<string, unknown>): Promise<void
 
 // Smoke: `pnpm tsx scripts/_util.ts` must not throw.
 if (import.meta.url === `file://${process.argv[1]}` || process.argv[1]?.endsWith("_util.ts")) {
-  console.log(`_util ok — explorer=${STORYSCAN_TX}`);
+  console.log(`_util ok — explorer=${SUI_EXPLORER_TX}`);
 }

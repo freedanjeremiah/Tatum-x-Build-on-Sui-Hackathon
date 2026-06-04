@@ -140,6 +140,44 @@ export function getArtifact(db: DB, ipId: string): Artifact | undefined {
   return row ? fromRow(row) : undefined;
 }
 
+// --- Indexer cursor (resumable Sui event polling) -----------------------
+//
+// The Sui event indexer (indexer/listen.ts) paginates queryEvents and persists
+// the last consumed EventId so a restart resumes where it left off. The cursor
+// is keyed by a logical stream name (e.g. the Move event type). Stored as the
+// {txDigest, eventSeq} pair the Sui RPC expects back as a paging cursor.
+
+/** A Sui EventId paging cursor ({ txDigest, eventSeq }). */
+export interface EventCursor {
+  txDigest: string;
+  eventSeq: string;
+}
+
+function ensureCursorTable(db: DB): void {
+  db.exec(
+    "CREATE TABLE IF NOT EXISTS indexer_cursor (" +
+      "stream TEXT PRIMARY KEY, txDigest TEXT NOT NULL, eventSeq TEXT NOT NULL)",
+  );
+}
+
+/** Read the saved cursor for `stream`, or null if none has been persisted. */
+export function getCursor(db: DB, stream: string): EventCursor | null {
+  ensureCursorTable(db);
+  const row = db
+    .prepare("SELECT txDigest, eventSeq FROM indexer_cursor WHERE stream = ?")
+    .get(stream) as EventCursor | undefined;
+  return row ?? null;
+}
+
+/** Persist the cursor for `stream` (idempotent upsert on the stream name). */
+export function setCursor(db: DB, stream: string, cursor: EventCursor): void {
+  ensureCursorTable(db);
+  db.prepare(
+    "INSERT INTO indexer_cursor (stream, txDigest, eventSeq) VALUES (@stream, @txDigest, @eventSeq) " +
+      "ON CONFLICT(stream) DO UPDATE SET txDigest = excluded.txDigest, eventSeq = excluded.eventSeq",
+  ).run({ stream, txDigest: cursor.txDigest, eventSeq: cursor.eventSeq });
+}
+
 export interface ListFilter {
   tier?: string;
   modality?: string;

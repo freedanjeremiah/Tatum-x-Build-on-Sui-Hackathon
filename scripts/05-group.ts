@@ -1,16 +1,24 @@
-// SPEC §8.7 — Group bundle.
+// SPEC §8.7 — Group bundle (Sui-native).
 //
-// Register a group with even-split rewards, attach a license, add member IPs,
-// add one more, then collect + distribute group royalties to the members. The
-// group steps now use lib/group.
+// Create a shared Group object, record member artifacts at creation, add one
+// more, then realize group revenue by claiming each member's own on-chain
+// royalty vault (Sui has no shared even-split pool — see lib/group.ts). Each
+// member carries its own ArtifactCap, captured at register time so `distribute`
+// can owner-claim per member.
 //
 // Run: pnpm real scripts/05-group.ts
 
+import type { ServerClients } from "../lib/clients";
 import { getClients, logTx } from "./_util";
 import { uploadPublic } from "../lib/artifacts";
 import { createGroup, addToGroup, distribute } from "../lib/group";
 
-async function registerMember(clients: any, title: string): Promise<`0x${string}`> {
+interface Member {
+  artifactId: string;
+  capId: string;
+}
+
+async function registerMember(clients: ServerClients, title: string): Promise<Member> {
   const owner = clients.account.address as `0x${string}`;
   const art = await uploadPublic(clients, {
     bytes: new TextEncoder().encode(title),
@@ -18,41 +26,39 @@ async function registerMember(clients: any, title: string): Promise<`0x${string}
       title,
       description: `Group member ${title}.`,
       tags: ["group", "member"],
-      creators: [{ name: "OpenVault Demo", address: owner, contributionPercent: 100 }],
+      creators: [{ name: "Tessera Demo", address: owner, contributionPercent: 100 }],
       modality: "model",
     },
   });
-  return art.ipId;
+  return { artifactId: art.ipId, capId: art.capId! };
 }
 
 async function main() {
   const clients = await getClients();
 
-  // Three member IPs (A, B added at creation; C added after).
+  // Three member artifacts (A, B recorded at creation; C added after).
   const A = await registerMember(clients, "Member A");
   const B = await registerMember(clients, "Member B");
   const C = await registerMember(clients, "Member C");
 
-  // A group license terms id.
-  const GROUP_TERMS = "1500";
+  const grp = await createGroup(clients, [A.artifactId, B.artifactId]);
+  const groupId = grp.groupId;
+  logTx("create group", grp.txHash);
 
-  const grp = await createGroup(clients.story as any, { ipIds: [A, B], termsId: GROUP_TERMS });
-  const groupIpId = grp.groupIpId;
-  logTx("register group", grp.txHash);
-
-  const add = await addToGroup(clients.story as any, { groupIpId, ipIds: [C] });
+  const add = await addToGroup(clients, grp.capId, groupId, [C.artifactId]);
   logTx("add member C", add.txHash);
 
-  const dist = await distribute(clients.story as any, { groupIpId, memberIpIds: [A, B] });
-
-  // OPEN ITEM (SPEC §8.7): group-license -> member vault read-condition unconfirmed;
-  // default to per-IP gating.
+  // Realize revenue: claim each member's own vault (skips empty vaults).
+  const dist = await distribute(clients, [A, B, C]);
 
   console.log("=== 05-group (SPEC §8.7) ===");
-  console.log("groupIpId:", groupIpId);
-  console.log("members:", [A, B, C]);
-  logTx("distribute royalties", dist.txHash);
-  console.log("✓ group registered, members added, royalties distributed");
+  console.log("groupId:", groupId);
+  console.log("members:", [A.artifactId, B.artifactId, C.artifactId]);
+  console.log("total claimed (MIST):", dist.totalClaimed.toString());
+  for (const r of dist.results) {
+    console.log(`  ${r.artifactId}: ${r.skipped ? `skipped (${r.skipped})` : `claimed ${r.claimed} MIST`}`);
+  }
+  console.log("✓ group created, members recorded, member vaults distributed");
 }
 
 main().catch((e) => {

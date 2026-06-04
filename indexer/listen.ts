@@ -1,243 +1,299 @@
-// OpenVault event indexer (INDEX-ONLY).
+// Tessera Sui event indexer (INDEX-ONLY).
 //
-// Mirrors PUBLIC on-chain registry data into the local SQLite read model so the
-// UI can browse/search. NEVER touches decryption keys, NEVER sees plaintext,
-// NEVER gates access.
+// Mirrors PUBLIC on-chain `tessera::registry` events into the local SQLite read
+// model so the UI can browse/search and rank artifacts. It is a CACHE: it NEVER
+// touches decryption keys, NEVER sees plaintext, NEVER gates access. The on-chain
+// `seal_approve` policy is the only real gate.
 //
-// Watchers:
-//   IPRegistered       → fetch + parse public IP metadata JSON at args.uri,
-//                        upsert with parsed tier/modality/tags. NO silent
-//                        public-shell fallback; missing/invalid metadata SKIPS
-//                        the upsert with a loud warn.
-//   LicenseTokenMinted → bump the licensor IP's score by a fee-weighted nudge
-//                        so the leaderboard surfaces actively-licensed IPs.
-//   RoyaltyPaid        → bump the receiver IP's score and the payer IP's score
-//                        (real economic activity → real ranking signal).
+// Replaces the old viem EVM log subscription. We poll `SuiClient.queryEvents`
+// filtered to the registry module, cursor-paginate from the oldest unseen event,
+// upsert into the read model, and persist the paging cursor so a restart resumes
+// where it left off. Public RPC has no long-lived websocket subscription here, so
+// polling is the portable, Tatum-gateway-friendly path.
 //
-// Deferred (need module addresses in constants.ts to wire properly):
-//   GroupCreated / GroupIpsAdded — set groupId on the indexed members.
-//   DisputeRaised / DisputeResolved — record dispute state on the targetIpId.
-// These are noted in HANDOFF.md P1 as the next iteration.
+// Event → read-model mapping (events emitted by move/sources/tessera.move):
+//   ArtifactRegistered{artifact, owner, tier, parent}
+//       → upsert a new artifact row (tier from u8, owner, parentIpId, createdTx).
+//   LicensePurchased{artifact, buyer, price}
+//       → +2 score on the licensed artifact (active licensing signal).
+//   AccessChanged{artifact, who, kind}
+//       → +1 score (a grant/revoke/worker-add is real activity).
+//   RoyaltyPaid{artifact, payer, amount, accrued}
+//       → +3 score (revenue is the strongest economic ranking signal).
+//   RevenueClaimed{artifact, owner, amount}
+//       → no score change (a withdrawal, logged only).
+//   GroupCreated{group, owner}
+//       → logged (groups are not artifacts; no row of their own).
+//   GroupMemberAdded{group, member}
+//       → set groupId on the member artifact row (if already indexed).
+//   Disputed{artifact, reporter, evidence, count}
+//       → log (sticky on-chain flag; surfaced via the registry read, not scored).
+//   CounterEvidence{artifact, responder, evidence}
+//       → log only.
+//
+// NOTE on metadata: the Move events carry ids/tiers, not title/description/tags.
+// Those come from the public IP-metadata JSON the upload flow self-indexes via
+// /api/index. This indexer therefore catalogues the on-chain SHELL of each
+// artifact (id/tier/owner/lineage) and lets the richer metadata layer over the
+// top; it never invents titles. modality defaults to "dataset" until the
+// metadata layer refines it (the row stays browsable in the meantime).
 
-import { RPC_URL, IP_ASSET_REGISTRY, LICENSE_TOKEN, ROYALTY_MODULE } from "../lib/constants";
-import { openDb, upsertArtifact, getArtifact } from "./db";
-import type { Artifact, Tier, Modality } from "../types/artifact";
+import type { SuiEvent } from "@mysten/sui/jsonRpc";
 
-/** Public IP-metadata shape we expect at args.uri (subset). */
-interface IpMeta {
-  title?: string;
-  description?: string;
-  tags?: string[];
-  modality?: string;
-  tier?: string;
-  cid?: string;
-  externalSource?: string;
+import { makeSuiClient, type SuiClient } from "../lib/clients";
+import { TESSERA_PACKAGE_ID } from "../lib/constants";
+import { u8ToTier } from "../lib/registry";
+import {
+  openDb,
+  upsertArtifact,
+  getArtifact,
+  getCursor,
+  setCursor,
+  type DB,
+  type EventCursor,
+} from "./db";
+import type { Artifact, Tier } from "../types/artifact";
+
+const MODULE = "registry";
+
+// Single logical stream — we query the whole registry module and route by the
+// event's `type` suffix, so one cursor covers every registry event in order.
+const STREAM = "tessera::registry";
+
+const PAGE_LIMIT = 50;
+const POLL_INTERVAL_MS = Number(process.env.OV_INDEXER_POLL_MS ?? 4000);
+
+/** Map the on-chain tier u8 to the app-facing Tier (types/artifact.ts). */
+const CORE_TO_APP: Record<string, Tier> = {
+  public: "public",
+  "private-owner": "private",
+  "gated-license": "gated",
+  group: "group",
+  compute: "compute",
+};
+
+function appTier(tierU8: number): Tier {
+  const core = u8ToTier(tierU8); // throws on an out-of-range u8 (fail loud)
+  return CORE_TO_APP[core] ?? "public";
 }
 
-function ipfsToGateway(uri: string): string {
-  if (uri.startsWith("ipfs://")) {
-    const path = uri.slice("ipfs://".length).replace(/^ipfs\//, "");
-    return `https://gateway.pinata.cloud/ipfs/${path}`;
+// --- typed event payload shapes (parsedJson of each Move event struct) -------
+
+interface ArtifactRegisteredJson {
+  artifact: string;
+  owner: string;
+  tier: number | string;
+  parent: { vec?: string[] } | string | null;
+}
+interface LicensePurchasedJson {
+  artifact: string;
+  buyer: string;
+  price: number | string;
+}
+interface AccessChangedJson {
+  artifact: string;
+  who: string;
+  kind: number | string;
+}
+interface RoyaltyPaidJson {
+  artifact: string;
+  payer: string;
+  amount: number | string;
+  accrued: number | string;
+}
+interface RevenueClaimedJson {
+  artifact: string;
+  owner: string;
+  amount: number | string;
+}
+interface GroupMemberAddedJson {
+  group: string;
+  member: string;
+}
+interface DisputedJson {
+  artifact: string;
+  reporter: string;
+  count: number | string;
+}
+
+/** Normalize a Move `Option<ID>` (rendered as `{ vec: [id?] }` or string/null). */
+function parseOptionId(v: ArtifactRegisteredJson["parent"]): `0x${string}` | undefined {
+  if (!v) return undefined;
+  if (typeof v === "string") return v === "" ? undefined : (v as `0x${string}`);
+  const first = v.vec?.[0];
+  return first ? (first as `0x${string}`) : undefined;
+}
+
+/** Add `delta` to an artifact's leaderboard score (no-op if it is not indexed). */
+function bumpScore(db: DB, artifactId: string, delta: number, label: string): void {
+  const existing = getArtifact(db, artifactId);
+  if (!existing) {
+    console.warn(`[indexer] ${label} for unknown artifact=${artifactId} — skipping (not indexed yet)`);
+    return;
   }
-  return uri;
+  existing.score = (existing.score ?? 0) + delta;
+  upsertArtifact(db, existing);
+  console.log(`[indexer] ${label} artifact=${artifactId} +${delta} score`);
 }
 
-async function fetchIpMeta(uri: string, timeoutMs = 15000): Promise<IpMeta | null> {
-  if (!uri) return null;
-  const url = ipfsToGateway(uri);
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), timeoutMs);
-  try {
-    const r = await fetch(url, { signal: ctrl.signal });
-    if (!r.ok) {
-      console.warn(`[indexer] metadata fetch ${r.status} for ${url}`);
-      return null;
+/** Dispatch one Sui event into the read model. Routes by the event type suffix. */
+function handleEvent(db: DB, ev: SuiEvent): void {
+  // ev.type looks like `${pkg}::registry::ArtifactRegistered`.
+  const name = ev.type.split("::").pop() ?? "";
+  const json = ev.parsedJson;
+  const tx = (ev.id?.txDigest ?? "0x") as `0x${string}`;
+
+  switch (name) {
+    case "ArtifactRegistered": {
+      const a = json as ArtifactRegisteredJson;
+      const tierU8 = Number(a.tier);
+      const row: Artifact = {
+        ipId: a.artifact as `0x${string}`,
+        tier: appTier(tierU8),
+        // The on-chain event carries no modality/title — default to a browsable
+        // shell that the /api/index metadata layer refines. No invented titles.
+        modality: "dataset",
+        title: a.artifact,
+        description: "",
+        tags: [],
+        ipMetadataURI: "",
+        createdTx: tx,
+        owner: a.owner as `0x${string}`,
+        score: 0,
+      };
+      const parent = parseOptionId(a.parent);
+      if (parent) row.parentIpId = parent;
+      // Preserve any richer metadata a prior /api/index upsert already wrote.
+      const existing = getArtifact(db, row.ipId);
+      if (existing) {
+        upsertArtifact(db, {
+          ...existing,
+          tier: row.tier,
+          owner: row.owner,
+          createdTx: existing.createdTx || row.createdTx,
+          parentIpId: row.parentIpId ?? existing.parentIpId,
+        });
+      } else {
+        upsertArtifact(db, row);
+      }
+      console.log(`[indexer] ArtifactRegistered ${row.ipId} tier=${row.tier} owner=${row.owner}`);
+      break;
     }
-    const data = (await r.json()) as IpMeta;
-    return data;
-  } catch (e) {
-    console.warn(`[indexer] metadata fetch failed for ${url}: ${(e as Error).message}`);
-    return null;
-  } finally {
-    clearTimeout(t);
+    case "LicensePurchased": {
+      const a = json as LicensePurchasedJson;
+      bumpScore(db, a.artifact, 2, "LicensePurchased");
+      break;
+    }
+    case "AccessChanged": {
+      const a = json as AccessChangedJson;
+      bumpScore(db, a.artifact, 1, `AccessChanged(kind=${a.kind})`);
+      break;
+    }
+    case "RoyaltyPaid": {
+      const a = json as RoyaltyPaidJson;
+      bumpScore(db, a.artifact, 3, "RoyaltyPaid");
+      break;
+    }
+    case "RevenueClaimed": {
+      const a = json as RevenueClaimedJson;
+      console.log(`[indexer] RevenueClaimed artifact=${a.artifact} amount=${a.amount} (no score change)`);
+      break;
+    }
+    case "GroupCreated": {
+      // Groups are not artifacts — nothing to upsert; membership arrives via
+      // GroupMemberAdded. Logged for observability.
+      console.log(`[indexer] GroupCreated ${JSON.stringify(json)}`);
+      break;
+    }
+    case "GroupMemberAdded": {
+      const a = json as GroupMemberAddedJson;
+      const member = getArtifact(db, a.member);
+      if (member) {
+        member.groupId = a.group as `0x${string}`;
+        upsertArtifact(db, member);
+        console.log(`[indexer] GroupMemberAdded group=${a.group} member=${a.member}`);
+      } else {
+        console.warn(`[indexer] GroupMemberAdded for unknown member=${a.member} — skipping`);
+      }
+      break;
+    }
+    case "Disputed": {
+      const a = json as DisputedJson;
+      console.log(`[indexer] Disputed artifact=${a.artifact} count=${a.count} reporter=${a.reporter}`);
+      break;
+    }
+    case "CounterEvidence": {
+      console.log(`[indexer] CounterEvidence ${JSON.stringify(json)}`);
+      break;
+    }
+    default:
+      // Unknown / future event — ignore but keep the cursor advancing.
+      break;
   }
 }
 
-const TIER_VALUES: ReadonlySet<Tier> = new Set([
-  "public",
-  "private",
-  "gated",
-  "group",
-  "compute",
-]);
-const MODALITY_VALUES: ReadonlySet<Modality> = new Set(["dataset", "model"]);
+/**
+ * Drain every event newer than the saved cursor in ascending (oldest-first)
+ * order, upserting each into the read model and advancing the persisted cursor
+ * page by page. Returns the number of events consumed this drain.
+ */
+async function drainOnce(client: SuiClient, db: DB): Promise<number> {
+  let cursor: EventCursor | null = getCursor(db, STREAM);
+  let consumed = 0;
 
-function coerceTier(v: unknown): Tier | undefined {
-  if (typeof v === "string" && TIER_VALUES.has(v as Tier)) return v as Tier;
-  return undefined;
-}
-function coerceModality(v: unknown): Modality | undefined {
-  if (typeof v === "string" && MODALITY_VALUES.has(v as Modality)) return v as Modality;
-  return undefined;
+  for (;;) {
+    const page = await client.queryEvents({
+      query: { MoveModule: { package: TESSERA_PACKAGE_ID, module: MODULE } },
+      cursor: cursor ?? undefined,
+      limit: PAGE_LIMIT,
+      order: "ascending",
+    });
+
+    for (const ev of page.data) {
+      try {
+        handleEvent(db, ev);
+      } catch (e) {
+        console.warn(`[indexer] failed to handle ${ev.type}: ${(e as Error).message}`);
+      }
+      consumed++;
+    }
+
+    if (page.nextCursor) {
+      cursor = { txDigest: page.nextCursor.txDigest, eventSeq: page.nextCursor.eventSeq };
+      setCursor(db, STREAM, cursor);
+    }
+    if (!page.hasNextPage) break;
+  }
+
+  return consumed;
 }
 
 async function runReal(): Promise<void> {
-  const { createPublicClient, http, parseAbiItem } = await import("viem");
+  if (!TESSERA_PACKAGE_ID || TESSERA_PACKAGE_ID.trim() === "") {
+    throw new Error(
+      "TESSERA_PACKAGE_ID is unset — cannot index. Set OV_TESSERA_PACKAGE_ID (or " +
+        "NEXT_PUBLIC_OV_TESSERA_PACKAGE_ID) to the published Tessera package id.",
+    );
+  }
 
   const db = openDb();
-  const client = createPublicClient({ transport: http(RPC_URL) });
-
-  // --- IPAssetRegistry.IPRegistered ---
-  // chainId, tokenContract, tokenId ARE indexed; ipId is NOT.
-  const ipRegisteredEvent = parseAbiItem(
-    "event IPRegistered(address ipId, uint256 indexed chainId, address indexed tokenContract, uint256 indexed tokenId, string name, string uri, uint256 registrationDate)"
-  );
+  const client = makeSuiClient();
 
   console.log(
-    `[indexer] watching ${RPC_URL} (ipRegistry=${IP_ASSET_REGISTRY}, licenseToken=${LICENSE_TOKEN}, royaltyModule=${ROYALTY_MODULE})`,
+    `[indexer] polling tessera::registry events (package=${TESSERA_PACKAGE_ID}, interval=${POLL_INTERVAL_MS}ms)`,
   );
 
-  client.watchEvent({
-    address: IP_ASSET_REGISTRY,
-    event: ipRegisteredEvent,
-    onLogs: async (logs) => {
-      for (const log of logs) {
-        const args = log.args as {
-          ipId?: `0x${string}`;
-          tokenId?: bigint;
-          name?: string;
-          uri?: string;
-        };
-        if (!args.ipId) continue;
-
-        const meta = await fetchIpMeta(args.uri ?? "");
-        if (!meta) {
-          console.warn(
-            `[indexer] SKIP ipId=${args.ipId} — metadata at ${args.uri} unreachable or invalid; not catalogued`,
-          );
-          continue;
-        }
-        const tier = coerceTier(meta.tier);
-        const modality = coerceModality(meta.modality);
-        if (!tier || !modality) {
-          console.warn(
-            `[indexer] SKIP ipId=${args.ipId} — metadata missing/invalid tier(${meta.tier})/modality(${meta.modality})`,
-          );
-          continue;
-        }
-
-        const row: Artifact = {
-          ipId: args.ipId,
-          tier,
-          modality,
-          title: typeof meta.title === "string" && meta.title.length > 0 ? meta.title : (args.name ?? args.ipId),
-          description: typeof meta.description === "string" ? meta.description : "",
-          tags: Array.isArray(meta.tags) ? meta.tags.filter((t) => typeof t === "string") : [],
-          ipMetadataURI: args.uri ?? "",
-          ownerNftTokenId: args.tokenId,
-          createdTx: log.transactionHash ?? ("0x" as `0x${string}`),
-          cid: typeof meta.cid === "string" ? meta.cid : undefined,
-          externalSource: typeof meta.externalSource === "string" ? meta.externalSource : undefined,
-        };
-        upsertArtifact(db, row);
-        console.log(`[indexer] upserted ${args.ipId} tier=${tier} modality=${modality}`);
-      }
-    },
-  });
-
-  // --- LicenseToken.LicenseTokenMinted ---
-  // Bump the licensor IP's score on every mint. Story's canonical event:
-  //   event LicenseTokenMinted(address indexed minter, address indexed receiver,
-  //                            uint256 indexed startLicenseTokenId, uint256 amount,
-  //                            address licensorIpId, uint256 licenseTermsId)
-  // We index the licensorIpId regardless of mint amount — the count is what the
-  // leaderboard cares about (not the magnitude of a single mint).
-  const licenseTokenMinted = parseAbiItem(
-    "event LicenseTokenMinted(address indexed minter, address indexed receiver, uint256 indexed startLicenseTokenId, uint256 amount, address licensorIpId, uint256 licenseTermsId)",
-  );
-  try {
-    client.watchEvent({
-      address: LICENSE_TOKEN,
-      event: licenseTokenMinted,
-      onLogs: (logs) => {
-        for (const log of logs) {
-          const args = log.args as {
-            licensorIpId?: `0x${string}`;
-            licenseTermsId?: bigint;
-            amount?: bigint;
-          };
-          if (!args.licensorIpId) continue;
-          const existing = getArtifact(db, args.licensorIpId);
-          if (!existing) {
-            console.warn(
-              `[indexer] LicenseTokenMinted for unknown ipId=${args.licensorIpId} (not in index yet) — skipping score bump`,
-            );
-            continue;
-          }
-          existing.score = (existing.score ?? 0) + 2;
-          if (!existing.licenseTermsId && args.licenseTermsId !== undefined) {
-            existing.licenseTermsId = args.licenseTermsId.toString();
-          }
-          upsertArtifact(db, existing);
-          console.log(
-            `[indexer] LicenseTokenMinted licensor=${args.licensorIpId} +2 score`,
-          );
-        }
-      },
-    });
-  } catch (e) {
-    console.warn(`[indexer] could not watch LicenseTokenMinted: ${(e as Error).message}`);
+  // Poll forever. Each tick drains all new events; errors are logged and retried
+  // on the next tick (the cursor only advances on a successful page).
+  for (;;) {
+    try {
+      const n = await drainOnce(client, db);
+      if (n > 0) console.log(`[indexer] consumed ${n} event(s)`);
+    } catch (e) {
+      console.warn(`[indexer] poll error: ${(e as Error).message}`);
+    }
+    await new Promise<void>((r) => setTimeout(r, POLL_INTERVAL_MS));
   }
-
-  // --- RoyaltyModule.RoyaltyPaid ---
-  // Bump both receiver and payer. Receiver gets +3 (revenue is the strongest
-  // economic signal), payer gets +1 (consuming downstream IP is a weaker signal
-  // but still real activity). Story's event:
-  //   event RoyaltyPaid(address indexed receiverIpId, address indexed payerIpId,
-  //                     address indexed sender, address token, uint256 amount)
-  const royaltyPaid = parseAbiItem(
-    "event RoyaltyPaid(address indexed receiverIpId, address indexed payerIpId, address indexed sender, address token, uint256 amount)",
-  );
-  try {
-    client.watchEvent({
-      address: ROYALTY_MODULE,
-      event: royaltyPaid,
-      onLogs: (logs) => {
-        for (const log of logs) {
-          const args = log.args as {
-            receiverIpId?: `0x${string}`;
-            payerIpId?: `0x${string}`;
-            amount?: bigint;
-          };
-          if (args.receiverIpId) {
-            const r = getArtifact(db, args.receiverIpId);
-            if (r) {
-              r.score = (r.score ?? 0) + 3;
-              upsertArtifact(db, r);
-              console.log(
-                `[indexer] RoyaltyPaid receiver=${args.receiverIpId} +3 score`,
-              );
-            } else {
-              console.warn(
-                `[indexer] RoyaltyPaid receiver unknown: ${args.receiverIpId}`,
-              );
-            }
-          }
-          if (args.payerIpId) {
-            const p = getArtifact(db, args.payerIpId);
-            if (p) {
-              p.score = (p.score ?? 0) + 1;
-              upsertArtifact(db, p);
-            }
-          }
-        }
-      },
-    });
-  } catch (e) {
-    console.warn(`[indexer] could not watch RoyaltyPaid: ${(e as Error).message}`);
-  }
-
-  // watchEvent runs until the process is killed; keep it alive.
 }
 
 async function main(): Promise<void> {

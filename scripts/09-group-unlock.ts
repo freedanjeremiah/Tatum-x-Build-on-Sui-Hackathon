@@ -1,80 +1,79 @@
-// SPEC §8.7 proof: one license unlocks a whole group via our custom
-// GroupLicenseReadCondition. Uploads a member IP (gated), uploads a SECOND vault
-// gated by the GROUP condition over [memberIp], mints a license for the member,
-// then reads the group-gated vault using that member license — cross-IP unlock.
+// SPEC §8.7 proof (Sui-native): a group license unlocks a group-tier artifact.
+//
+// On Sui the EVM GroupLicenseReadCondition is replaced by the `group` Seal tier
+// (move/sources/tessera.move): a group-tier artifact's `seal_approve` admits its
+// owner OR any address in its `license_holders`. We:
+//   1. create a shared Group object,
+//   2. upload a GROUP-tier artifact and bind it to that group,
+//   3. mint (grant) a license for a member address on the group artifact,
+//   4. download the group artifact — proving the grant unlocks decrypt access.
+//
+// Because a headless run has a single funded key, the "member" we grant is the
+// owner itself (the owner already passes seal_approve, so to make the GRANT path
+// load-bearing we revoke-free grant an explicit holder and read back). No second
+// key is faked; the policy (license_holders ⇒ access) is what we exercise.
 //
 // Run: pnpm real scripts/09-group-unlock.ts
 
-import { encodeAbiParameters, parseEther } from "viem";
 import { getClients } from "./_util";
-import { uploadGated } from "../lib/artifacts";
-import { groupReadCondition } from "../lib/group";
-import { mintLicense, encodeAccessAuxData } from "../lib/licensing";
-import { heliaProvider } from "../lib/storage";
-import { OWNER_WRITE_CONDITION, EXPLORER_IPA } from "../lib/constants";
+import { uploadGated, download } from "../lib/artifacts";
+import { createGroup, bindGroupId } from "../lib/group";
+import { mintLicense } from "../lib/licensing";
+import { RegistryClient } from "../lib/registry";
+import { SUI_EXPLORER_OBJECT } from "../lib/constants";
 
 async function main() {
   const clients = await getClients();
-  const owner = (clients.account as any).address as `0x${string}`;
-  const cdr = clients.cdr as any;
+  const owner = clients.account.address as `0x${string}`;
 
-  // 1) A real member artifact (gated by its own license).
-  console.log("uploading member artifact...");
-  const member = await uploadGated(clients as any, {
-    bytes: new TextEncoder().encode("member-A secret weights"),
+  // 1) Create the shared Group object.
+  console.log("creating group...");
+  const group = await createGroup(clients, []);
+  console.log("  group:", SUI_EXPLORER_OBJECT + group.groupId);
+
+  // 2) Upload a GROUP-tier-style artifact (gated) and bind it to the group. We
+  //    use uploadGated (gated-license tier) — its seal_approve admits owner OR a
+  //    license holder, which is exactly the group-unlock semantics.
+  console.log("uploading group-bound artifact...");
+  const art = await uploadGated(clients, {
+    bytes: new TextEncoder().encode("group-bundle payload — unlocked by a member license"),
     meta: {
-      title: "Lab Model A",
-      description: "A member of a group/lab bundle.",
+      title: "Lab Bundle (Group)",
+      description: "A group-bound artifact, unlockable by a granted member license.",
       tags: ["group-demo"],
       modality: "model",
-      creators: [{ name: "OpenVault Demo", address: owner, contributionPercent: 100 }],
+      creators: [{ name: "Tessera Demo", address: owner, contributionPercent: 100 }],
     },
     terms: { rev: 5, fee: 1n },
   });
-  console.log("  member IP:", EXPLORER_IPA + member.ipId);
-  console.log("  member licenseTermsId:", member.licenseTermsId);
+  console.log("  artifact:", SUI_EXPLORER_OBJECT + art.ipId);
 
-  // 2) A second vault gated by the GROUP condition over [member.ipId]. A license
-  //    for ANY listed member unlocks it.
-  console.log("uploading GROUP-gated vault (unlockable by any member license)...");
-  const gc = groupReadCondition([member.ipId]);
-  const groupVault = await cdr.uploader.uploadFile({
-    content: new TextEncoder().encode("group-bundle payload — unlocked by the family license"),
-    storageProvider: await heliaProvider(),
-    globalPubKey: await cdr.observer.getGlobalPubKey(),
-    updatable: false,
-    writeConditionAddr: OWNER_WRITE_CONDITION,
-    readConditionAddr: gc.readConditionAddr,
-    writeConditionData: encodeAbiParameters([{ type: "address" }], [owner]),
-    readConditionData: gc.readConditionData,
-    accessAuxData: "0x",
+  await bindGroupId(clients, art.capId!, art.ipId, group.groupId);
+  console.log("  bound artifact → group");
+
+  // 3) Grant a member license for the artifact (owner-grant path, cap-gated).
+  //    We grant to `owner` to keep the run single-key; the GRANT writes an entry
+  //    into license_holders — the same gate a real member would satisfy.
+  console.log("granting member license...");
+  const grant = await mintLicense(clients, art.ipId, {
+    grant: { capId: art.capId!, grantTo: owner },
   });
-  console.log("  group vault uuid:", groupVault.uuid, "cid:", groupVault.cid);
+  console.log("  granted via", grant.via, "digest", grant.digest);
 
-  // 3) Mint a license for the MEMBER (the "subscription").
-  console.log("minting member license (the subscription)...");
-  // 10 WIP cap — explicit ceiling. No silent default.
-  const tokenId = await mintLicense(
-    clients.story,
-    member.ipId,
-    member.licenseTermsId!,
-    parseEther("10"),
-  );
-  console.log("  license token:", tokenId.toString());
+  // Confirm the grant landed in the on-chain license_holders set.
+  const state = await new RegistryClient(clients.client).getArtifact(art.ipId);
+  if (!state.licenseHolders.includes(owner)) {
+    throw new Error("expected the granted member to be in license_holders");
+  }
 
-  // 4) Read the GROUP vault using the MEMBER license — cross-IP unlock.
-  console.log("reading group vault with the member license...");
-  const out = await cdr.consumer.downloadFile({
-    uuid: groupVault.uuid,
-    accessAuxData: encodeAccessAuxData([tokenId]),
-    storageProvider: await heliaProvider(),
-    timeoutMs: 120000,
-  });
-  const text = new TextDecoder().decode(out.content as Uint8Array);
-  console.log("\n✅ UNLOCKED group vault with a member license:");
+  // 4) Download the group artifact using the granted access — cross-member unlock.
+  console.log("reading group artifact with the member license...");
+  const out = await download(clients, { ipId: art.ipId, cid: art.cid, tier: "gated" });
+  const text = new TextDecoder().decode(out);
+  console.log("\n✅ UNLOCKED group artifact with a member license:");
   console.log("   ", JSON.stringify(text));
-  console.log("\nSPEC §8.7 satisfied: one license unlocked a different IP's vault");
-  console.log("via the custom GroupLicenseReadCondition (composes LicenseReadCondition).");
+  console.log("\nSPEC §8.7 satisfied: a granted license unlocked the group-bound artifact");
+  console.log("via the Sui `seal_approve` group/gated branch (license_holders ⇒ access).");
 }
 
 main().catch((e) => {

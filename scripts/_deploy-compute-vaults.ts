@@ -1,59 +1,74 @@
-// Deploy royalty vaults for the compute-tier seed IPs. uploadCompute returns the
-// terms id as `computeLicenseTermsId` (not `licenseTermsId`), so the seed's mint
-// step skipped them. Mint one self-license each (using computeLicenseTermsId) to
-// deploy the vault. No re-registration.
+// Seed the compute-tier artifacts' royalty vaults (Sui-native). On Story this
+// minted a self-license to DEPLOY a royalty vault contract for each compute IP.
+// On Sui every artifact already owns its vault (`revenue: Balance<SUI>`), so there
+// is nothing to deploy — instead we pay a small royalty into each compute
+// artifact so its vault is demonstrably accruing (and claimable). No
+// re-registration.
 //
 // Run: pnpm real scripts/_deploy-compute-vaults.ts
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { parseEther, zeroAddress } from "viem";
-import { getClients } from "./_util";
-import { mintLicense } from "../lib/licensing";
-import { fetchRoyaltyVault } from "../lib/royalty";
+import { getClients, logTx } from "./_util";
+import { payRoyalty, getClaimable } from "../lib/royalty";
 
 const SEED_DIR = resolve(__dirname, "sample", "seed");
-const INDEX = process.env.OPENVAULT_INDEX_URL ?? "http://localhost:3000/api/index";
+const MIST_PER_SUI = 1_000_000_000n;
+
+interface SeedRow {
+  key: string;
+  tier: string;
+  ipId: `0x${string}`;
+  capId?: string;
+}
+
+function suiToMist(amount: string): bigint {
+  const [whole, frac = ""] = amount.split(".");
+  const fracPadded = (frac + "0".repeat(9)).slice(0, 9);
+  return BigInt(whole) * MIST_PER_SUI + BigInt(fracPadded || "0");
+}
+
+interface ManifestEntry {
+  key: string;
+  tier: string;
+  terms: { fee: string } | null;
+}
 
 async function main() {
   const clients = await getClients();
-  const pc = (clients as any).publicClient;
 
-  const manifest = JSON.parse(readFileSync(resolve(SEED_DIR, "seed-manifest.json"), "utf-8")) as any[];
-  const results = JSON.parse(readFileSync(resolve(SEED_DIR, "seed-results.json"), "utf-8")) as any[];
-  const idByKey: Record<string, `0x${string}`> = {};
-  for (const r of results) idByKey[r.key] = r.ipId;
-
-  // computeLicenseTermsId lives in the index (selfIndex persisted it).
-  const all = (await (await fetch(INDEX)).json()) as any[];
-  const termsByIp: Record<string, string> = {};
-  for (const a of all) termsByIp[a.ipId.toLowerCase()] = a.computeLicenseTermsId;
+  const manifest = JSON.parse(
+    readFileSync(resolve(SEED_DIR, "seed-manifest.json"), "utf-8"),
+  ) as ManifestEntry[];
+  const results = JSON.parse(
+    readFileSync(resolve(SEED_DIR, "seed-results.json"), "utf-8"),
+  ) as SeedRow[];
+  const rowByKey: Record<string, SeedRow> = {};
+  for (const r of results) rowByKey[r.key] = r;
 
   const computeEntries = manifest.filter((e) => e.tier === "compute");
-  console.log(`deploying vaults for ${computeEntries.length} compute IPs\n`);
+  console.log(`seeding vaults for ${computeEntries.length} compute artifacts\n`);
 
   for (const e of computeEntries) {
-    const ipId = idByKey[e.key];
-    if (!ipId) {
-      console.warn(`${e.key}: no ipId in results — skip`);
+    const row = rowByKey[e.key];
+    if (!row) {
+      console.warn(`${e.key}: no artifactId in results — skip`);
       continue;
     }
-    const termsId = termsByIp[ipId.toLowerCase()];
-    const fee = parseEther(e.terms.fee);
-    console.log(`→ ${e.key} ${ipId} termsId=${termsId} fee=${e.terms.fee}`);
+    const fee = e.terms ? suiToMist(e.terms.fee) : MIST_PER_SUI / 100n;
+    console.log(`→ ${e.key} ${row.ipId} seeding ${fee} MIST`);
     try {
-      const tokenId = await mintLicense(clients.story, ipId, termsId, fee);
-      const vault = await fetchRoyaltyVault(pc, ipId);
-      console.log(
-        `  minted #${tokenId} → vault ${vault !== zeroAddress ? vault : "STILL NONE"}\n`,
-      );
-    } catch (err: any) {
-      console.error(`  ✗ ${err?.shortMessage || err?.message || err}\n`);
+      const pay = await payRoyalty(clients, row.ipId, fee);
+      logTx("  paid", pay.txHash);
+      const claimable = await getClaimable(clients, row.ipId);
+      console.log(`  vault accrued: ${claimable.toString()} MIST\n`);
+    } catch (err) {
+      console.error(`  ✗ ${(err as Error)?.message ?? err}\n`);
     }
   }
 }
 
 main().catch((e) => {
-  console.error("FAILED:", e?.shortMessage || e?.message || e);
+  console.error("FAILED:", (e as Error)?.message ?? e);
   process.exit(1);
 });
