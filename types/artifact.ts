@@ -86,13 +86,18 @@ export interface AttestationInfo {
   validatorAttestationEnabled: boolean;
   enforced: boolean;
   untrustedValidators: number;
-  /** "enclave-sim" = simulated TEE for development; honestly disclosed as not
-   *  hardware-attested. "enclave" = real attested SGX/TDX in production. */
-  workerIsolation: "enclave" | "enclave-sim" | "plain-server";
-  /** Present iff workerIsolation === "enclave-sim". Sim verification result. */
+  /** "enclave-nautilus" = real AWS Nitro enclave, attestation verified on-chain.
+   *  "enclave-sim" = simulated TEE (honestly NOT hardware-attested).
+   *  "enclave" = generic attested SGX/TDX. "plain-server" = no isolation. */
+  workerIsolation: "enclave" | "enclave-nautilus" | "enclave-sim" | "plain-server";
   simQuote?: SimulatedQuoteInfo;
-  /** Present iff workerIsolation === "enclave-sim". `true` = sim sig verified. */
   simVerified?: boolean;
+  /** enclave-nautilus: on-chain Enclave object id used for verification. */
+  enclaveObjectId?: `0x${string}`;
+  /** enclave-nautilus: tx digest where reef::registry verified the enclave sig. */
+  attestationTx?: `0x${string}`;
+  /** enclave-nautilus: hex of the enclave's ed25519 signature over the result. */
+  enclaveSig?: `0x${string}`;
 }
 
 export interface ComputeJobResult {
