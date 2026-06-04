@@ -1,6 +1,6 @@
 // Seed the registry with 10 valid datasets + 10 valid models spanning every tier,
 // uploading each through the real lib/artifacts path. On Sui every artifact carries
-// its OWN on-chain royalty vault (`revenue: Balance<SUI>` in tessera::registry),
+// its OWN on-chain royalty vault (`revenue: Balance<SUI>` in reef::registry),
 // so there is no separate vault object to deploy — commercial tiers (gated /
 // compute) and derivatives are immediately royalty-testable. Prints a
 // royalty-readiness table and writes seed-results.json (now carrying the Sui
@@ -76,7 +76,7 @@ async function main() {
       title: e.title,
       description: e.description,
       tags: e.tags,
-      creators: [{ name: "Tessera Demo", address: owner, contributionPercent: 100 }],
+      creators: [{ name: "Reef Demo", address: owner, contributionPercent: 100 }],
       modality: e.kind,
     };
 

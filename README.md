@@ -1,11 +1,10 @@
-# Tessera
+# Reef
 
-> A *tessera* was a small token in the ancient world — a tile that proved your right to enter, claim a
-> ration, or be counted. Tesserae also tiled together into mosaics. Both meanings are the product: here
-> the **license is the access credential**, and datasets tile into models tile into derivatives — a
-> mosaic of provenance with royalties flowing back along every edge.
+> A *reef* is a living structure — many organisms tiling together into one ecosystem, each sheltered yet
+> connected. That is the product: the **license is the access credential**, and datasets tile into models
+> tile into derivatives — a reef of provenance with royalties flowing back along every edge.
 
-**Tessera is a decentralized Kaggle + Hugging Face, built on Sui.** Datasets and ML models are
+**Reef — a private data & model market on Sui/Walrus.** A decentralized Kaggle + Hugging Face. Datasets and ML models are
 registered as on-chain **Sui Move objects**; their heavy files are **threshold-encrypted with Seal**
 and stored on **Walrus**; and who may decrypt them is enforced **on-chain** by a Move `seal_approve`
 policy — there is no auth server and no platform operator who can hand out access. RPC runs through the
@@ -20,15 +19,15 @@ policy — there is no auth server and no platform operator who can hand out acc
 
 Four pieces of the Sui stack, each doing what only it can:
 
-| Layer | Technology | Role in Tessera |
+| Layer | Technology | Role in Reef |
 |-------|-----------|-----------------|
 | **Storage** | **Walrus** (`@mysten/walrus`) | Encrypted dataset/model blobs; owner pays + owns the `Blob` object; gasless public reads via the aggregator; renewable + deletable for storage GC. |
 | **Confidentiality** | **Seal** (`@mysten/seal`) | Threshold IBE encryption. The decryption key is released by the key-server committee **only** when an on-chain `seal_approve` Move call succeeds. |
-| **Coordination** | **Sui Move** (`tessera::registry`) | One shared `ArtifactRegistry` object per artifact: tier, owner, license holders, compute allowlist, group, revenue vault, derivative lineage — and the `seal_approve` gate itself. |
+| **Coordination** | **Sui Move** (`reef::registry`) | One shared `ArtifactRegistry` object per artifact: tier, owner, license holders, compute allowlist, group, revenue vault, derivative lineage — and the `seal_approve` gate itself. |
 | **Access (RPC)** | **Tatum** Sui gateway | All JSON-RPC routed through Tatum (`x-api-key`, 429 backoff), with the public fullnode as fallback. |
 
 **The composability lives in the on-chain `seal_approve` policy.** Seal calls
-`tessera::registry::seal_approve(id, registry, ctx)` as a dry-run before releasing key shares; if the
+`reef::registry::seal_approve(id, registry, ctx)` as a dry-run before releasing key shares; if the
 Move call aborts, the read is denied. One Move function expresses all five access tiers, and the
 identity is bound to the artifact's own object id (`sealId = artifactObjectId ++ blake2b256(tier)`), so
 each artifact's policy is isolated and forgery is impossible.
@@ -67,7 +66,7 @@ derivative IP** of the dataset, wipes the plaintext, and returns **aggregate met
 ## Honesty (please read)
 
 Seal provides **threshold encryption + on-chain-gated key delivery** — nothing more. It does **not**
-run user algorithms on plaintext. "Private but computable" is **Tessera's own** compute worker, which
+run user algorithms on plaintext. "Private but computable" is **Reef's own** compute worker, which
 uses Seal only to decrypt. So the compute-privacy guarantee comes from **the worker's isolation + the
 algorithm allowlist**, not from Seal.
 
@@ -94,7 +93,7 @@ Requires **Node 20+** and **pnpm**, plus the **Sui CLI** (1.65+) to publish the 
 pnpm install
 cp .env.local.example .env.local       # fill Privy, Tatum, Seal key servers, signer
 
-# publish the Move package, then put the package id in TESSERA_PACKAGE_ID
+# publish the Move package, then put the package id in REEF_PACKAGE_ID
 cd move && sui move build && sui client publish --gas-budget 200000000
 cd ..
 
@@ -105,7 +104,7 @@ pnpm dev                               # https://localhost:3000 (dev uses experi
 
 See `.env.local.example` for the full annotated list. The ones you must set to run real flows:
 `NEXT_PUBLIC_PRIVY_APP_ID`, `TATUM_API_KEY`, `MASTER_SUI_PRIVKEY` (+ `MASTER_SUI_ADDRESS`),
-`TESSERA_PACKAGE_ID`, and `SEAL_KEY_SERVER_IDS`. Walrus/Sui/Tatum endpoints default to testnet.
+`REEF_PACKAGE_ID`, and `SEAL_KEY_SERVER_IDS`. Walrus/Sui/Tatum endpoints default to testnet.
 Optional `INFERENCE_*` powers the model **Run** tab (omit → honest 503).
 
 ---
@@ -134,7 +133,7 @@ The `real` family preloads `.env.local` via `node --env-file`.
 ├─ components/     React UI (browse, upload wizard, artifact tabs, compute panel, Run tab, wallet)
 ├─ lib/            core: clients (Sui+Tatum), registry (Move calls), crypto (Seal), storage (Walrus),
 │                  artifacts, licensing, royalty, group, dispute, compute, attestation, tee-sim
-├─ move/           Sui Move package `tessera::registry` — the Artifact object + tiered seal_approve gate
+├─ move/           Sui Move package `reef::registry` — the Artifact object + tiered seal_approve gate
 ├─ worker/         confidential-compute worker + the algorithm allowlist registry (worker/algos/)
 ├─ indexer/        SQLite read-model over Sui Move events (cache only — never keys or plaintext)
 ├─ scripts/        flow scripts (00..09), diagnostics (diag/), seed corpus (sample/)
@@ -174,5 +173,5 @@ decryption revocation beyond forward-only (rotate by re-encrypting) · a product
 full per-wallet license enumeration · the attested-enclave compute deployment (designed for, simulated
 here) · the Privy→Sui browser write-signer (server signing works today).
 
-Tessera is built natively on Sui, Walrus, Seal, and Tatum — every layer chosen for the job it
+Reef is built natively on Sui, Walrus, Seal, and Tatum — every layer chosen for the job it
 alone can do.

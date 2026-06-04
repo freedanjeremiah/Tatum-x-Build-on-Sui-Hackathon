@@ -1,11 +1,11 @@
-# Tessera — Frontend PRD
+# Reef — Frontend PRD
 
 > **Design system note:** §3 uses the **MECHATONE** aesthetic — warm cream paper,
 > navy + orange-red 2-ink palette, Oswald display + DM Sans + JetBrains Mono +
 > Noto Sans JP, halftone-dot background, offset screenprint shadows. §1, §2
 > (intent/voice) and §4+ (behaviour) describe current product behavior.
 
-A self-contained design brief for Tessera's web frontend. Hand this document to a
+A self-contained design brief for Reef's web frontend. Hand this document to a
 designer as the source of truth for what to build, how it should feel, and which
 screens/components exist today. The goal is design fidelity that matches the
 product thesis without inventing flows that the backend can't support.

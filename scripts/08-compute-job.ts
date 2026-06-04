@@ -36,7 +36,7 @@ async function main() {
       title: "Confidential Numeric Rows",
       description: "Compute-enabled dataset; raw rows never leave the enclave.",
       tags: ["dataset", "compute"],
-      creators: [{ name: "Tessera Demo", address: owner, contributionPercent: 100 }],
+      creators: [{ name: "Reef Demo", address: owner, contributionPercent: 100 }],
       modality: "dataset",
     },
     // Explicit terms — no silent default.

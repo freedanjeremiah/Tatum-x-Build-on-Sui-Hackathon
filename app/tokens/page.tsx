@@ -1,7 +1,7 @@
 import TokensClient from "@/components/TokensClient";
 
 export const metadata = {
-  title: "My License Tokens — Tessera",
+  title: "My License Tokens — Reef",
   description: "License tokens held by your connected wallet, read on-chain.",
 };
 

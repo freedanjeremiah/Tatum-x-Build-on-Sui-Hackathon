@@ -24,7 +24,7 @@ async function main() {
       description:
         "7B-parameter sentiment model. Weights decrypt only for valid license-token holders.",
       tags: ["llm", "sentiment", "nlp", "gated"],
-      creators: [{ name: "Tessera Demo", address: owner, contributionPercent: 100 }],
+      creators: [{ name: "Reef Demo", address: owner, contributionPercent: 100 }],
       modality: "model",
     },
     // Explicit terms — no silent default. 5% rev-share, 1-wei nominal fee.

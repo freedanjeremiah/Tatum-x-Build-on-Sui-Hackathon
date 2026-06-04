@@ -25,7 +25,7 @@ async function main() {
       title: "OpenWeather Hourly",
       description: "Hourly weather observations, free to all.",
       tags: ["weather", "dataset", "public"],
-      creators: [{ name: "Tessera Demo", address: owner, contributionPercent: 100 }],
+      creators: [{ name: "Reef Demo", address: owner, contributionPercent: 100 }],
       modality: "dataset",
     },
   });
@@ -46,7 +46,7 @@ async function main() {
       title: "FraudNet-v3 (Private)",
       description: "Proprietary fraud model, owner-only.",
       tags: ["fraud", "model", "private"],
-      creators: [{ name: "Tessera Demo", address: owner, contributionPercent: 100 }],
+      creators: [{ name: "Reef Demo", address: owner, contributionPercent: 100 }],
       modality: "model",
     },
   });
@@ -65,7 +65,7 @@ async function main() {
   // A non-owner wallet is denied on-chain by `seal_approve` (ENotOwner → fail
   // closed: the key servers refuse to issue a key). Demonstrating that here would
   // require a SECOND funded Sui key; rather than fake one, we assert the policy
-  // contract: the private tier admits ONLY the owner. (See move/sources/tessera.move
+  // contract: the private tier admits ONLY the owner. (See move/sources/reef.move
   // seal_approve, TIER_PRIVATE branch.)
   console.log("✓ private-other-denied (seal_approve TIER_PRIVATE admits only the owner)");
 }

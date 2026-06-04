@@ -1,6 +1,6 @@
-// Tessera Sui event indexer (INDEX-ONLY).
+// Reef Sui event indexer (INDEX-ONLY).
 //
-// Mirrors PUBLIC on-chain `tessera::registry` events into the local SQLite read
+// Mirrors PUBLIC on-chain `reef::registry` events into the local SQLite read
 // model so the UI can browse/search and rank artifacts. It is a CACHE: it NEVER
 // touches decryption keys, NEVER sees plaintext, NEVER gates access. The on-chain
 // `seal_approve` policy is the only real gate.
@@ -11,7 +11,7 @@
 // where it left off. Public RPC has no long-lived websocket subscription here, so
 // polling is the portable, Tatum-gateway-friendly path.
 //
-// Event → read-model mapping (events emitted by move/sources/tessera.move):
+// Event → read-model mapping (events emitted by move/sources/reef.move):
 //   ArtifactRegistered{artifact, owner, tier, parent}
 //       → upsert a new artifact row (tier from u8, owner, parentIpId, createdTx).
 //   LicensePurchased{artifact, buyer, price}
@@ -41,7 +41,7 @@
 import type { SuiEvent } from "@mysten/sui/jsonRpc";
 
 import { makeSuiClient, type SuiClient } from "../lib/clients";
-import { TESSERA_PACKAGE_ID } from "../lib/constants";
+import { REEF_PACKAGE_ID } from "../lib/constants";
 import { u8ToTier } from "../lib/registry";
 import {
   openDb,
@@ -58,7 +58,7 @@ const MODULE = "registry";
 
 // Single logical stream — we query the whole registry module and route by the
 // event's `type` suffix, so one cursor covers every registry event in order.
-const STREAM = "tessera::registry";
+const STREAM = "reef::registry";
 
 const PAGE_LIMIT = 50;
 const POLL_INTERVAL_MS = Number(process.env.OV_INDEXER_POLL_MS ?? 4000);
@@ -243,7 +243,7 @@ async function drainOnce(client: SuiClient, db: DB): Promise<number> {
 
   for (;;) {
     const page = await client.queryEvents({
-      query: { MoveModule: { package: TESSERA_PACKAGE_ID, module: MODULE } },
+      query: { MoveModule: { package: REEF_PACKAGE_ID, module: MODULE } },
       cursor: cursor ?? undefined,
       limit: PAGE_LIMIT,
       order: "ascending",
@@ -269,10 +269,10 @@ async function drainOnce(client: SuiClient, db: DB): Promise<number> {
 }
 
 async function runReal(): Promise<void> {
-  if (!TESSERA_PACKAGE_ID || TESSERA_PACKAGE_ID.trim() === "") {
+  if (!REEF_PACKAGE_ID || REEF_PACKAGE_ID.trim() === "") {
     throw new Error(
-      "TESSERA_PACKAGE_ID is unset — cannot index. Set OV_TESSERA_PACKAGE_ID (or " +
-        "NEXT_PUBLIC_OV_TESSERA_PACKAGE_ID) to the published Tessera package id.",
+      "REEF_PACKAGE_ID is unset — cannot index. Set OV_REEF_PACKAGE_ID (or " +
+        "NEXT_PUBLIC_OV_REEF_PACKAGE_ID) to the published Reef package id.",
     );
   }
 
@@ -280,7 +280,7 @@ async function runReal(): Promise<void> {
   const client = makeSuiClient();
 
   console.log(
-    `[indexer] polling tessera::registry events (package=${TESSERA_PACKAGE_ID}, interval=${POLL_INTERVAL_MS}ms)`,
+    `[indexer] polling reef::registry events (package=${REEF_PACKAGE_ID}, interval=${POLL_INTERVAL_MS}ms)`,
   );
 
   // Poll forever. Each tick drains all new events; errors are logged and retried

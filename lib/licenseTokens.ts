@@ -1,7 +1,7 @@
 // On-chain read helper for a wallet's Sui licenses.
 //
 // In the Sui model a "license token" is not an ERC-721 NFT — it is membership of
-// an artifact's on-chain `license_holders` set (tessera::registry). So the EVM
+// an artifact's on-chain `license_holders` set (reef::registry). So the EVM
 // `balanceOf` + `tokenOfOwnerByIndex` enumeration is replaced by:
 //   for each KNOWN artifact id, read its ArtifactRegistry via
 //   RegistryClient.getArtifact and check whether `owner` is in `licenseHolders`.
@@ -69,7 +69,7 @@ export async function listLicenseTokens(
 
   // No candidates and no indexer: honest empty result, not fabricated data.
   if (candidates.length === 0) {
-    // TODO(indexer): subscribe to tessera::registry `AccessChanged` (kind 0) and
+    // TODO(indexer): subscribe to reef::registry `AccessChanged` (kind 0) and
     // `LicensePurchased` events to build the full per-wallet candidate set. Until
     // then a complete enumeration is not queryable on-chain.
     return { tokens: [], indexed: false, checked: 0 };

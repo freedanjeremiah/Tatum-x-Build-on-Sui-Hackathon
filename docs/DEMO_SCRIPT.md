@@ -1,4 +1,4 @@
-# Tessera — Live Demo Script
+# Reef — Live Demo Script
 
 **Total time: 75 seconds (slide 4 of the pitch).**
 
@@ -134,7 +134,7 @@ This script drives the **production** build (`pnpm build && pnpm start`) with `W
 | "Is the worker really trusted?" | No, and we say so on every compute screen. Production needs attested SGX/TDX. The TEE-SIM mode proves the verification code path works; it does NOT claim hardware attestation. |
 | "What about decryption revocation?" | Seal cannot revoke a granted credential. Rotate by re-encrypting. We disclose this in the footer on every page. |
 | "How does the group tier work?" | The `group` branch of `seal_approve` admits the owner or any address in the artifact's `license_holders`. Today each member is gated per-artifact; a single-identity group unlock is future work. |
-| "Token economics?" | License fees + royalty cascade + compute fees. All on-chain in SUI. Tessera takes nothing. |
+| "Token economics?" | License fees + royalty cascade + compute fees. All on-chain in SUI. Reef takes nothing. |
 | "Is it production-ready?" | Backend: integration tests pass on real Sui testnet. UI: PRD-compliant per audit. TEE: simulated. The browser write-signer is the one disclosed gap; server signing works today. |
 
 ---

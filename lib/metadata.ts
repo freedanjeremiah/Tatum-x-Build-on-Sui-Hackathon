@@ -60,7 +60,7 @@ export async function buildIpaMetadata(
     description,
     tags,
     creators,
-    // Custom Tessera fields used across the app.
+    // Custom Reef fields used across the app.
     modality,
   };
   if (externalSource) {
@@ -71,8 +71,8 @@ export async function buildIpaMetadata(
   }
 
   const nftMetadata = {
-    name: `${title} — Tessera IP NFT`,
-    description: `Ownership NFT for the Tessera artifact "${title}".`,
+    name: `${title} — Reef IP NFT`,
+    description: `Ownership NFT for the Reef artifact "${title}".`,
   };
 
   // Content-address locally (no network write). The hash is the durable, stable

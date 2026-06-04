@@ -22,7 +22,7 @@ async function main() {
       title: "BaseModel-7B",
       description: "Commercial-remix base model.",
       tags: ["model", "base"],
-      creators: [{ name: "Tessera Demo", address: owner, contributionPercent: 100 }],
+      creators: [{ name: "Reef Demo", address: owner, contributionPercent: 100 }],
       modality: "model",
     },
     // Explicit terms — no silent default.
@@ -41,7 +41,7 @@ async function main() {
       title: "BaseModel-7B-Finetuned",
       description: "A fine-tune derived from BaseModel-7B.",
       tags: ["model", "finetune"],
-      creators: [{ name: "Tessera Demo", address: owner, contributionPercent: 100 }],
+      creators: [{ name: "Reef Demo", address: owner, contributionPercent: 100 }],
       modality: "model",
     },
   });

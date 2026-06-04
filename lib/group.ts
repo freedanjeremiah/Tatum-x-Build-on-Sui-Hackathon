@@ -1,6 +1,6 @@
 // Group helpers — Sui-native.
 //
-// On Sui a group is a shared `Group` object (tessera::registry) that records its
+// On Sui a group is a shared `Group` object (reef::registry) that records its
 // member artifact ids. Each member artifact also carries `group_id` (so the Seal
 // `group` tier keeps gating via the member's own `license_holders`). Group revenue
 // is realized by claiming each member artifact's own on-chain royalty vault.

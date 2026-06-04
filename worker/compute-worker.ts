@@ -324,7 +324,7 @@ export async function runComputeJob(
             tags: ["compute-result", algo.name, "derivative"],
             creators: [
               {
-                name: "Tessera Compute Worker",
+                name: "Reef Compute Worker",
                 address: clients.account.address as `0x${string}`,
                 contributionPercent: 100,
               },

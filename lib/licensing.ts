@@ -1,7 +1,7 @@
 // Licensing helpers — Sui-native on-chain licensing.
 //
 // In the Sui model a "license" is simply membership of an artifact's on-chain
-// `license_holders` set (lib/registry.ts / tessera::registry). Holding a license
+// `license_holders` set (lib/registry.ts / reef::registry). Holding a license
 // is exactly what `seal_approve` checks for the gated-license / group tiers, so
 // granting a license == granting decrypt access. There are TWO grant paths:
 //

@@ -1,6 +1,6 @@
-# Tessera Demo Recording
+# Reef Demo Recording
 
-Headless Playwright produces a polished MP4 walkthrough of the full Tessera
+Headless Playwright produces a polished MP4 walkthrough of the full Reef
 product lifecycle against the **production** build (no compile lag on camera),
 with Privy login + a funded wallet so the recording shows real on-chain
 behavior.
@@ -54,7 +54,7 @@ persistent demo profile directory.
 
 ### 3. Fund the Privy wallet
 
-Tessera's compute / buy-license flows need real testnet SUI. Send some from your
+Reef's compute / buy-license flows need real testnet SUI. Send some from your
 signer to the address you just copied:
 
 ```bash

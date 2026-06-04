@@ -1,7 +1,7 @@
 import type { CSSProperties } from "react";
 
 /**
- * Stroke-only icon set used across Tessera. 2px stroke, rounded caps, no
+ * Stroke-only icon set used across Reef. 2px stroke, rounded caps, no
  * filled glyphs except the small triangular `play` and `bolt` shapes. Adding
  * an icon: keep the 24×24 viewBox and the same stroke conventions.
  */

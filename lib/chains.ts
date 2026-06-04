@@ -1,4 +1,4 @@
-// Sui network descriptor for Tessera. Used by client factories (lib/clients.ts)
+// Sui network descriptor for Reef. Used by client factories (lib/clients.ts)
 // so every caller gets a consistent network + RPC config from a single place.
 
 import { SUI_NETWORK, SUI_FULLNODE_URL, TATUM_SUI_JSONRPC } from "./constants";

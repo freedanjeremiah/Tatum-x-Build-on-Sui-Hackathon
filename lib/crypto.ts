@@ -1,4 +1,4 @@
-// Tessera Seal threshold-encryption layer.
+// Reef Seal threshold-encryption layer.
 //
 // Design invariants:
 //   - Encrypt-before-publish: plaintext is encrypted here; only ciphertext bytes
@@ -9,9 +9,9 @@
 //     access policy is isolated per artifact per tier.
 //
 // Seal decrypt path requires a `seal_approve` transaction kind. The Move entry
-// that must exist in the published tessera package is:
+// that must exist in the published reef package is:
 //
-//     ${TESSERA_PACKAGE_ID}::registry::seal_approve(id: vector<u8>, registry: &ArtifactRegistry)
+//     ${REEF_PACKAGE_ID}::registry::seal_approve(id: vector<u8>, registry: &ArtifactRegistry)
 //
 //   `id`       — the 64-byte sealIdBytes for the artifact+tier being decrypted.
 //   `registry` — the shared ArtifactRegistry object that holds per-artifact policies.
@@ -30,7 +30,7 @@ import { getReadClient } from './clients';
 import {
   SEAL_KEY_SERVER_IDS,
   SEAL_THRESHOLD,
-  TESSERA_PACKAGE_ID,
+  REEF_PACKAGE_ID,
 } from './constants';
 
 // ---------------------------------------------------------------------------
@@ -40,7 +40,7 @@ import {
 export { SessionKey, NoAccessError, EncryptedObject };
 
 // ---------------------------------------------------------------------------
-// Tessera access tiers — each tier results in a distinct Seal identity so the
+// Reef access tiers — each tier results in a distinct Seal identity so the
 // on-chain policy for "public" vs "gated-license" vs "compute" can be enforced
 // by separate seal_approve branches in the Move contract.
 // ---------------------------------------------------------------------------
@@ -83,7 +83,7 @@ function rawHex(id: string): string {
 }
 
 /**
- * Tessera Seal identity bytes for (artifactObjectId, tier).
+ * Reef Seal identity bytes for (artifactObjectId, tier).
  *
  *   sealId = artifactObjectId(32 bytes, hex-padded)
  *         ++ blake2b256(utf8(tier))(32 bytes)
@@ -109,7 +109,7 @@ export function sealIdHex(artifactObjectId: string, tier: ArtifactTier): string 
 }
 
 // ---------------------------------------------------------------------------
-// Crypto class — thin Tessera wrapper around SealClient.
+// Crypto class — thin Reef wrapper around SealClient.
 // ---------------------------------------------------------------------------
 
 export class Crypto {
@@ -160,7 +160,7 @@ export class Crypto {
    *
    * `txBytes` must be built by task B1 (registry adapter) via
    * `buildSealApproveTx(artifactObjectId, sealId, client)` below. It encodes the
-   * Move call `${TESSERA_PACKAGE_ID}::registry::seal_approve(id, registry)`.
+   * Move call `${REEF_PACKAGE_ID}::registry::seal_approve(id, registry)`.
    *
    * Fail-closed contract: if the on-chain policy denies access, Seal throws
    * `NoAccessError`. This method re-throws immediately — callers MUST handle
@@ -215,7 +215,7 @@ export function isNoAccess(e: unknown): boolean {
  *                          `registry` argument.
  * @param sealId            The 64-byte seal identity (from sealIdBytes).
  * @param suiClient         SuiClient used to resolve gas/object refs for tx.build.
- * @param packageId         Tessera package id (defaults to TESSERA_PACKAGE_ID).
+ * @param packageId         Reef package id (defaults to REEF_PACKAGE_ID).
  *
  * Returns the BCS-encoded transaction-kind bytes to pass to `Crypto.decrypt`.
  *
@@ -227,7 +227,7 @@ export async function buildSealApproveTx(
   artifactObjectId: string,
   sealId: Uint8Array,
   suiClient: SuiClient,
-  packageId: string = TESSERA_PACKAGE_ID,
+  packageId: string = REEF_PACKAGE_ID,
 ): Promise<Uint8Array> {
   const tx = new Transaction();
   tx.moveCall({
@@ -247,7 +247,7 @@ export async function buildSealApproveTx(
 // Lazy, memo-ised instance configured from lib/constants.ts defaults.
 // Mirrors getStorage() in lib/storage.ts and getReadClient() in lib/clients.ts.
 //
-// Throws if SEAL_KEY_SERVER_IDS is empty or TESSERA_PACKAGE_ID is unset —
+// Throws if SEAL_KEY_SERVER_IDS is empty or REEF_PACKAGE_ID is unset —
 // the Crypto class cannot function without these.
 // ---------------------------------------------------------------------------
 
@@ -256,7 +256,7 @@ let _crypto: Crypto | undefined;
 /**
  * Returns the shared Crypto singleton, configured from environment constants.
  *
- * Throws clearly if SEAL_KEY_SERVER_IDS or TESSERA_PACKAGE_ID are not set,
+ * Throws clearly if SEAL_KEY_SERVER_IDS or REEF_PACKAGE_ID are not set,
  * rather than silently constructing a broken SealClient.
  *
  * Pass `cfg` to override any field (e.g. in tests with stub key servers).
@@ -272,11 +272,11 @@ export function getCrypto(cfg?: Partial<SealConfig>): Crypto {
     );
   }
 
-  const packageId = cfg?.packageId ?? TESSERA_PACKAGE_ID;
+  const packageId = cfg?.packageId ?? REEF_PACKAGE_ID;
   if (!packageId || packageId.trim() === '') {
     throw new Error(
-      'Missing TESSERA_PACKAGE_ID — set NEXT_PUBLIC_OV_TESSERA_PACKAGE_ID or ' +
-      'OV_TESSERA_PACKAGE_ID to the published tessera Move package object id.',
+      'Missing REEF_PACKAGE_ID — set NEXT_PUBLIC_OV_REEF_PACKAGE_ID or ' +
+      'OV_REEF_PACKAGE_ID to the published reef Move package object id.',
     );
   }
 

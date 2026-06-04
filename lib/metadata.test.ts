@@ -14,7 +14,7 @@ itInt("buildIpaMetadata returns 4 non-empty fields", async () => {
     title: "SentimentLLM-7B",
     description: "gated model",
     tags: ["llm", "gated"],
-    creators: [{ name: "Tessera", address: owner, contributionPercent: 100 }],
+    creators: [{ name: "Reef", address: owner, contributionPercent: 100 }],
     modality: "model",
     commercial: true,
   });

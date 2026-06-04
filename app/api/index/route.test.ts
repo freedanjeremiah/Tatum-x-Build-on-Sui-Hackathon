@@ -1,9 +1,9 @@
 import { test, expect } from "vitest";
 
 // Isolate the route's datastore BEFORE importing it — the route lazily opens
-// `process.env.TESSERA_DB_PATH` on first request, so an in-memory DB here means
-// these tests never pollute the real index (indexer/tessera.db).
-process.env.TESSERA_DB_PATH = ":memory:";
+// `process.env.REEF_DB_PATH` on first request, so an in-memory DB here means
+// these tests never pollute the real index (indexer/reef.db).
+process.env.REEF_DB_PATH = ":memory:";
 
 const { POST, GET } = await import("./route");
 

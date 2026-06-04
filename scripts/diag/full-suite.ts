@@ -1,4 +1,4 @@
-// Full functionality suite — exercises every Tessera flow end-to-end against
+// Full functionality suite — exercises every Reef flow end-to-end against
 // the live Sui testnet. Each step prints a tx hash + outcome.
 //
 // Tests:

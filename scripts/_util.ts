@@ -63,7 +63,7 @@ export function readLast(): Record<string, any> {
   return JSON.parse(readFileSync(LAST_FILE, "utf8"));
 }
 
-const INDEX_URL = process.env.TESSERA_INDEX_URL ?? "http://localhost:3000/api/index";
+const INDEX_URL = process.env.REEF_INDEX_URL ?? "http://localhost:3000/api/index";
 
 /**
  * POST the public Artifact descriptor to the running dev server's `/api/index`

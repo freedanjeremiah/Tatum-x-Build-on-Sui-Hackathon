@@ -1,4 +1,4 @@
-// Tessera Sui/Walrus/Seal/Tatum testnet constants.
+// Reef Sui/Walrus/Seal/Tatum testnet constants.
 //
 // Every constant here is env-overrideable so the same code runs against a
 // different network (e.g. Sui mainnet, alternative Walrus endpoints) without
@@ -7,7 +7,7 @@
 // Naming: vars are read in this order for each constant:
 //   1. NEXT_PUBLIC_OV_<NAME>   (works in client + server bundles)
 //   2. OV_<NAME>               (server-only override)
-//   3. Tessera testnet default
+//   3. Reef testnet default
 // Browsers only see NEXT_PUBLIC_ vars; the server reads both.
 
 function envStr(name: string, fallback: string): string {
@@ -69,10 +69,10 @@ export const SEAL_KEY_SERVER_IDS: string[] = envStr("SEAL_KEY_SERVER_IDS", "")
 /** Minimum key-server responses required to decrypt (k-of-n). Default 2. */
 export const SEAL_THRESHOLD: number = envNum("SEAL_THRESHOLD", 2);
 
-// --- Tessera Move package --------------------------------------------------------
+// --- Reef Move package --------------------------------------------------------
 
-/** Object id of the published `tessera` Move package on the target network. */
-export const TESSERA_PACKAGE_ID: string = envStr("TESSERA_PACKAGE_ID", "");
+/** Object id of the published `reef` Move package on the target network. */
+export const REEF_PACKAGE_ID: string = envStr("REEF_PACKAGE_ID", "");
 
 // --- Explorer -------------------------------------------------------------------
 

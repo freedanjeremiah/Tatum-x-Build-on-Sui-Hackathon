@@ -1,10 +1,10 @@
 #[test_only]
-module tessera::registry_tests;
+module reef::registry_tests;
 
 use sui::coin;
 use sui::sui::SUI;
 use sui::test_scenario as ts;
-use tessera::registry::{Self, ArtifactRegistry, ArtifactCap, Group, GroupCap};
+use reef::registry::{Self, ArtifactRegistry, ArtifactCap, Group, GroupCap};
 
 const OWNER: address = @0xA;
 const BOB: address = @0xB; // license holder / worker
@@ -49,7 +49,7 @@ fun private_owner_can_decrypt() {
 }
 
 #[test]
-#[expected_failure(abort_code = ::tessera::registry::ENotOwner)]
+#[expected_failure(abort_code = ::reef::registry::ENotOwner)]
 fun private_non_owner_aborts() {
     let mut sc = ts::begin(OWNER);
     registry::register(TIER_PRIVATE, 0, option::none(), sc.ctx());
@@ -87,7 +87,7 @@ fun gated_license_holder_passes() {
 }
 
 #[test]
-#[expected_failure(abort_code = ::tessera::registry::ENoLicense)]
+#[expected_failure(abort_code = ::reef::registry::ENoLicense)]
 fun gated_non_holder_aborts() {
     let mut sc = ts::begin(OWNER);
     registry::register(TIER_GATED, 0, option::none(), sc.ctx());
@@ -143,7 +143,7 @@ fun buy_license_pays_owner_and_adds_holder() {
 }
 
 #[test]
-#[expected_failure(abort_code = ::tessera::registry::ENotForSale)]
+#[expected_failure(abort_code = ::reef::registry::ENotForSale)]
 fun buy_license_on_public_aborts() {
     let mut sc = ts::begin(OWNER);
     registry::register(TIER_PUBLIC, PRICE, option::none(), sc.ctx());
@@ -156,7 +156,7 @@ fun buy_license_on_public_aborts() {
 }
 
 #[test]
-#[expected_failure(abort_code = ::tessera::registry::EWrongPrice)]
+#[expected_failure(abort_code = ::reef::registry::EWrongPrice)]
 fun buy_license_wrong_price_aborts() {
     let mut sc = ts::begin(OWNER);
     registry::register(TIER_GATED, PRICE, option::none(), sc.ctx());
@@ -171,7 +171,7 @@ fun buy_license_wrong_price_aborts() {
 // ---- revocation (forward-only) ----
 
 #[test]
-#[expected_failure(abort_code = ::tessera::registry::ERevoked)]
+#[expected_failure(abort_code = ::reef::registry::ERevoked)]
 fun revoked_address_aborts() {
     let mut sc = ts::begin(OWNER);
     registry::register(TIER_GATED, 0, option::none(), sc.ctx());
@@ -212,7 +212,7 @@ fun compute_worker_passes() {
 }
 
 #[test]
-#[expected_failure(abort_code = ::tessera::registry::ENotWorker)]
+#[expected_failure(abort_code = ::reef::registry::ENotWorker)]
 fun compute_consumer_aborts() {
     let mut sc = ts::begin(OWNER);
     registry::register(TIER_COMPUTE, 0, option::none(), sc.ctx());
@@ -231,7 +231,7 @@ fun compute_consumer_aborts() {
 }
 
 #[test]
-#[expected_failure(abort_code = ::tessera::registry::ENotWorker)]
+#[expected_failure(abort_code = ::reef::registry::ENotWorker)]
 fun compute_owner_is_also_denied() {
     // owner must NOT be able to download a compute-tier artifact.
     let mut sc = ts::begin(OWNER);
@@ -302,7 +302,7 @@ fun pay_royalty_accrues_and_claim_withdraws_to_owner() {
 }
 
 #[test]
-#[expected_failure(abort_code = ::tessera::registry::EZeroPayment)]
+#[expected_failure(abort_code = ::reef::registry::EZeroPayment)]
 fun pay_royalty_zero_aborts() {
     let mut sc = ts::begin(OWNER);
     registry::register(TIER_GATED, 0, option::none(), sc.ctx());
@@ -315,7 +315,7 @@ fun pay_royalty_zero_aborts() {
 }
 
 #[test]
-#[expected_failure(abort_code = ::tessera::registry::EEmptyRevenue)]
+#[expected_failure(abort_code = ::reef::registry::EEmptyRevenue)]
 fun claim_empty_revenue_aborts() {
     let mut sc = ts::begin(OWNER);
     registry::register(TIER_GATED, 0, option::none(), sc.ctx());
@@ -329,7 +329,7 @@ fun claim_empty_revenue_aborts() {
 }
 
 #[test]
-#[expected_failure(abort_code = ::tessera::registry::EWrongCap)]
+#[expected_failure(abort_code = ::reef::registry::EWrongCap)]
 fun claim_revenue_wrong_cap_aborts() {
     // Two artifacts; claim_revenue on artifact #2 with artifact #1's cap aborts.
     let mut sc = ts::begin(OWNER);
@@ -383,7 +383,7 @@ fun create_group_and_add_member() {
 }
 
 #[test]
-#[expected_failure(abort_code = ::tessera::registry::EWrongCap)]
+#[expected_failure(abort_code = ::reef::registry::EWrongCap)]
 fun add_member_wrong_cap_aborts() {
     let mut sc = ts::begin(OWNER);
     registry::create_group(sc.ctx()); // group #1
@@ -427,7 +427,7 @@ fun raise_dispute_sets_flag_and_counts() {
 // ---- id binding ----
 
 #[test]
-#[expected_failure(abort_code = ::tessera::registry::EBadId)]
+#[expected_failure(abort_code = ::reef::registry::EBadId)]
 fun wrong_object_prefix_aborts() {
     let mut sc = ts::begin(OWNER);
     registry::register(TIER_PUBLIC, 0, option::none(), sc.ctx());

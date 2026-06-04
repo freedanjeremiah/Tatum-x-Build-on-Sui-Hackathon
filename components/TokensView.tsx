@@ -110,7 +110,7 @@ export default function TokensView() {
           }}
         >
           Artifacts your connected wallet holds a license for, read live from the
-          Tessera registry on Sui. Each gated or group artifact you unlock adds
+          Reef registry on Sui. Each gated or group artifact you unlock adds
           your address to that artifact&apos;s on-chain license holders.
         </p>
       </div>

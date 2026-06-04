@@ -1,6 +1,6 @@
-// Tessera registry adapter — on-chain artifact registration via Sui Move.
+// Reef registry adapter — on-chain artifact registration via Sui Move.
 //
-// Backed by the `tessera::registry` Move module: each artifact is its OWN shared
+// Backed by the `reef::registry` Move module: each artifact is its OWN shared
 // object (`ArtifactRegistry`) whose object id IS the Seal id prefix (see
 // lib/crypto.ts `sealIdBytes`). The owner receives an `ArtifactCap`.
 //
@@ -19,7 +19,7 @@
 import { Transaction } from "@mysten/sui/transactions";
 
 import type { SuiClient, Signer } from "./clients";
-import { TESSERA_PACKAGE_ID } from "./constants";
+import { REEF_PACKAGE_ID } from "./constants";
 import {
   buildSealApproveTx as cryptoBuildSealApproveTx,
   type ArtifactTier,
@@ -114,12 +114,12 @@ export interface ArtifactState {
 export class RegistryClient {
   constructor(
     readonly client: SuiClient,
-    readonly packageId: string = TESSERA_PACKAGE_ID,
+    readonly packageId: string = REEF_PACKAGE_ID,
   ) {
     if (!packageId || packageId.trim() === "") {
       throw new Error(
-        "RegistryClient: missing packageId (TESSERA_PACKAGE_ID is unset). " +
-          "Set NEXT_PUBLIC_OV_TESSERA_PACKAGE_ID or OV_TESSERA_PACKAGE_ID.",
+        "RegistryClient: missing packageId (REEF_PACKAGE_ID is unset). " +
+          "Set NEXT_PUBLIC_OV_REEF_PACKAGE_ID or OV_REEF_PACKAGE_ID.",
       );
     }
   }
@@ -351,7 +351,7 @@ export class RegistryClient {
   }
 
   // -------------------------------------------------------------------------
-  // Royalties — on-chain revenue vault (tessera::registry pay/claim).
+  // Royalties — on-chain revenue vault (reef::registry pay/claim).
   // -------------------------------------------------------------------------
 
   /**
@@ -391,7 +391,7 @@ export class RegistryClient {
   }
 
   // -------------------------------------------------------------------------
-  // Groups — shared Group bundle object (tessera::registry create_group/add_member).
+  // Groups — shared Group bundle object (reef::registry create_group/add_member).
   // -------------------------------------------------------------------------
 
   /**
@@ -432,7 +432,7 @@ export class RegistryClient {
   }
 
   // -------------------------------------------------------------------------
-  // Disputes — on-chain flag + events (tessera::registry raise/counter_dispute).
+  // Disputes — on-chain flag + events (reef::registry raise/counter_dispute).
   // -------------------------------------------------------------------------
 
   /**

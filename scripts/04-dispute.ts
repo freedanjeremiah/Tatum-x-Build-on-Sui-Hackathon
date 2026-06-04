@@ -21,7 +21,7 @@ async function main() {
       title: "Disputable Artifact",
       description: "Target of a demo dispute.",
       tags: ["demo"],
-      creators: [{ name: "Tessera Demo", address: owner, contributionPercent: 100 }],
+      creators: [{ name: "Reef Demo", address: owner, contributionPercent: 100 }],
       modality: "dataset",
     },
   });

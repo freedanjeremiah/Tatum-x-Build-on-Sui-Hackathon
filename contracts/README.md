@@ -1,11 +1,11 @@
-# Tessera — Access Conditions (migrated to Move)
+# Reef — Access Conditions (migrated to Move)
 
-> **This directory's Solidity read-condition contracts have been removed.** Tessera
+> **This directory's Solidity read-condition contracts have been removed.** Reef
 > migrated from EVM/CDR vaults + custom `IReadCondition` staticcalls to a single
 > **Sui Move** module with **Seal** threshold encryption. The on-chain access
 > policy now lives in:
 >
-> **`move/sources/tessera.move`** (`module tessera::registry`)
+> **`move/sources/reef.move`** (`module reef::registry`)
 
 ## What replaced the Solidity contracts
 
@@ -54,4 +54,4 @@ sui move test
 - `lib/crypto.ts` — Seal identity (`sealIdBytes`) + `seal_approve` tx builder.
 - `lib/storage.ts` — Walrus publish/read of the ciphertext blob.
 - `worker/compute-worker.ts` — decrypts as the allowlisted compute-worker operator.
-- `indexer/listen.ts` — read-model indexer over `tessera::registry` events.
+- `indexer/listen.ts` — read-model indexer over `reef::registry` events.

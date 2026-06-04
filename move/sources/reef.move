@@ -1,5 +1,5 @@
-/// Tessera registry — the on-chain artifact record + Seal access gate for the
-/// Tessera decentralized data/model marketplace.
+/// Reef registry — the on-chain artifact record + Seal access gate for the
+/// Reef decentralized data/model marketplace.
 ///
 /// Each artifact is its OWN shared object of type `ArtifactRegistry` (one shared
 /// object per artifact). `seal_approve` is dry-run by Seal key servers with the
@@ -12,7 +12,7 @@
 /// argument order: id first, the shared ArtifactRegistry second. This module
 /// matches that signature exactly.
 ///
-/// The five Tessera access tiers (replacing the Solidity read-conditions in
+/// The five Reef access tiers (replacing the Solidity read-conditions in
 /// contracts/*.sol) map to the `tier: u8` field:
 ///   0 = public        — anyone may read (OwnerReadCondition-free; open)
 ///   1 = private-owner — only the owner (OwnerReadCondition)
@@ -20,7 +20,7 @@
 ///   3 = group         — group members OR owner (GroupLicenseReadCondition)
 ///   4 = compute       — ONLY an allowlisted compute worker (ComputeWorkerReadCondition):
 ///                       consumers are denied -> "computable, not downloadable".
-module tessera::registry;
+module reef::registry;
 
 use sui::balance::{Self, Balance};
 use sui::coin::{Self, Coin};
@@ -173,7 +173,7 @@ public struct CounterEvidence has copy, drop {
 // ---- registration / minting ----
 
 /// Register a new artifact. Creates + SHARES an `ArtifactRegistry` and transfers
-/// the owning `ArtifactCap` to the sender. Mirrors Tessera's
+/// the owning `ArtifactCap` to the sender. Mirrors Reef's
 /// "register -> get object id -> then encrypt+store" invariant: the caller reads
 /// the new object id from the tx effects, derives the sealId (A4), encrypts, and
 /// stores the blob off-chain.

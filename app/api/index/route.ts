@@ -22,9 +22,9 @@ let _db: DB | null = null;
 
 function db(): DB {
   if (_db) return _db;
-  // TESSERA_DB_PATH lets tests point at an isolated/in-memory DB so they never
-  // write throwaway rows into the real index (indexer/tessera.db).
-  _db = openDb(process.env.TESSERA_DB_PATH || undefined);
+  // REEF_DB_PATH lets tests point at an isolated/in-memory DB so they never
+  // write throwaway rows into the real index (indexer/reef.db).
+  _db = openDb(process.env.REEF_DB_PATH || undefined);
   return _db;
 }
 

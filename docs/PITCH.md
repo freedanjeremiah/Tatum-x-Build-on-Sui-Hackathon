@@ -1,4 +1,4 @@
-# Tessera — Hackathon Pitch Deck
+# Reef — Hackathon Pitch Deck
 
 **3-minute pitch, 7 slides, built for the Tatum x Walrus hackathon (Technical Implementation track).**
 
@@ -11,7 +11,7 @@ Tagline: *Access control as a property of the data, not the platform.*
 ```
 ┌──────────────────────────────────────────────────────────┐
 │                                                          │
-│            ▣ TESSERA                                     │
+│            ▣ REEF                                        │
 │            ──────────────────                            │
 │            Confidential Data Registry                    │
 │                                                          │
@@ -56,7 +56,7 @@ Tagline: *Access control as a property of the data, not the platform.*
 
 **ONE-LINER:**
 
-> **Tessera is a decentralized Hugging Face where every dataset and model is a Sui Move object, the bytes are threshold-encrypted with Seal and stored on Walrus, and the access tier is enforced by a Move policy — not a server.**
+> **Reef is a decentralized Hugging Face where every dataset and model is a Sui Move object, the bytes are threshold-encrypted with Seal and stored on Walrus, and the access tier is enforced by a Move policy — not a server.**
 
 **ARCHITECTURE (4 boxes):**
 
@@ -144,7 +144,7 @@ Three on-chain revenue streams, all atomic with the access action:
 2. **Royalty cascade** — derivatives pay royalties upstream into each artifact's on-chain `Balance<SUI>` vault; we verified this end-to-end with `pay_royalty + claim_revenue`.
 3. **Compute fee** — compute jobs charge a fee per run; the owner claims the accrued revenue.
 
-Tessera itself takes nothing. The protocol monetizes the data owners; we provide the tooling. Optional future: a fee on the indexer/discovery layer.
+Reef itself takes nothing. The protocol monetizes the data owners; we provide the tooling. Optional future: a fee on the indexer/discovery layer.
 
 ---
 
@@ -152,7 +152,7 @@ Tessera itself takes nothing. The protocol monetizes the data owners; we provide
 
 We need **two specific things** to take this to production:
 
-1. **A pilot dataset partner** — a real AI/ML team with confidential data they want to monetize. We deploy them on Tessera in a week; they keep the on-chain royalties.
+1. **A pilot dataset partner** — a real AI/ML team with confidential data they want to monetize. We deploy them on Reef in a week; they keep the on-chain royalties.
 
 2. **A TEE infrastructure partner** — Gramine, Phala, AzureCC, or similar — so we can run the compute worker in a **real** attested enclave. The honest-disclosure architecture is already wired; flipping `WORKER_ISOLATION_MODE=enclave` is a one-line change once the runtime exists.
 

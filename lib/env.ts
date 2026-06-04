@@ -1,4 +1,4 @@
-// Tessera runtime env vars. Split from lib/constants.ts so constants only
+// Reef runtime env vars. Split from lib/constants.ts so constants only
 // contain derivable config while this file holds raw env reads for secrets /
 // per-deployment ids that must never be inlined as defaults.
 

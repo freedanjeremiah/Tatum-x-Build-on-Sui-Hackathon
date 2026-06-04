@@ -36,7 +36,7 @@ async function main() {
       title: "Llama-3-8B-Finetuned-Support",
       description: "A support-domain fine-tune of the OSS Llama-3-8B.",
       tags: ["llm", "finetune", "support"],
-      creators: [{ name: "Tessera Demo", address: owner, contributionPercent: 100 }],
+      creators: [{ name: "Reef Demo", address: owner, contributionPercent: 100 }],
       modality: "model",
       externalSource: HF_URL,
     },

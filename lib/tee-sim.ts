@@ -97,7 +97,7 @@ export interface SimVerifyResult {
 }
 
 const SIM_SECRET_ENV = "WORKER_SIM_KEY";
-const DEFAULT_SECRET_SEED = "tessera-tee-sim-default-secret-v1";
+const DEFAULT_SECRET_SEED = "reef-tee-sim-default-secret-v1";
 const QE_VENDOR_ID_SIM = "OV-SIM-QE";
 const DISCLOSURE =
   "Simulated enclave (TEE-SIM v1) — cryptographically UNVERIFIED by hardware. Do NOT trust for production data; operator can still see plaintext in memory. Use only for development/CI.";

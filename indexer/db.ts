@@ -12,7 +12,7 @@ import type { Artifact, Tier, Modality } from "../types/artifact";
 export type DB = Database.Database;
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const DEFAULT_DB_PATH = join(HERE, "tessera.db");
+const DEFAULT_DB_PATH = join(HERE, "reef.db");
 
 /** Open (and migrate) the index database. Pass ":memory:" in tests. */
 export function openDb(path: string = DEFAULT_DB_PATH): DB {

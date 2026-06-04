@@ -26,7 +26,7 @@ async function registerMember(clients: ServerClients, title: string): Promise<Me
       title,
       description: `Group member ${title}.`,
       tags: ["group", "member"],
-      creators: [{ name: "Tessera Demo", address: owner, contributionPercent: 100 }],
+      creators: [{ name: "Reef Demo", address: owner, contributionPercent: 100 }],
       modality: "model",
     },
   });

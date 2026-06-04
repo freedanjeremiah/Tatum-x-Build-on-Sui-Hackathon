@@ -8,7 +8,7 @@ config({ path: resolve(process.cwd(), ".env.local") });
 
 import { pinJSON } from "../lib/storage";
 import { makeClientsFromKey } from "../lib/clients";
-import { TATUM_SUI_JSONRPC, TESSERA_PACKAGE_ID } from "../lib/constants";
+import { TATUM_SUI_JSONRPC, REEF_PACKAGE_ID } from "../lib/constants";
 
 async function main() {
   const pk = process.env.WALLET_PRIVATE_KEY ?? process.env.MASTER_SUI_PRIVKEY;
@@ -21,7 +21,7 @@ async function main() {
 
   // 1) Walrus storage helper (public metadata path).
   try {
-    const pinned = await pinJSON({ probe: "tessera", t: "real-connectivity" });
+    const pinned = await pinJSON({ probe: "reef", t: "real-connectivity" });
     console.log("✓ WALRUS pinJSON ->", pinned.uri);
   } catch (e) {
     console.log("✗ WALRUS pinJSON failed:", (e as Error).message);
@@ -48,11 +48,11 @@ async function main() {
       mist === 0n ? "→ UNFUNDED (use the Sui testnet faucet to send txs)" : "→ funded",
     );
 
-    if (TESSERA_PACKAGE_ID && TESSERA_PACKAGE_ID.trim() !== "") {
-      const pkg = await client.core.getObject({ objectId: TESSERA_PACKAGE_ID });
-      console.log("✓ tessera package reachable:", Boolean((pkg as { object?: unknown }).object));
+    if (REEF_PACKAGE_ID && REEF_PACKAGE_ID.trim() !== "") {
+      const pkg = await client.core.getObject({ objectId: REEF_PACKAGE_ID });
+      console.log("✓ reef package reachable:", Boolean((pkg as { object?: unknown }).object));
     } else {
-      console.log("• TESSERA_PACKAGE_ID unset — registry calls will fail until it is set.");
+      console.log("• REEF_PACKAGE_ID unset — registry calls will fail until it is set.");
     }
   } catch (e) {
     console.log("✗ Sui client/probe failed:", (e as Error).message);

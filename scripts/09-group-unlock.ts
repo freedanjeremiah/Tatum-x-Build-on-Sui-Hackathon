@@ -1,6 +1,6 @@
 // Group-unlock proof (Sui-native): a group license unlocks a group-tier artifact.
 //
-// The `group` Seal tier (move/sources/tessera.move): a group-tier artifact's
+// The `group` Seal tier (move/sources/reef.move): a group-tier artifact's
 // `seal_approve` admits its owner OR any address in its `license_holders`. We:
 //   1. create a shared Group object,
 //   2. upload a GROUP-tier artifact and bind it to that group,
@@ -41,7 +41,7 @@ async function main() {
       description: "A group-bound artifact, unlockable by a granted member license.",
       tags: ["group-demo"],
       modality: "model",
-      creators: [{ name: "Tessera Demo", address: owner, contributionPercent: 100 }],
+      creators: [{ name: "Reef Demo", address: owner, contributionPercent: 100 }],
     },
     terms: { rev: 5, fee: 1n },
   });

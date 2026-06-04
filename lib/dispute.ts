@@ -1,5 +1,5 @@
 // Dispute helpers — Sui-native. On Sui a dispute is an on-chain flag + event in
-// tessera::registry:
+// reef::registry:
 //
 //   - `raiseReport` files evidence against a target artifact (Move `raise_dispute`):
 //     sets the sticky `disputed` flag, bumps `dispute_count`, emits `Disputed`.

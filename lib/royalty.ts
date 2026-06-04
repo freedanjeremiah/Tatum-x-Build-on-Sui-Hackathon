@@ -1,5 +1,5 @@
 // Royalty helpers — Sui-native. Each artifact carries its OWN on-chain revenue
-// vault (`revenue: Balance<SUI>` in tessera::registry):
+// vault (`revenue: Balance<SUI>` in reef::registry):
 //
 //   - `payRoyalty` pays SUI into an artifact's vault (Move `pay_royalty`). Anyone
 //     may pay — a derivative's licensee tipping upstream, a marketplace
