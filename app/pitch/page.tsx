@@ -775,7 +775,7 @@ function SlideWhyNow() {
         <RailCard
           tag="WALRUS · 2025"
           title="Owner-controlled blob storage"
-          body="Encrypted dataset blobs stored on Walrus — owner pays and owns the Blob object; gasless aggregator reads. No IPFS pinning service to lose your files."
+          body="Encrypted dataset blobs stored on Walrus — owner pays and owns the Blob object; gasless aggregator reads, renewable and deletable on-chain. No third-party pinning service that can drop your files."
         />
       </div>
 
