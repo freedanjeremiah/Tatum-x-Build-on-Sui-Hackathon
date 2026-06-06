@@ -68,7 +68,7 @@ fun attested_registration_accepts_valid_signature() {
 }
 
 #[test]
-#[expected_failure(abort_code = 100)] // 100 = reef::registry::EBadEnclaveSig
+#[expected_failure(abort_code = 100, location = reef::registry)] // 100 = reef::registry::EBadEnclaveSig
 /// A bad (all-zero) signature MUST be rejected with EBadEnclaveSig (= 100).
 fun attested_registration_aborts_on_bad_signature() {
     let mut sc = ts::begin(CALLER);
