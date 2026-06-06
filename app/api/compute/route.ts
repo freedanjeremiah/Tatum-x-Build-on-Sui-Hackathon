@@ -131,8 +131,8 @@ export async function POST(req: Request): Promise<Response> {
     const clients = await makeClientsFromKey(pk);
     const rc = new RegistryClient(clients.client);
 
-    // 6. Encode metrics as bytes.
-    const metricsBytes = new TextEncoder().encode(JSON.stringify({ metrics: signed.metrics }));
+    // 6. Forward the verbatim signed metrics bytes — do NOT re-serialize.
+    const metricsBytes = signed.metricsBytes;
 
     // 7. Call registerDerivativeAttested — verifies enclave sig on-chain.
     let digest: string;

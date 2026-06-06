@@ -31,6 +31,7 @@ vi.mock("@/lib/enclaveClient", () => ({
   ENCLAVE_URL_ENV: "ENCLAVE_PROCESS_URL",
   callEnclave: vi.fn(async () => ({
     metrics: { n: 5 },
+    metricsBytes: new Uint8Array([1, 2, 3]),
     timestampMs: 1717000000000n,
     signature: new Uint8Array(64).fill(9),
   })),

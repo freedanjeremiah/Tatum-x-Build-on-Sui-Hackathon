@@ -26,7 +26,7 @@ async function main() {
     enclaveObjectId: process.env.REEF_ENCLAVE_OBJECT_ID!,
     timestampMs: signed.timestampMs,
     algoHash,
-    metrics: new TextEncoder().encode(JSON.stringify({ metrics: signed.metrics })),
+    metrics: signed.metricsBytes,
     signature: signed.signature,
   }, clients.signer as never);
   console.log("on-chain verify tx:", tx);

@@ -33,21 +33,19 @@ bytes the server forwards on-chain**:
 | `algo_hash` | UTF-8 of the algo string (e.g. `"sha256:mean-aggregate"`). `lib/registry.ts` encodes `new TextEncoder().encode(args.algoHash)`. |
 | `metrics` | **the byte-for-byte metrics blob.** This is the footgun. |
 
-### The metrics footgun (must fix before the demo works)
-Today `app/api/compute/route.ts` builds `metrics = TextEncoder().encode(JSON.stringify({ metrics: signed.metrics }))` — it **re-serializes** the metrics object it got back from the enclave. Rust `serde_json` and JS `JSON.stringify` do **not** guarantee identical bytes (key order, whitespace, number formatting). If the enclave signs its own serialization and the server re-stringifies, `verify_signature` fails → `EBadEnclaveSig`.
+### The metrics footgun — **DONE on the TS side**
 
-**Fix (pick one) before wiring the live enclave:**
-1. **Forward verbatim (recommended).** Have the enclave return the canonical
-   metrics bytes it signed (e.g. `data.metrics_b64`). Have `lib/enclaveClient.ts`
-   expose those raw bytes, and `app/api/compute/route.ts` pass *those exact bytes*
-   to `registerDerivativeAttested` (do NOT re-`JSON.stringify`). The enclave's
-   metrics object can still be returned separately for display.
-2. **Canonical JSON both sides.** Define one canonical serialization (sorted keys,
-   no spaces) and use it identically in the Rust shim and in the route. More
-   fragile than (1).
+`lib/enclaveClient.ts` now exposes `metricsBytes: Uint8Array` — the EXACT signed
+bytes decoded from `data.metrics_b64` in the enclave response. `callEnclave`
+**throws** (fail-closed) if `metrics_b64` is absent — no silent re-encode.
+`app/api/compute/route.ts` and `scripts/07-nautilus-attested-demo.ts` forward
+`signed.metricsBytes` verbatim to `registerDerivativeAttested` (no re-`JSON.stringify`).
 
-This is a one-file change to the route + a field add to `enclaveClient.ts`; do it
-when the enclave response shape is finalized in Task 12 Step 2 below.
+**Remaining enclave-side requirement (Task 12 Step 2):** the Rust `process_data`
+MUST return `data.metrics_b64` = base64 of the EXACT bytes it signed as the
+`metrics` field of `ComputeResultPayload`. The TS server now forwards those bytes
+unchanged. As long as the Rust side includes `metrics_b64` in the response and the
+on-chain `metrics` argument matches the signed bytes, `verify_signature` will pass.
 
 ---
 

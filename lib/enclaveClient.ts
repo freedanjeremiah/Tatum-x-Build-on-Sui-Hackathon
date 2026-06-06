@@ -10,6 +10,8 @@ export interface EnclaveJob {
 
 export interface EnclaveSignedResult {
   metrics: Record<string, number>;
+  /** The EXACT bytes the enclave signed as the metrics field — forwarded verbatim on-chain. */
+  metricsBytes: Uint8Array;
   timestampMs: bigint;
   /** raw ed25519 signature bytes (64). */
   signature: Uint8Array;
@@ -37,11 +39,17 @@ export async function callEnclave(job: EnclaveJob): Promise<EnclaveSignedResult>
   }
   if (!res.ok) throw new Error(`enclave: process_data returned ${res.status}`);
   const j = (await res.json()) as {
-    response: { intent: number; timestamp_ms: number; data: { metrics: Record<string, number> } };
+    response: { intent: number; timestamp_ms: number; data: { metrics: Record<string, number>; metrics_b64?: string } };
     signature: string;
   };
+  const metrics_b64 = j.response.data.metrics_b64;
+  if (!metrics_b64) {
+    throw new Error("enclave: response missing metrics_b64 — cannot forward signed bytes");
+  }
+  const metricsBytes = new Uint8Array(Buffer.from(metrics_b64, "base64"));
   return {
     metrics: j.response.data.metrics,
+    metricsBytes,
     timestampMs: BigInt(j.response.timestamp_ms),
     signature: hexToBytes(j.signature),
   };
