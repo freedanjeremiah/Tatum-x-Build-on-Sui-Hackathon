@@ -109,10 +109,15 @@ export async function POST(req: Request): Promise<Response> {
       );
     }
 
-    // 3. Call the Nautilus enclave.
+    // 3. Call the Nautilus enclave. Pass the dataset descriptor (Walrus cid +
+    // allowlist) so the in-enclave worker can Seal-decrypt the real blob; without
+    // it the worker short-circuits at the allowlist gate and returns empty metrics.
+    const datasetDescriptor = dataset.cid
+      ? { ipId: dataset.ipId, tier: dataset.tier, cid: dataset.cid, allowedAlgoHashes: allowed }
+      : undefined;
     let signed: Awaited<ReturnType<typeof callEnclave>>;
     try {
-      signed = await callEnclave({ datasetIpId, algoHash, params });
+      signed = await callEnclave({ datasetIpId, algoHash, params, dataset: datasetDescriptor, allowedAlgoHashes: allowed });
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       return json({ status: "failed", reason: message, decryptCalled: true }, 500);
@@ -127,8 +132,10 @@ export async function POST(req: Request): Promise<Response> {
       );
     }
 
-    // 5. Build Sui clients.
-    const clients = await makeClientsFromKey(pk);
+    // 5. Build Sui clients. Force the public fullnode for SIGNING — the tx build
+    // calls suix_getLatestSuiSystemState, which the Tatum gateway does not serve.
+    // (Reads / gas / status elsewhere still route through Tatum.)
+    const clients = await makeClientsFromKey(pk, { fullnode: true });
     const rc = new RegistryClient(clients.client);
 
     // 6. Forward the verbatim signed metrics bytes — do NOT re-serialize.

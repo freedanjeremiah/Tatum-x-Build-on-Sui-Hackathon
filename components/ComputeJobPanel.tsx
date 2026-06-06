@@ -503,15 +503,20 @@ function IsolationStrip({
   // hardcode "plain server" — the UI must reflect whatever the worker says.
   const lower = (mode ?? "").toLowerCase();
   const isSim = lower.includes("simulated enclave") || lower.includes("enclave-sim");
-  const isEnclave = !isSim && lower.includes("attested enclave");
-  const headline = isEnclave
+  const isNitro = !isSim && (lower.includes("nitro enclave") || lower.includes("attestation verified on-chain"));
+  const isEnclave = !isSim && !isNitro && lower.includes("attested enclave");
+  const headline = isNitro
+    ? "Isolation: AWS Nitro enclave — attestation verified on-chain."
+    : isEnclave
     ? "Isolation: attested enclave (production)."
     : isSim
       ? "Isolation: simulated enclave (TEE-SIM, NOT hardware-attested — development only)."
       : mode
         ? `Isolation: ${mode}.`
         : "Isolation: plain server (operator-trusted, demo).";
-  const body = isEnclave
+  const body = isNitro
+    ? "The worker ran inside an AWS Nitro enclave; reef::registry verified the AWS attestation + the enclave's signature on-chain before accepting the result. Seal delivers keys only — compute privacy comes from the attested enclave + the algorithm allowlist."
+    : isEnclave
     ? "Worker measurements are verified by hardware attestation. Seal delivers keys only; privacy comes from the attested worker + the algorithm allowlist."
     : isSim
       ? "The simulator exercises the same verification code path real attestation would take, but the signature is HMAC over a server-side secret — not chained to Intel's quoting enclave. Do not trust for production data."

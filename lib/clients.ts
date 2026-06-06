@@ -48,8 +48,12 @@ function retryingFetch(maxRetries = 5): typeof fetch {
 // public fullnode is used (suiNetwork.fullnodeUrl).
 // ---------------------------------------------------------------------------
 
-export function makeSuiClient(): SuiClient {
-  const hasTatum = Boolean(TATUM_API_KEY && TATUM_API_KEY.length > 0);
+export function makeSuiClient(opts?: { fullnode?: boolean }): SuiClient {
+  // `fullnode: true` forces the public fullnode and skips the Tatum gateway.
+  // Needed for transaction BUILDING/signing: the SDK calls
+  // `suix_getLatestSuiSystemState`, which the Tatum Sui gateway does not serve —
+  // so writes must go through the fullnode while reads/status stay on Tatum.
+  const hasTatum = !opts?.fullnode && Boolean(TATUM_API_KEY && TATUM_API_KEY.length > 0);
 
   if (hasTatum) {
     const transport = new JsonRpcHTTPTransport({
@@ -110,7 +114,10 @@ export interface ServerClients {
   account: { address: string };
 }
 
-export async function makeClientsFromKey(secretOverride?: string): Promise<ServerClients> {
+export async function makeClientsFromKey(
+  secretOverride?: string,
+  opts?: { fullnode?: boolean },
+): Promise<ServerClients> {
   // Read the secret from the environment (never from a default).
   const secret =
     secretOverride ??
@@ -126,7 +133,7 @@ export async function makeClientsFromKey(secretOverride?: string): Promise<Serve
 
   const keypair = keypairFromSecret(secret.trim());
   const address = addressOf(keypair);
-  const client = makeSuiClient();
+  const client = makeSuiClient(opts);
 
   return {
     client,
