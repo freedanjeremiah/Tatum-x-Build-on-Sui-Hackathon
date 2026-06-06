@@ -927,7 +927,7 @@ function SlideSolution() {
       >
         <LegendDot color="var(--ov-accent)" label="CIPHERTEXT · WALRUS BLOB" />
         <LegendDot color="var(--ov-accent)" label="SEAL KEY SHARDS" ring />
-        <LegendDot color="var(--ov-navy)" label="LICENSE TOKEN" />
+        <LegendDot color="var(--ov-navy)" label="LICENSE · ON-CHAIN HOLDER" />
         <LegendDot color="var(--ov-navy)" label="DECRYPTION SHARES" ring />
         <span className="meta" style={{ color: "var(--ov-text-faint)" }}>
           NO SINGLE PARTY — INCLUDING US — CAN DECRYPT
@@ -1044,8 +1044,8 @@ function ArchDiagram() {
         fill="var(--ov-text-faint)"
       >
         <text x="280" y="120">CIPHERTEXT →</text>
-        <text x="290" y="345">SEAL KEY SHARDS →</text>
-        <text x="800" y="120">← LICENSE</text>
+        <text x="290" y="345">REGISTER + seal_approve →</text>
+        <text x="800" y="120">← PAY · SUI</text>
         <text x="810" y="350">← SHARES</text>
         <text x="780" y="65">CIPHERTEXT FETCH →</text>
       </g>
@@ -1072,8 +1072,8 @@ function ArchDiagram() {
       <Node
         cx={910}
         cy={100}
-        label="LICENSE"
-        sub="sui move object"
+        label="BUY LICENSE"
+        sub="→ license_holders"
         icon={<CoinIcon />}
         small
       />
