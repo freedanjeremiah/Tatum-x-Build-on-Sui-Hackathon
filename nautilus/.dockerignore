@@ -1,0 +1,5 @@
+src/nautilus-server/target
+out
+template-move
+*.png
+RUNBOOK.md

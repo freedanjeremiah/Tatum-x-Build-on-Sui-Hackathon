@@ -1,0 +1,9 @@
+# External endpoints the enclave's in-enclave TS worker is allowed to reach
+# (Seal-decrypt the compute-tier dataset + read the ciphertext blob from Walrus).
+# Outbound HTTPS is brokered by the Nautilus traffic forwarder / host vsock-proxy.
+endpoints:
+  - aggregator.walrus-testnet.walrus.space   # Walrus testnet aggregator (read ciphertext blob)
+  - publisher.walrus-testnet.walrus.space    # Walrus testnet publisher (persist Seal-encrypted metrics)
+  - seal-key-server-testnet-1.mystenlabs.com # Mysten Seal key server #1 (gated key delivery)
+  - seal-key-server-testnet-2.mystenlabs.com # Mysten Seal key server #2 (gated key delivery)
+  - fullnode.testnet.sui.io                  # Sui testnet fullnode (seal_approve dry-run + derivative tx)

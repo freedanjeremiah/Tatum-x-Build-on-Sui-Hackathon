@@ -1,0 +1,5 @@
+# Build artifacts — NOT committed (rebuilt from source via Dockerfile + build-bundle.sh)
+out/
+enclave/dist/
+src/nautilus-server/target/
+template-move/

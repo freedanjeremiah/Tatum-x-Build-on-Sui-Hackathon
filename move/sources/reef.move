@@ -189,6 +189,16 @@ public struct CounterEvidence has copy, drop {
 
 // ---- registration / minting ----
 
+/// Mint the enclave-registration capability bound to this package's `REEF` type
+/// tag. `REEF` is constructible only inside this module, so this is the ONLY way
+/// to obtain a `Cap<REEF>` — which `create_enclave_config<REEF>` then requires to
+/// register a confidential-compute enclave on-chain. The `Cap<REEF>` is sent to
+/// the caller (typically the package deployer / enclave operator).
+public entry fun mint_enclave_cap(ctx: &mut TxContext) {
+    let cap = enclave::new_cap<REEF>(REEF {}, ctx);
+    transfer::public_transfer(cap, ctx.sender());
+}
+
 /// Register a new artifact. Creates + SHARES an `ArtifactRegistry` and transfers
 /// the owning `ArtifactCap` to the sender. Mirrors Reef's
 /// "register -> get object id -> then encrypt+store" invariant: the caller reads
