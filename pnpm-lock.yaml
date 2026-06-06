@@ -47,6 +47,9 @@ importers:
       react-dom:
         specifier: 19.2.4
         version: 19.2.4(react@19.2.4)
+      undici:
+        specifier: ^6.21.0
+        version: 6.21.0
     devDependencies:
       '@tailwindcss/postcss':
         specifier: ^4
@@ -4843,6 +4846,10 @@ packages:
 
   undici-types@7.27.0:
     resolution: {integrity: sha512-sqqlwW3zm+cE82GwKdGyn3pcze7LXlx/4jUgA0vtAf6Fa81KMrJqc3VfWmmeOTUIElW9IdPsLwMUIpiOZQgK3A==}
+
+  undici@6.21.0:
+    resolution: {integrity: sha512-BUgJXc752Kou3oOIuU1i+yZZypyZRqNPW0vqoMPl8VaoalSfeR0D8/t4iAS3yirs79SSMTxTag+ZC86uswv+Cw==}
+    engines: {node: '>=18.17'}
 
   unrs-resolver@1.12.2:
     resolution: {integrity: sha512-dmlRxBJJayXjqTwC+JtF1HhJmgf3ftQ3YejFcZrf4+KKtJv0qDsK1pjqaaVjG7wJ5NJ6UVP1OqRMQ71Z4C3rxQ==}
@@ -11941,6 +11948,8 @@ snapshots:
   undici-types@6.21.0: {}
 
   undici-types@7.27.0: {}
+
+  undici@6.21.0: {}
 
   unrs-resolver@1.12.2:
     dependencies:

@@ -37,6 +37,26 @@ COPY src/nautilus-server/src/apps/reef-compute/allowed_endpoints.yaml /app/allow
 COPY enclave/entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh /app/nautilus-server
 
-ENV WORKER_PORT=7070
-ENV WORKER_ISOLATION_MODE=enclave-nautilus
+# Runtime config for the in-enclave worker. Non-secret testnet values + the signer
+# key are injected at build time via --build-arg (sourced from .env.local), so no
+# secret lives in the committed Dockerfile. NOTE: a production enclave should
+# deliver WALLET_PRIVATE_KEY over the Nautilus vsock secrets channel (port 7777)
+# instead of baking it into the image; build-arg injection is used here for a
+# self-contained, operator-controlled demo on this box.
+ARG WALLET_PRIVATE_KEY
+ARG REEF_PACKAGE_ID
+ARG SEAL_KEY_SERVER_IDS
+ENV WORKER_PORT=7070 \
+    WORKER_ISOLATION_MODE=enclave-nautilus \
+    ENCLAVE_HTTPS_PROXY=http://127.0.0.1:8888 \
+    SUI_NETWORK=testnet \
+    SUI_FULLNODE_URL=https://fullnode.testnet.sui.io:443 \
+    WALRUS_AGGREGATOR=https://aggregator.walrus-testnet.walrus.space \
+    WALRUS_PUBLISHER=https://publisher.walrus-testnet.walrus.space \
+    SEAL_THRESHOLD=2 \
+    STORAGE_EPOCHS=5 \
+    WALLET_PRIVATE_KEY=$WALLET_PRIVATE_KEY \
+    REEF_PACKAGE_ID=$REEF_PACKAGE_ID \
+    NEXT_PUBLIC_OV_REEF_PACKAGE_ID=$REEF_PACKAGE_ID \
+    SEAL_KEY_SERVER_IDS=$SEAL_KEY_SERVER_IDS
 CMD ["/app/entrypoint.sh"]
