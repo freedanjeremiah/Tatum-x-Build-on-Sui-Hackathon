@@ -52,6 +52,12 @@ pub struct ReefRequest {
     pub algo_hash: String,
     #[serde(default)]
     pub params: Option<Value>,
+    /// Dataset descriptor (cid/tier/allowedAlgoHashes) resolved by the host and
+    /// forwarded verbatim to the in-enclave worker so it can Seal-decrypt the blob.
+    #[serde(default)]
+    pub dataset: Option<Value>,
+    #[serde(rename = "allowedAlgoHashes", default)]
+    pub allowed_algo_hashes: Option<Value>,
 }
 
 /// Decode a Sui object id hex string into its raw 32 bytes, matching what
@@ -81,6 +87,8 @@ pub async fn process_data(
         "datasetIpId": req.dataset_ip_id,
         "algoHash": req.algo_hash,
         "params": req.params,
+        "dataset": req.dataset,
+        "allowedAlgoHashes": req.allowed_algo_hashes,
     });
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(120))

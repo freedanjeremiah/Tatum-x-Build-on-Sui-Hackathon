@@ -12,8 +12,19 @@ async function main() {
   }
   const datasetIpId = (process.env.DEMO_DATASET_ID ?? "0x0") as `0x${string}`;
   const algoHash = "sha256:mean-aggregate";
+  // When the dataset's Walrus blobId is provided, hand the in-enclave worker the
+  // descriptor it needs to Seal-decrypt the real blob (cid + allowlist). Without
+  // it (e.g. DEMO_DATASET_ID=0x0) the worker short-circuits at the allowlist gate
+  // and returns empty metrics — still a valid enclave-signature proof.
+  const cid = process.env.DEMO_DATASET_CID;
+  const allowedAlgoHashes = (process.env.DEMO_ALLOWED_ALGOS ?? algoHash)
+    .split(",").map((s) => s.trim()).filter(Boolean);
+  const dataset = cid
+    ? { ipId: datasetIpId, tier: "compute", cid, allowedAlgoHashes }
+    : undefined;
   console.log("=== 1. Call enclave process_data ===");
-  const signed = await callEnclave({ datasetIpId, algoHash });
+  if (dataset) console.log("dataset descriptor:", { cid, allowedAlgoHashes });
+  const signed = await callEnclave({ datasetIpId, algoHash, dataset, allowedAlgoHashes });
   console.log("enclave metrics:", signed.metrics);
   console.log("enclave sig (hex):", "0x" + Buffer.from(signed.signature).toString("hex"));
 

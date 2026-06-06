@@ -6,6 +6,11 @@ export interface EnclaveJob {
   datasetIpId: string;
   algoHash: string;
   params?: Record<string, unknown>;
+  /** Dataset descriptor (cid/tier/allowedAlgoHashes) so the in-enclave worker can
+   *  resolve the Walrus blob + satisfy the allowlist gate and actually decrypt. */
+  dataset?: Record<string, unknown>;
+  /** Dataset's algo allowlist (mirrors dataset.allowedAlgoHashes). */
+  allowedAlgoHashes?: string[];
 }
 
 export interface EnclaveSignedResult {
