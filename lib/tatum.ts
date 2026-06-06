@@ -141,12 +141,17 @@ export interface TatumNetworkStatus {
   network: string;
   /** Reference gas price in MIST (decimal string; bigint is not JSON-safe). */
   referenceGasPrice: string;
-  /** Latest checkpoint sequence number (decimal string). */
-  checkpoint: string;
-  /** Current epoch number (decimal string), from the Sui system state. */
-  epoch: string;
+  /** Latest checkpoint sequence number (decimal string). Omitted if the gateway
+   *  does not serve `sui_getLatestCheckpointSequenceNumber`. */
+  checkpoint?: string;
+  /** Current epoch number (decimal string), from the Sui system state. Omitted if
+   *  the gateway does not serve `suix_getLatestSuiSystemState`. */
+  epoch?: string;
   /** Total stake reported by the system state, if available (decimal string). */
   totalStake?: string;
+  /** RPC methods the Tatum gateway did not serve — honest partial disclosure so
+   *  the UI can show what's live and "—" for the rest, instead of failing whole. */
+  unavailable?: string[];
 }
 
 interface SuiSystemStateSummary {
@@ -164,19 +169,39 @@ export async function tatumNetworkStatus(): Promise<TatumNetworkStatus> {
   requireKey("network status");
   const { SUI_NETWORK } = await import("./constants");
 
-  const [gas, checkpoint, system] = await Promise.all([
+  // Independent calls: a single method the gateway doesn't serve (e.g. some Tatum
+  // gateways lack `suix_getLatestSuiSystemState`) must NOT sink the whole surface.
+  const [gasR, cpR, sysR] = await Promise.allSettled([
     suiRpc<string | number>("suix_getReferenceGasPrice", []),
     suiRpc<string | number>("sui_getLatestCheckpointSequenceNumber", []),
     suiRpc<SuiSystemStateSummary>("suix_getLatestSuiSystemState", []),
   ]);
 
+  // Reference gas price is the core Tatum-routed signal; if even that fails the
+  // gateway is unusable — surface a real error (route → 502, UI → "—").
+  if (gasR.status !== "fulfilled") {
+    throw new Error(
+      `Tatum gateway error: ${(gasR.reason as Error)?.message ?? "reference gas price unavailable"}`,
+    );
+  }
+
+  const unavailable: string[] = [];
   const status: TatumNetworkStatus = {
     network: SUI_NETWORK,
-    referenceGasPrice: BigInt(gas).toString(),
-    checkpoint: String(checkpoint),
-    epoch: system.epoch !== undefined ? String(system.epoch) : "",
+    referenceGasPrice: BigInt(gasR.value).toString(),
   };
-  if (system.totalStake !== undefined) status.totalStake = String(system.totalStake);
+
+  if (cpR.status === "fulfilled") status.checkpoint = String(cpR.value);
+  else unavailable.push("sui_getLatestCheckpointSequenceNumber");
+
+  if (sysR.status === "fulfilled") {
+    if (sysR.value.epoch !== undefined) status.epoch = String(sysR.value.epoch);
+    if (sysR.value.totalStake !== undefined) status.totalStake = String(sysR.value.totalStake);
+  } else {
+    unavailable.push("suix_getLatestSuiSystemState");
+  }
+
+  if (unavailable.length > 0) status.unavailable = unavailable;
   return status;
 }
 

@@ -193,9 +193,11 @@ signature.
    The server pins the canonical enclave object id (`REEF_ENCLAVE_OBJECT_ID`), so the **app** is safe,
    but the **contract-level** guarantee is "signed by *a* registered REEF enclave," not "*the* canonical
    one." Production would gate cap minting (one-time / deployer-only) and assert expected PCRs in Move.
-2. **Tatum RPC coverage.** The Tatum Sui gateway does not implement `suix_getLatestSuiSystemState`, so
-   the live status surface's epoch/system-state field falls back to a public fullnode; the Sui JSON-RPC
-   gateway and reference-gas-price status continue to route through Tatum.
+2. **Tatum RPC coverage.** The Tatum Sui gateway does not serve `suix_getLatestSuiSystemState`, so the
+   live status surface **omits the epoch field and lists it under `unavailable`** (honest partial) while
+   the reference gas price and latest checkpoint **do** route through Tatum. The `/api/tatum/status`
+   route degrades to `200` with whatever the gateway served — it never fails the whole surface (`502`)
+   over one unsupported method.
 
 ---
 
