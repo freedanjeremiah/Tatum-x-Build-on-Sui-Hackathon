@@ -102,6 +102,24 @@ allowlisted algorithm **inside the enclave**. The enclave's ephemeral key signs 
 registered enclave object (PCRs + public key) before a compute derivative is accepted. The guarantee
 is **"Sui Move verified the enclave"**, not "trust the operator."
 
+**Verified live on Sui testnet (2026-06-06):** a real AWS Nitro enclave was built, its NSM
+attestation document verified on-chain against the **AWS root of trust** (bundled in the Sui
+framework), and a confidential-compute result passed `register_derivative_attested`'s on-chain
+ed25519 verification:
+
+| On-chain artifact | Value |
+|---|---|
+| Reef package | `0x3203061e549b9df36a842a53fe3ef40e2a2e923e05a9aeed26ed9715ee63db7d` |
+| `Enclave<REEF>` object | `0xb9e55bd52c96832fe73f3f2954bb9619499e70bff2e8d8b2bc3bfdda02a1ed9a` |
+| `register_enclave` (AWS-root attestation verified) | `J4mbShboRhgKEPEEWVXEtMAuDrmCEf3v4ywYManyR5eo` |
+| `register_derivative_attested` (enclave sig verified) | `3JL6uVFH1FuVqcP9bBmURZfcxiey7kNDNgZnxpX8UkVb` |
+| PCR0 | `e9be617501b7b2a4442353d514a0a53273005029b9cda9a1b73be1e7e399eeb422dc07481a05c12f4c9569122c831735` |
+
+The Nautilus enclave app (`nautilus/`) runs the in-enclave TS worker (`worker/enclave-server.ts`,
+on `127.0.0.1:7070`), signs `IntentMessage{intent:0,…}` over `ComputeResultPayload{dataset_id,
+algo_hash, metrics}`, and returns `metrics_b64` = base64 of the **exact signed bytes** so the server
+forwards them verbatim on-chain (byte-exact; no `EBadEnclaveSig`).
+
 The **TEE simulator (`enclave-sim`) remains as an honestly-disclosed CI/dev fallback.** There is
 **no silent fallback** — if `WORKER_ISOLATION_MODE=enclave-nautilus` is set but the enclave is
 unconfigured or unreachable, the compute path **fails closed** with a clear error. The worker refuses
@@ -117,6 +135,16 @@ Privy-embedded wallet) is stubbed with an honest throw — server-side flows (sc
 `real` family) sign with an Ed25519 keypair and work end-to-end today. Wiring the Privy→Sui browser
 signer is the next step; the UI surfaces a real "wallet not connected" error rather than a fake
 signature.
+
+**Two further disclosed limits of the attested path:**
+1. **Contract-level scope.** `reef::registry::mint_enclave_cap` is open, and
+   `register_derivative_attested` accepts any registered `Enclave<REEF>` without pinning PCRs on-chain.
+   The server pins the canonical enclave object id (`REEF_ENCLAVE_OBJECT_ID`), so the **app** is safe,
+   but the **contract-level** guarantee is "signed by *a* registered REEF enclave," not "*the* canonical
+   one." Production would gate cap minting (one-time / deployer-only) and assert expected PCRs in Move.
+2. **Tatum RPC coverage.** The Tatum Sui gateway does not implement `suix_getLatestSuiSystemState`, so
+   the live status surface's epoch/system-state field falls back to a public fullnode; the Sui JSON-RPC
+   gateway and reference-gas-price status continue to route through Tatum.
 
 ---
 
