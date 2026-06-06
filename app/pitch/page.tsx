@@ -646,7 +646,7 @@ function SlideProblem() {
           borderTop: "1.5px solid var(--ov-line-ink)",
         }}
       >
-        <StatBlock big="1M+" small="MODELS ON HUGGING FACE" />
+        <StatBlock big="1.4M+" small="MODELS ON HUGGING FACE" />
         <StatBlock big="70M+" small="KAGGLE USERS" />
         <StatBlock big="0" small="NATIVE ROYALTY RAILS" />
         <StatBlock big="1" small="ROW STANDING BETWEEN YOU & EXPOSURE" />
@@ -1706,6 +1706,7 @@ function SlideCompute() {
         <Stamp>PLAINTEXT NEVER EXITS THE ENCLAVE</Stamp>
         <Stamp>ALGORITHM ALLOWLIST · HASH-PINNED</Stamp>
         <Stamp>RESULT REGISTERS AS DERIVATIVE</Stamp>
+        <Stamp>ENCLAVE-SIM · DISCLOSED CI FALLBACK</Stamp>
         <span className="meta" style={{ color: "var(--ov-text-faint)" }}>
           THE PRIMITIVE NO CENTRALIZED PLATFORM CAN OFFER
         </span>
@@ -2193,6 +2194,18 @@ function SlideProvenance() {
             <RoyaltyRow source="dataset" verb="trained →" model="model-v1" pct="5%" />
             <RoyaltyRow source="model-v1" verb="fine-tuned →" model="model-v2" pct="3%" />
             <RoyaltyRow source="compute result" verb="derived from →" model="dataset" pct="0.1%" />
+            <div
+              className="font-mono"
+              style={{
+                marginTop: 4,
+                fontSize: 9,
+                letterSpacing: "0.1em",
+                color: "var(--ov-text-faint)",
+                textTransform: "uppercase",
+              }}
+            >
+              rates illustrative — pay_royalty accepts any SUI amount; no protocol-enforced %
+            </div>
           </div>
         </div>
 
@@ -2721,7 +2734,7 @@ function SlideAsk() {
           }}
         >
           <Stamp>SUI TESTNET · LIVE TODAY</Stamp>
-          <Stamp>GITHUB.COM/REEF</Stamp>
+          <Stamp>GITHUB · FREEDANJEREMIAH/TATUM-X-BUILD-ON-SUI-HACKATHON</Stamp>
           <Stamp>LIVE DEMO · /BROWSE</Stamp>
         </div>
       </div>
