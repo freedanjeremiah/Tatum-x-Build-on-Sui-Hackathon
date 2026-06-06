@@ -17,13 +17,14 @@ policy — there is no auth server and no platform operator who can hand out acc
 
 ## Built for the Tatum x Walrus hackathon
 
-Four pieces of the Sui stack, each doing what only it can:
+Five pieces of the Sui stack, each doing what only it can:
 
 | Layer | Technology | Role in Reef |
 |-------|-----------|-----------------|
 | **Storage** | **Walrus** (`@mysten/walrus`) | Encrypted dataset/model blobs; owner pays + owns the `Blob` object; gasless public reads via the aggregator; renewable + deletable for storage GC. |
 | **Confidentiality** | **Seal** (`@mysten/seal`) | Threshold IBE encryption. The decryption key is released by the key-server committee **only** when an on-chain `seal_approve` Move call succeeds. |
 | **Coordination** | **Sui Move** (`reef::registry`) | One shared `ArtifactRegistry` object per artifact: tier, owner, license holders, compute allowlist, group, revenue vault, derivative lineage — and the `seal_approve` gate itself. |
+| **Confidential compute** | **AWS Nitro Enclave + Nautilus** (`nautilus/`) | Compute-tier data is decrypted and processed **inside a hardware enclave**; the enclave signs the result and `reef::registry::register_derivative_attested` verifies the AWS attestation + signature **on-chain** before accepting the derivative. See [Confidential compute](#confidential-compute-nautilus-tee). |
 | **Access (RPC + data)** | **Tatum** | Three Tatum capabilities: Sui JSON-RPC gateway (`x-api-key`, 429 backoff, public-fullnode fallback), Notification webhooks → push indexer, and a live network/gas status surface. See [Tatum integration](#tatum-integration). |
 
 **The composability lives in the on-chain `seal_approve` policy.** Seal calls
@@ -88,6 +89,56 @@ derivative IP** of the dataset, wipes the plaintext, and returns **aggregate met
 
 ---
 
+## Confidential compute (Nautilus TEE)
+
+The compute tier's promise — *"computable, not downloadable"* — is only as strong as the box the
+worker runs on. Reef closes that gap with **Nautilus**, Sui's verifiable-offchain-compute framework,
+backed by a real **AWS Nitro Enclave**. This is the part that turns "trust the operator" into
+**"Sui Move verified the enclave."**
+
+**End-to-end flow of one confidential job:**
+
+```
+consumer ─▶ /api/compute ─▶ Nitro Enclave (Nautilus app, nautilus/)
+                                  │  in-enclave TS worker (worker/enclave-server.ts, 127.0.0.1:7070)
+                                  │   1. Seal-gated decrypt (compute_workers allowlist)
+                                  │   2. run the allowlisted algorithm (worker/algos/*)
+                                  │   3. wipe plaintext → metrics only
+                                  │  enclave ephemeral key signs
+                                  │   IntentMessage{intent:0, ts, ComputeResultPayload{dataset_id, algo_hash, metrics}}
+                                  ▼
+        server ─▶ reef::registry::register_derivative_attested(payload, signature, &Enclave<REEF>)
+                                  ▼
+                  Move verifies: AWS-rooted attestation (PCRs + ephemeral pubkey via the vendored
+                  `reef::enclave` module) AND the ed25519 signature over the result.
+                  Aborts (EBadEnclaveSig) on mismatch — the derivative is only created if the
+                  enclave is real and the result is genuinely what it signed.
+```
+
+**What this buys you:** the compute derivative on-chain is provably the output of an **allowlisted
+algorithm running inside an attested enclave** over the gated data — not something an operator could
+fabricate. The enclave returns `metrics_b64` (base64 of the exact signed bytes) so the server forwards
+them **verbatim** on-chain; the signed bytes and the verified bytes are identical by construction.
+
+**Honest fallback, no silent downgrade.** Setting `WORKER_ISOLATION_MODE=enclave-sim` runs a
+TEE *simulator* for CI/dev — clearly disclosed as **not hardware-attested**. If
+`WORKER_ISOLATION_MODE=enclave-nautilus` is set but the enclave is unreachable, the compute path
+**fails closed** rather than quietly running on a plain server.
+
+**Verified live on Sui testnet (2026-06-06):**
+
+| On-chain artifact | Value |
+|---|---|
+| Reef package | `0x3203061e549b9df36a842a53fe3ef40e2a2e923e05a9aeed26ed9715ee63db7d` |
+| `Enclave<REEF>` object | `0xb9e55bd52c96832fe73f3f2954bb9619499e70bff2e8d8b2bc3bfdda02a1ed9a` |
+| `register_enclave` (AWS-root attestation verified) | `J4mbShboRhgKEPEEWVXEtMAuDrmCEf3v4ywYManyR5eo` |
+| `register_derivative_attested` (enclave sig verified) | `3JL6uVFH1FuVqcP9bBmURZfcxiey7kNDNgZnxpX8UkVb` |
+
+To reproduce the enclave from scratch (build EIF, register PCRs, register the live attestation), see
+**[`nautilus/RUNBOOK.md`](nautilus/RUNBOOK.md)**.
+
+---
+
 ## Honesty (please read)
 
 Seal provides **threshold encryption + on-chain-gated key delivery** — nothing more. It does **not**
@@ -148,46 +199,121 @@ signature.
 
 ---
 
-## Quick start (Sui + Walrus testnet)
+## Getting started
 
-Requires **Node 20+** and **pnpm**, plus the **Sui CLI** (1.65+) to publish the Move package.
+**Prerequisites:** **Node 20+**, **pnpm**, and (for publishing/Move work) the **Sui CLI** — use a
+build matching Sui **testnet** (`sui --version` should report `1.73.x`). The web app uses experimental
+HTTPS in dev, so it serves on `https://localhost:3000`.
 
 ```bash
+git clone https://github.com/freedanjeremiah/Tatum-x-Build-on-Sui-Hackathon.git
+cd Tatum-x-Build-on-Sui-Hackathon
 pnpm install
-cp .env.local.example .env.local       # fill Privy, Tatum, Seal key servers, signer
-
-# publish the Move package, then put the package id in REEF_PACKAGE_ID
-cd move && sui move build && sui client publish --gas-budget 200000000
-cd ..
-
-pnpm dev                               # https://localhost:3000 (dev uses experimental HTTPS)
+cp .env.local.example .env.local
 ```
 
-### What each env var is for
+`.env.local` is gitignored — secrets never enter the repo. Fill it according to the path you want:
 
-See `.env.local.example` for the full annotated list. The ones you must set to run real flows:
-`NEXT_PUBLIC_PRIVY_APP_ID`, `TATUM_API_KEY`, `MASTER_SUI_PRIVKEY` (+ `MASTER_SUI_ADDRESS`),
-`REEF_PACKAGE_ID`, and `SEAL_KEY_SERVER_IDS`. Walrus/Sui/Tatum endpoints default to testnet.
-Optional `INFERENCE_*` powers the model **Run** tab (omit → honest 503).
+### Path A — Browse against the already-deployed testnet package (fastest)
 
-For the Nautilus attested-compute path:
-`WORKER_ISOLATION_MODE=enclave-nautilus` activates real enclave routing (omit or set to `enclave-sim`
-for the CI simulator); `ENCLAVE_PROCESS_URL` is the HTTP base URL of the running Nitro enclave host
-(required — the worker fails closed if unset); `REEF_ENCLAVE_OBJECT_ID` is the on-chain Sui object id
-of the registered Nautilus enclave (required for `register_derivative_attested` on-chain verification).
+You don't have to publish anything. Point the app at the live Reef package and the public Mysten
+testnet Seal key servers (these are the built-in defaults, shown here explicitly):
+
+```bash
+# in .env.local
+REEF_PACKAGE_ID=0x3203061e549b9df36a842a53fe3ef40e2a2e923e05a9aeed26ed9715ee63db7d
+NEXT_PUBLIC_OV_REEF_PACKAGE_ID=0x3203061e549b9df36a842a53fe3ef40e2a2e923e05a9aeed26ed9715ee63db7d
+SEAL_KEY_SERVER_IDS=0x73d05d62c18d9374e3ea529e8e0ed6161da1a141a94d3f76ae3fe4e99356db75,0xf5d14a81a982144ae441cd7d64b09027f116a468bd36e7eca494f750591623c8
+NEXT_PUBLIC_PRIVY_APP_ID=<your-privy-app-id>     # browser wallet (free at dashboard.privy.io)
+```
+
+```bash
+pnpm dev          # https://localhost:3000 — browse artifacts indexed from Sui testnet
+```
+
+### Path B — Run real on-chain flows with your own wallet
+
+To register artifacts, buy licenses, pay royalties, etc., you need a funded testnet signer:
+
+```bash
+# create a wallet (or import an existing suiprivkey)
+sui client new-address ed25519
+sui client faucet                         # fund it on testnet
+
+# in .env.local — the server signer (bech32 suiprivkey…, NOT hex on Sui ≥1.7):
+MASTER_SUI_PRIVKEY=suiprivkey1...
+MASTER_SUI_ADDRESS=0x...
+WALLET_PRIVATE_KEY=suiprivkey1...         # same value; read by the worker + /api/compute
+TATUM_API_KEY=<your-tatum-key>            # optional — routes RPC via Tatum; omit → public fullnode
+```
+
+Sanity-check connectivity, then run a flow:
+
+```bash
+pnpm probe:real                           # gas price (via Tatum), wallet balance, package reachable
+pnpm real scripts/01-upload-gated.ts      # register → Seal-encrypt → Walrus-store, end-to-end
+```
+
+To deploy **your own** copy of the contracts instead of using the shared package:
+
+```bash
+cd move && sui move build && sui client publish --gas-budget 200000000
+# put the new package id in REEF_PACKAGE_ID (+ NEXT_PUBLIC_OV_REEF_PACKAGE_ID)
+```
+
+### Path C — Confidential compute
+
+**Simulator (zero infra, honest):** exercises the full code path with a disclosed *non-attested*
+simulator. Good for local dev and CI.
+
+```bash
+WORKER_ISOLATION_MODE=enclave-sim pnpm exec tsx scripts/06-enclave-sim-demo.ts
+```
+
+**Real Nitro enclave:** point at a running enclave (see [`nautilus/RUNBOOK.md`](nautilus/RUNBOOK.md)
+to build one on a Nitro-enabled EC2 box). If the enclave runs on a remote host, tunnel its vsock
+bridge to localhost first (`ssh -L 3000:127.0.0.1:3000 ec2-user@<host>`), then:
+
+```bash
+WORKER_ISOLATION_MODE=enclave-nautilus \
+ENCLAVE_PROCESS_URL=http://127.0.0.1:3000 \
+REEF_ENCLAVE_OBJECT_ID=0xb9e55bd52c96832fe73f3f2954bb9619499e70bff2e8d8b2bc3bfdda02a1ed9a \
+pnpm exec tsx scripts/07-nautilus-attested-demo.ts
+```
+
+This decrypts inside the real enclave, runs the allowlisted algorithm, and lands a
+`register_derivative_attested` transaction whose enclave signature is **verified on-chain**.
+
+### Environment variables
+
+`.env.local.example` is the full annotated list. The essentials by purpose:
+
+| Purpose | Vars |
+|---|---|
+| Move package | `REEF_PACKAGE_ID`, `NEXT_PUBLIC_OV_REEF_PACKAGE_ID` |
+| Server signer | `MASTER_SUI_PRIVKEY` / `MASTER_SUI_ADDRESS`, `WALLET_PRIVATE_KEY` (bech32 `suiprivkey…`) |
+| Browser wallet | `NEXT_PUBLIC_PRIVY_APP_ID` |
+| Seal | `SEAL_KEY_SERVER_IDS` (defaults to the Mysten testnet pair), `SEAL_THRESHOLD` |
+| Tatum | `TATUM_API_KEY`, `REEF_WEBHOOK_URL`, `TATUM_WEBHOOK_SECRET` |
+| Confidential compute | `WORKER_ISOLATION_MODE` (`enclave-nautilus` \| `enclave-sim` \| unset), `ENCLAVE_PROCESS_URL`, `REEF_ENCLAVE_OBJECT_ID` |
+| Model Run tab (optional) | `INFERENCE_*` (omit → honest 503) |
+
+Walrus / Sui / Tatum endpoints default to testnet; override with the `NEXT_PUBLIC_OV_*` / `OV_*` vars.
 
 ---
 
 ## Scripts, worker, indexer
 
 ```bash
-pnpm probe:real                        # Sui connectivity check via Tatum (gas price, balance, package)
-pnpm real scripts/01-upload-gated.ts   # run any flow script against Sui testnet
-pnpm worker:real                       # confidential-compute worker (Seal-gated decrypt, long-running)
-pnpm indexer:real                      # SQLite read-model indexer over Sui Move events (long-running)
-pnpm test                              # unit tests — no creds, no gas
-RUN_INTEGRATION=1 pnpm test            # also runs live on-chain integration tests
-cd move && sui move test               # Move contract tests (21 tests: the full access matrix)
+pnpm probe:real                              # Sui connectivity check via Tatum (gas price, balance, package)
+pnpm real scripts/01-upload-gated.ts         # run any flow script against Sui testnet
+pnpm worker:real                             # confidential-compute worker (Seal-gated decrypt, long-running)
+pnpm indexer:real                            # SQLite read-model indexer over Sui Move events (long-running)
+pnpm exec tsx scripts/06-enclave-sim-demo.ts # TEE simulator demo (honest, non-attested)
+pnpm exec tsx scripts/07-nautilus-attested-demo.ts  # real enclave → on-chain attested verify (needs ENCLAVE_PROCESS_URL)
+pnpm test                                    # unit tests — no creds, no gas
+RUN_INTEGRATION=1 pnpm test                  # also runs live on-chain integration tests
+cd move && sui move test                     # Move contract tests (24 tests: full access matrix + attested registration)
 ```
 
 The `real` family preloads `.env.local` via `node --env-file`.
@@ -200,14 +326,18 @@ The `real` family preloads `.env.local` via `node --env-file`.
 .
 ├─ app/            Next.js App Router — pages + API routes (/api/run, /api/compute, /api/index, …)
 ├─ components/     React UI (browse, upload wizard, artifact tabs, compute panel, Run tab, wallet)
-├─ lib/            core: clients (Sui+Tatum), registry (Move calls), crypto (Seal), storage (Walrus),
-│                  artifacts, licensing, royalty, group, dispute, compute, attestation, tee-sim
-├─ move/           Sui Move package `reef::registry` — the Artifact object + tiered seal_approve gate
-├─ worker/         confidential-compute worker + the algorithm allowlist registry (worker/algos/)
+├─ lib/            core: clients (Sui+Tatum), registry (Move calls + register_derivative_attested),
+│                  crypto (Seal), storage (Walrus), enclaveClient (→ Nautilus enclave), artifacts,
+│                  licensing, royalty, group, dispute, compute, attestation, tee-sim
+├─ move/           Sui Move package: reef.move (`reef::registry` + register_derivative_attested) +
+│                  enclave.move (vendored Nautilus `reef::enclave` attestation verifier) + tests
+├─ worker/         confidential-compute worker, algorithm allowlist (worker/algos/), and
+│                  enclave-server.ts (the in-enclave localhost listener the Nautilus app calls)
+├─ nautilus/       AWS Nitro Enclave app (Rust) + build/registration scripts + RUNBOOK.md
 ├─ indexer/        SQLite read-model over Sui Move events (cache only — never keys or plaintext)
-├─ scripts/        flow scripts (00..09), diagnostics (diag/), seed corpus (sample/)
+├─ scripts/        flow scripts (00..09), enclave-sim + nautilus demos, diagnostics, seed corpus
 ├─ e2e/            Playwright verification harness (own package.json)
-└─ docs/           design specs, pitch, demo script
+└─ docs/           design specs (docs/superpowers/specs + plans), pitch, demo script
 ```
 
 ### How the layers fit
@@ -219,7 +349,12 @@ The `real` family preloads `.env.local` via `node --env-file`.
 - `lib/crypto.ts` (Seal) + `lib/storage.ts` (Walrus) — encrypt-before-publish always; a ciphertext
   guard refuses to publish anything that looks like plaintext.
 - `worker/` — allowlist gate → Seal decrypt-in-worker → run the one approved algorithm → register a
-  derivative → wipe plaintext → return metrics only.
+  derivative → wipe plaintext → return metrics only. Inside the enclave, `worker/enclave-server.ts`
+  exposes this over localhost so the Nautilus Rust app (`nautilus/`) can drive it and sign the result.
+- `lib/enclaveClient.ts` + `lib/registry.ts#registerDerivativeAttested` — the server calls the enclave's
+  `process_data`, then submits the enclave-signed result to `register_derivative_attested`, which the
+  vendored `reef::enclave` Move module verifies on-chain (AWS attestation + ed25519) before the
+  derivative is created. Fails closed if the enclave is unreachable.
 
 ---
 
@@ -231,6 +366,11 @@ The `real` family preloads `.env.local` via `node --env-file`.
 - Encrypt-before-publish; Walrus writes are refused if the payload looks like plaintext.
 - Compute-tier artifacts have **no download path** at all; the worker returns aggregate metrics only.
 - Fail closed on Seal `NoAccessError` — never retried, never faked.
+- Attested compute: the enclave signs the exact result bytes it returns, and the server forwards them
+  **verbatim** on-chain; `register_derivative_attested` aborts (`EBadEnclaveSig`) on any mismatch, so a
+  compute derivative cannot exist without a genuine enclave signature over that exact result.
+- No silent isolation downgrade: `enclave-nautilus` fails closed if the enclave is unreachable; the
+  `enclave-sim` simulator is always disclosed as non-attested.
 - `/api/index` stores only **public** descriptors — never keys or plaintext.
 
 ---
