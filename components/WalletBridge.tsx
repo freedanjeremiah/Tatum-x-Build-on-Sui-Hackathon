@@ -14,6 +14,10 @@ import {
   WalletStandardSigner,
   type WalletStandardSignFns,
 } from "@/lib/walletBridge";
+import { SUI_NETWORK } from "@/lib/constants";
+
+// dapp-kit requires a wallet-standard chain identifier (e.g. "sui:testnet").
+const SUI_CHAIN = `sui:${SUI_NETWORK}` as `sui:${string}`;
 
 // Candidate signature schemes for deriving a PublicKey from a wallet-standard
 // account's raw public-key bytes. The account exposes raw bytes + address but
@@ -88,7 +92,9 @@ export default function WalletBridge() {
   // Stable callback bag for the signer (mutateAsync identities are stable).
   const signFns = useMemo<WalletStandardSignFns>(
     () => ({
-      signTransaction: (input) => signTransaction(input),
+      // Inject the wallet-standard chain id — dapp-kit/Slush rejects a sign
+      // request without it ("A valid Sui chain identifier was not provided").
+      signTransaction: (input) => signTransaction({ ...input, chain: SUI_CHAIN }),
       signPersonalMessage: (input) => signPersonalMessage(input),
     }),
     [signTransaction, signPersonalMessage],
