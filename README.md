@@ -130,9 +130,9 @@ TEE *simulator* for CI/dev — clearly disclosed as **not hardware-attested**. I
 | On-chain artifact | Value |
 |---|---|
 | Reef package | `0x3203061e549b9df36a842a53fe3ef40e2a2e923e05a9aeed26ed9715ee63db7d` |
-| `Enclave<REEF>` object | `0xb9e55bd52c96832fe73f3f2954bb9619499e70bff2e8d8b2bc3bfdda02a1ed9a` |
-| `register_enclave` (AWS-root attestation verified) | `J4mbShboRhgKEPEEWVXEtMAuDrmCEf3v4ywYManyR5eo` |
-| `register_derivative_attested` (enclave sig verified) | `3JL6uVFH1FuVqcP9bBmURZfcxiey7kNDNgZnxpX8UkVb` |
+| `Enclave<REEF>` object | `0x2bf98f2a6ea8e78835463e8dcece3d321eae948b527e699c69bca91a70c5b21e` |
+| `register_enclave` (AWS-root attestation verified) | `3m78crZ2ysQ83DKbQuimFh9aVVhVPkPF8NxX4NQyBbnS` |
+| `register_derivative_attested` (enclave sig verified) | `926wJkXLbJoWNpoa5YBjSnVcxahztAu9svjWnww1mMco` |
 
 To reproduce the enclave from scratch (build EIF, register PCRs, register the live attestation), see
 **[`nautilus/RUNBOOK.md`](nautilus/RUNBOOK.md)**.
@@ -161,10 +161,16 @@ ed25519 verification:
 | On-chain artifact | Value |
 |---|---|
 | Reef package | `0x3203061e549b9df36a842a53fe3ef40e2a2e923e05a9aeed26ed9715ee63db7d` |
-| `Enclave<REEF>` object | `0xb9e55bd52c96832fe73f3f2954bb9619499e70bff2e8d8b2bc3bfdda02a1ed9a` |
-| `register_enclave` (AWS-root attestation verified) | `J4mbShboRhgKEPEEWVXEtMAuDrmCEf3v4ywYManyR5eo` |
-| `register_derivative_attested` (enclave sig verified) | `3JL6uVFH1FuVqcP9bBmURZfcxiey7kNDNgZnxpX8UkVb` |
-| PCR0 | `e9be617501b7b2a4442353d514a0a53273005029b9cda9a1b73be1e7e399eeb422dc07481a05c12f4c9569122c831735` |
+| `Enclave<REEF>` object | `0x2bf98f2a6ea8e78835463e8dcece3d321eae948b527e699c69bca91a70c5b21e` |
+| `register_enclave` (AWS-root attestation verified) | `3m78crZ2ysQ83DKbQuimFh9aVVhVPkPF8NxX4NQyBbnS` |
+| `register_derivative_attested` (enclave sig verified) | `926wJkXLbJoWNpoa5YBjSnVcxahztAu9svjWnww1mMco` |
+| compute-tier dataset (Seal-encrypted CSV on Walrus) | `0xdcb43aeb3b2d6c14be413061826e1c6cd885c58e70b2f841ba15b9057d32f1fa` |
+| verified result (computed inside the enclave) | `{ columnMeans_0: 4, columnMeans_1: 5, columnMeans_2: 6, n: 3 }` |
+| `EnclaveConfig<REEF>` (registered PCRs) | `0x9f2447…d95d` |
+
+That last row is the proof it's **real, not a stub**: the enclave Seal-decrypted a private dataset on
+Walrus, computed `mean-aggregate` over it **inside the TEE**, and the resulting column means were
+accepted on-chain only because the enclave's signature verified.
 
 The Nautilus enclave app (`nautilus/`) runs the in-enclave TS worker (`worker/enclave-server.ts`,
 on `127.0.0.1:7070`), signs `IntentMessage{intent:0,…}` over `ComputeResultPayload{dataset_id,
@@ -279,7 +285,7 @@ bridge to localhost first (`ssh -L 3000:127.0.0.1:3000 ec2-user@<host>`), then:
 ```bash
 WORKER_ISOLATION_MODE=enclave-nautilus \
 ENCLAVE_PROCESS_URL=http://127.0.0.1:3000 \
-REEF_ENCLAVE_OBJECT_ID=0xb9e55bd52c96832fe73f3f2954bb9619499e70bff2e8d8b2bc3bfdda02a1ed9a \
+REEF_ENCLAVE_OBJECT_ID=0x2bf98f2a6ea8e78835463e8dcece3d321eae948b527e699c69bca91a70c5b21e \
 pnpm exec tsx scripts/07-nautilus-attested-demo.ts
 ```
 
