@@ -23,6 +23,17 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [{ source: "/about", destination: "/", permanent: true }];
   },
+  // Backend proxy. The API routes need a real filesystem (SQLite read-model),
+  // the local Nautilus enclave, and the server signer — none of which run on
+  // Vercel's serverless runtime. So when EC2_API_URL is set (on Vercel), proxy
+  // ALL /api/* to the EC2 backend that hosts those. When it's unset (on the EC2
+  // itself, or local dev), serve our own /api routes — no proxy, no loop.
+  async rewrites() {
+    const backend = process.env.EC2_API_URL;
+    if (!backend) return [];
+    const base = backend.replace(/\/$/, "");
+    return [{ source: "/api/:path*", destination: `${base}/api/:path*` }];
+  },
 };
 
 export default nextConfig;
