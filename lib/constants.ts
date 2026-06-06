@@ -88,8 +88,17 @@ export const SEAL_THRESHOLD: number = envNum("SEAL_THRESHOLD", 2);
 // --- Reef Move package --------------------------------------------------------
 
 /** Object id of the published `reef` Move package on the target network.
- *  No default — it must be published per deployment (never fabricated). */
-export const REEF_PACKAGE_ID: string = envStr("REEF_PACKAGE_ID", "");
+ *  No default — it must be published per deployment (never fabricated).
+ *
+ *  IMPORTANT: read `process.env.NEXT_PUBLIC_OV_REEF_PACKAGE_ID` as a STATIC
+ *  literal here. Next.js only inlines `process.env.NEXT_PUBLIC_*` into the client
+ *  bundle when the key is a static string — `envStr`'s computed
+ *  `process.env[`NEXT_PUBLIC_OV_${name}`]` is NOT inlinable, so the browser would
+ *  otherwise never see this value (and the OnchainConfigNotice would always show). */
+export const REEF_PACKAGE_ID: string =
+  process.env.NEXT_PUBLIC_OV_REEF_PACKAGE_ID && process.env.NEXT_PUBLIC_OV_REEF_PACKAGE_ID.length > 0
+    ? (process.env.NEXT_PUBLIC_OV_REEF_PACKAGE_ID as string)
+    : envStr("REEF_PACKAGE_ID", "");
 
 // --- On-chain readiness ----------------------------------------------------
 
