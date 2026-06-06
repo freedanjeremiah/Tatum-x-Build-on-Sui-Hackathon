@@ -4,7 +4,6 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import VaultMark from "./ui/VaultMark";
-import WalletButton from "./WalletButton";
 import ProfileMenu from "./ProfileMenu";
 import TatumStatus from "./TatumStatus";
 
@@ -77,7 +76,6 @@ export default function Header() {
         <TatumStatus />
         <ProfileMenu />
         <SuiWalletButton />
-        <WalletButton />
       </div>
     </header>
   );
