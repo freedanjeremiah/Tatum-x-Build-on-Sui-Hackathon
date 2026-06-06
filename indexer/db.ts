@@ -12,7 +12,15 @@ import type { Artifact, Tier, Modality } from "../types/artifact";
 export type DB = Database.Database;
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const DEFAULT_DB_PATH = join(HERE, "reef.db");
+// In a `next build` + `next start` server, import.meta.url resolves to a bundled
+// .next path — so the default DB would NOT be the indexer/reef.db the seed script
+// (run via tsx) writes, and browse comes up empty. Set REEF_DB_PATH (absolute) so
+// the seeder and the running server open the SAME file. Falls back to the
+// source-relative path for local dev / tests.
+const DEFAULT_DB_PATH =
+  process.env.REEF_DB_PATH && process.env.REEF_DB_PATH.length > 0
+    ? process.env.REEF_DB_PATH
+    : join(HERE, "reef.db");
 
 /** Open (and migrate) the index database. Pass ":memory:" in tests. */
 export function openDb(path: string = DEFAULT_DB_PATH): DB {
