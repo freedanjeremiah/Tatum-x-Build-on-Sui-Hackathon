@@ -43,7 +43,9 @@ export default function ComputeJobPanel({ artifact }: { artifact: Artifact }) {
             : "Seal key-server TEEs attested (report-only)"
           : "Seal key-server TEEs not attested";
         const wiPart =
-          wi === "enclave"
+          wi === "enclave-nautilus"
+            ? "compute worker in AWS Nitro enclave — attestation verified on-chain"
+            : wi === "enclave"
             ? "compute worker in attested enclave"
             : wi === "enclave-sim"
               ? "compute worker in SIMULATED enclave (TEE-SIM declared) — NOT hardware-attested"
